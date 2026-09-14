@@ -7,158 +7,168 @@
 <span class="sep">/</span>
 <a href="{% url 'admin_panel:manage_users' %}">المستخدمون</a>
 <span class="sep">/</span>
-<span class="current">تعديل</span>
+<span class="current">تعديل الملف</span>
 {% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1>
-        <i class="bi bi-pencil-fill me-2" style="color:var(--admin-accent);"></i>
-        تعديل: {{ target_user.get_full_name|default:target_user.email }}
-    </h1>
-    <p>
-        <span class="role-badge
-            {% if target_user.role == 'teacher' %}role-teacher
-            {% elif target_user.role == 'student' %}role-student
-            {% elif target_user.role == 'assistant' %}role-assistant
-            {% else %}role-admin{% endif %} me-2">
-            {{ target_user.get_role_display }}
-        </span>
-        {{ target_user.email }}
-    </p>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="fw-bold mb-0" style="color:var(--admin-accent);">
+        <i class="bi bi-person-gear me-2"></i>إعدادات المستخدم
+    </h2>
+    <a href="{% url 'admin_panel:manage_users' %}" class="btn btn-light border fw-bold shadow-sm">
+        <i class="bi bi-arrow-right me-1"></i>العودة للقائمة
+    </a>
 </div>
 
-<form method="POST">
-    {% csrf_token %}
-    <div class="row g-4">
-        <!-- بيانات أساسية -->
-        <div class="col-lg-6">
-            <div class="admin-card">
-                <div class="admin-card-header">
-                    <span class="admin-card-title"><i class="bi bi-person-fill me-2"></i>البيانات الأساسية</span>
+<div class="row">
+    <div class="col-xl-9 col-lg-10 mx-auto">
+        <!-- Main Form Card -->
+        <form method="POST">
+            {% csrf_token %}
+            <div class="admin-card mb-4 shadow-sm" style="border-radius: 12px; overflow: hidden;">
+                <!-- Header Area with Avatar -->
+                <div class="bg-light p-4 border-bottom d-flex align-items-center gap-3">
+                    <div class="d-flex align-items-center justify-content-center rounded-circle shadow-sm" 
+                         style="width: 70px; height: 70px; background: linear-gradient(45deg, var(--admin-accent), #a00000); color: white; font-size: 28px; font-weight: 800;">
+                        {{ target_user.first_name|first|default:"U"|upper }}
+                    </div>
+                    <div>
+                        <h4 class="mb-1 fw-bold">{{ target_user.get_full_name|default:target_user.email }}</h4>
+                        <div class="d-flex align-items-center gap-2 mt-1">
+                            <span class="role-badge
+                                {% if target_user.role == 'teacher' %}role-teacher
+                                {% elif target_user.role == 'student' %}role-student
+                                {% elif target_user.role == 'assistant' %}role-assistant
+                                {% else %}role-admin{% endif %}">
+                                {{ target_user.get_role_display }}
+                            </span>
+                            <span class="text-muted small"><i class="bi bi-envelope-fill me-1"></i>{{ target_user.email }}</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="p-4">
-                    {% for field in user_form %}
-                    <div class="mb-3">
-                        <label class="form-label fw-bold small text-muted">{{ field.label }}</label>
-                        {{ field }}
-                        {% if field.errors %}
-                        <div class="text-danger small mt-1">{{ field.errors|join:", " }}</div>
+
+                <div class="p-4 p-md-5">
+                    <!-- Basic Info Section -->
+                    <h5 class="fw-bold mb-4" style="color:var(--admin-accent);">
+                        <i class="bi bi-person-lines-fill me-2"></i>البيانات الأساسية
+                    </h5>
+                    <div class="row g-4">
+                        {% for field in user_form %}
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small text-secondary">{{ field.label }}</label>
+                            {{ field }}
+                            {% if field.errors %}
+                            <div class="text-danger small mt-1 fw-bold"><i class="bi bi-exclamation-circle me-1"></i>{{ field.errors|join:", " }}</div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    {% if teacher_form or student_form or assistant_form %}
+                    <hr class="my-5 opacity-25">
+                    
+                    <!-- Role Specific Section -->
+                    <h5 class="fw-bold mb-4 text-success">
+                        <i class="bi bi-briefcase-fill me-2"></i>التفاصيل المهنية / الدراسية
+                    </h5>
+                    <div class="row g-4">
+                        {% if teacher_form %}
+                            {% for field in teacher_form %}
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold small text-secondary">{{ field.label }}</label>
+                                {{ field }}
+                                {% if field.errors %}<div class="text-danger small mt-1 fw-bold">{{ field.errors|join:", " }}</div>{% endif %}
+                            </div>
+                            {% endfor %}
+                        {% endif %}
+                        
+                        {% if student_form %}
+                            {% for field in student_form %}
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold small text-secondary">{{ field.label }}</label>
+                                {{ field }}
+                                {% if field.errors %}<div class="text-danger small mt-1 fw-bold">{{ field.errors|join:", " }}</div>{% endif %}
+                            </div>
+                            {% endfor %}
+                        {% endif %}
+                        
+                        {% if assistant_form %}
+                            {% for field in assistant_form %}
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold small text-secondary">{{ field.label }}</label>
+                                {{ field }}
+                                {% if field.errors %}<div class="text-danger small mt-1 fw-bold">{{ field.errors|join:", " }}</div>{% endif %}
+                            </div>
+                            {% endfor %}
                         {% endif %}
                     </div>
-                    {% endfor %}
-                    <div class="d-flex gap-2 mt-4">
-                        <button type="submit" class="btn btn-primary fw-bold px-4">
-                            <i class="bi bi-check-circle me-1"></i>حفظ جميع التغييرات
+                    {% endif %}
+                    
+                    <hr class="my-5 opacity-25">
+                    
+                    <!-- Activity Stats -->
+                    <div class="bg-light p-3 rounded-3 border mb-4">
+                        <div class="row text-center text-md-start align-items-center">
+                            <div class="col-md-4 col-6 mb-3 mb-md-0">
+                                <span class="text-muted small d-block mb-1"><i class="bi bi-calendar3 me-1"></i>تاريخ الانضمام</span>
+                                <span class="fw-bold">{{ target_user.date_joined|date:"j M Y" }}</span>
+                            </div>
+                            <div class="col-md-4 col-6 mb-3 mb-md-0">
+                                <span class="text-muted small d-block mb-1"><i class="bi bi-clock-history me-1"></i>آخر ظهور</span>
+                                <span class="fw-bold">{{ target_user.last_login|date:"j M Y, H:i"|default:"لم يسجل دخول" }}</span>
+                            </div>
+                            <div class="col-md-4 col-12 text-md-end text-center">
+                                <span class="text-muted small d-inline-block me-2">حالة الحساب:</span>
+                                {% if target_user.is_banned %}
+                                <span class="badge bg-danger rounded-pill px-3 py-2"><i class="bi bi-slash-circle me-1"></i>محظور</span>
+                                {% else %}
+                                <span class="badge bg-success rounded-pill px-3 py-2"><i class="bi bi-check-circle me-1"></i>نشط</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="d-flex flex-column flex-sm-row justify-content-end gap-3 mt-4 pt-3 border-top">
+                        <button type="submit" class="btn btn-primary fw-bold px-5 py-2 shadow-sm" style="background-color: var(--admin-accent); border-color: var(--admin-accent);">
+                            <i class="bi bi-floppy-fill me-2"></i>حفظ التعديلات
                         </button>
-                        <a href="{% url 'admin_panel:manage_users' %}" class="btn btn-light fw-bold">إلغاء</a>
                     </div>
                 </div>
             </div>
-        </div>
+        </form>
 
-        <!-- بيانات فرعية -->
-        <div class="col-lg-6">
-            {% if teacher_form %}
-            <div class="admin-card">
-                <div class="admin-card-header">
-                    <span class="admin-card-title"><i class="bi bi-person-video3 me-2 text-primary"></i>بيانات المعلم</span>
-                </div>
-                <div class="p-4">
-                    {% for field in teacher_form %}
-                    <div class="mb-3">
-                        <label class="form-label fw-bold small text-muted">{{ field.label }}</label>
-                        {{ field }}
-                        {% if field.errors %}<div class="text-danger small">{{ field.errors|join:", " }}</div>{% endif %}
+        <!-- Security / Password Card -->
+        <div class="admin-card border-danger border border-opacity-25 shadow-sm mb-5" style="border-radius: 12px;">
+            <div class="p-4 p-md-5">
+                <div class="d-flex align-items-center mb-4">
+                    <div class="bg-danger bg-opacity-10 text-danger rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 45px; height: 45px; font-size: 1.2rem;">
+                        <i class="bi bi-shield-lock-fill"></i>
                     </div>
-                    {% endfor %}
-                </div>
-            </div>
-            {% endif %}
-
-            {% if student_form %}
-            <div class="admin-card">
-                <div class="admin-card-header">
-                    <span class="admin-card-title"><i class="bi bi-mortarboard me-2 text-success"></i>بيانات الطالب</span>
-                </div>
-                <div class="p-4">
-                    {% for field in student_form %}
-                    <div class="mb-3">
-                        <label class="form-label fw-bold small text-muted">{{ field.label }}</label>
-                        {{ field }}
-                        {% if field.errors %}<div class="text-danger small">{{ field.errors|join:", " }}</div>{% endif %}
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
-            {% endif %}
-
-            {% if assistant_form %}
-            <div class="admin-card">
-                <div class="admin-card-header">
-                    <span class="admin-card-title"><i class="bi bi-person-badge me-2" style="color:var(--admin-gold);"></i>بيانات المساعد</span>
-                </div>
-                <div class="p-4">
-                    {% for field in assistant_form %}
-                    <div class="mb-3">
-                        <label class="form-label fw-bold small text-muted">{{ field.label }}</label>
-                        {{ field }}
-                        {% if field.errors %}<div class="text-danger small">{{ field.errors|join:", " }}</div>{% endif %}
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
-            {% endif %}
-
-            <!-- معلومات إضافية (read-only) -->
-        <div class="admin-card mt-3">
-            <div class="admin-card-header">
-                <span class="admin-card-title"><i class="bi bi-info-circle me-2"></i>معلومات إضافية</span>
-            </div>
-            <div class="p-4">
-                <div class="row g-2" style="font-size:0.875rem;">
-                    <div class="col-6"><span class="text-muted">تاريخ الانضمام:</span></div>
-                    <div class="col-6 fw-bold">{{ target_user.date_joined|date:"j M Y" }}</div>
-                    <div class="col-6"><span class="text-muted">آخر دخول:</span></div>
-                    <div class="col-6 fw-bold">{{ target_user.last_login|date:"j M Y H:i"|default:"—" }}</div>
-                    <div class="col-6"><span class="text-muted">محظور؟</span></div>
-                    <div class="col-6">
-                        {% if target_user.is_banned %}
-                        <span class="role-badge status-banned">نعم</span>
-                        {% else %}
-                        <span class="role-badge status-active">لا</span>
-                        {% endif %}
+                    <div>
+                        <h5 class="fw-bold text-danger mb-1">الأمان وكلمة المرور</h5>
+                        <p class="text-muted small mb-0">يمكنك فرض كلمة مرور جديدة لهذا الحساب.</p>
                     </div>
                 </div>
-            </div>
-        </div>
-    </div>
-    </div>
-</form>
-
-<div class="row mt-4">
-    <div class="col-lg-6 mx-auto">
-        <!-- تغيير كلمة المرور -->
-        <div class="admin-card border-danger border border-opacity-25">
-            <div class="admin-card-header bg-danger bg-opacity-10 border-danger border-bottom border-opacity-25">
-                <span class="admin-card-title text-danger fw-bold"><i class="bi bi-key-fill me-2"></i>تغيير كلمة المرور</span>
-            </div>
-            <div class="p-4">
+                
                 <form method="POST" action="{% url 'admin_panel:edit_user' target_user.id %}">
                     {% csrf_token %}
                     <input type="hidden" name="change_password" value="1">
-                    <div class="mb-3">
-                        <label class="form-label fw-bold small text-muted">تعيين كلمة مرور جديدة لهذا الحساب</label>
-                        <input type="password" name="new_password" class="form-control" required minlength="6" placeholder="اكتب كلمة المرور الجديدة هنا...">
+                    <div class="row align-items-end g-3 bg-danger bg-opacity-10 p-3 rounded border border-danger border-opacity-25">
+                        <div class="col-md-8">
+                            <label class="form-label fw-bold small text-danger">كلمة المرور الجديدة</label>
+                            <input type="password" name="new_password" class="form-control border-danger border-opacity-50" required minlength="6" placeholder="اكتب كلمة السر الجديدة...">
+                        </div>
+                        <div class="col-md-4">
+                            <button type="submit" class="btn btn-danger fw-bold w-100 shadow-sm" onclick="return confirm('هل أنت متأكد من تغيير كلمة سر هذا المستخدم؟');">
+                                <i class="bi bi-key-fill me-1"></i>تحديث الآن
+                            </button>
+                        </div>
                     </div>
-                    <button type="submit" class="btn btn-danger fw-bold px-4" onsubmit="return confirm('تأكيد تغيير كلمة المرور؟');">
-                        <i class="bi bi-shield-lock-fill me-1"></i>حفظ كلمة المرور
-                    </button>
                 </form>
             </div>
         </div>
+        
     </div>
-</div>
-
 </div>
 {% endblock %}
