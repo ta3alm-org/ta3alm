@@ -168,6 +168,7 @@
             .brand-logo {
                 font-size: 1.2rem;
             }
+        }
 
         /* Modern SaaS Footer Styles */
         .site-footer {
@@ -276,7 +277,31 @@
             background: linear-gradient(180deg, #1e0505 0%, #120202 50%, #0a0101 100%);
             border-top-color: #d4af37;
         }
-    </style>
+    
+        /* Developer Credit Badge */
+        .developer-credit .dev-link {
+            color: #FFD700;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            padding: 5px 14px;
+            border-radius: 50px;
+            background: rgba(255, 215, 0, 0.08);
+            border: 1px solid rgba(255, 215, 0, 0.2);
+            font-size: 0.85rem;
+            transition: all 0.3s ease;
+        }
+        .developer-credit .dev-link:hover {
+            background: rgba(255, 215, 0, 0.18);
+            border-color: rgba(255, 215, 0, 0.4);
+            transform: translateY(-2px);
+            color: #fff;
+            box-shadow: 0 4px 12px rgba(255, 215, 0, 0.15);
+        }
+        .developer-credit .dev-link:hover i {
+            color: #fff !important;
+        }
+</style>
 </head>
 
 <body>
@@ -336,12 +361,10 @@
             {% if user.is_authenticated %}
             <!-- روابط لوحة التحكم حسب الدور -->
             {% if user.role == 'teacher' %}
-            <a href="{% url 'teacher_dashboard' %}" class="sidebar-link"><i class="bi bi-speedometer2"></i> {% trans
-                "لوحة المعلم" %}</a>
+            <a href="{% url 'teacher_dashboard' %}" class="sidebar-link"><i class="bi bi-speedometer2"></i> {% trans "لوحة المعلم" %}</a>
             <a href="{% url 'teacher_packages' %}" class="sidebar-link"><i class="bi bi-box-seam"></i> {% trans "إدارة
                 الحزم" %}</a>
-            <a href="{% url 'manage_assistants' %}" class="sidebar-link"><i class="bi bi-people"></i> {% trans
-                "المساعدين" %}</a>
+            <a href="{% url 'manage_assistants' %}" class="sidebar-link"><i class="bi bi-people"></i> {% trans "المساعدين" %}</a>
             <a href="{% url 'teacher_wallet' %}" class="sidebar-link"><i class="bi bi-wallet2"></i> {% trans "المحفظة"
                 %}</a>
             <a href="{% url 'subscription_info' %}" class="sidebar-link"><i class="bi bi-star"></i> {% trans "الاشتراك"
@@ -350,24 +373,20 @@
                 الشخصي" %}</a>
 
             {% elif user.role == 'student' %}
-            <a href="{% url 'student_dashboard' %}" class="sidebar-link"><i class="bi bi-speedometer2"></i> {% trans
-                "لوحة الطالب" %}</a>
+            <a href="{% url 'student_dashboard' %}" class="sidebar-link"><i class="bi bi-speedometer2"></i> {% trans "لوحة الطالب" %}</a>
             <a href="{% url 'search_groups' %}" class="sidebar-link"><i class="bi bi-search"></i> {% trans "بحث عن مدرس"
                 %}</a>
             <a href="{% url 'list_packages' %}" class="sidebar-link"><i class="bi bi-shop"></i> {% trans "تصفح الكورسات"
                 %}</a>
-            <a href="{% url 'student_settings' %}" class="sidebar-link"><i class="bi bi-person-gear"></i> {% trans
-                "بياناتي" %}</a>
+            <a href="{% url 'student_settings' %}" class="sidebar-link"><i class="bi bi-person-gear"></i> {% trans "بياناتي" %}</a>
 
             {% elif user.role == 'assistant' %}
-            <a href="{% url 'assistant_dashboard' %}" class="sidebar-link"><i class="bi bi-speedometer2"></i> {% trans
-                "لوحة المساعد" %}</a>
+            <a href="{% url 'assistant_dashboard' %}" class="sidebar-link"><i class="bi bi-speedometer2"></i> {% trans "لوحة المساعد" %}</a>
             <a href="{% url 'find_teacher' %}" class="sidebar-link"><i class="bi bi-briefcase"></i> {% trans "بحث عن
                 عمل" %}</a>
 
             {% elif user.is_superuser %}
-            <a href="{% url 'admin_panel:dashboard' %}" class="sidebar-link"><i class="bi bi-shield-lock"></i> {% trans
-                "لوحة المالك" %}</a>
+            <a href="{% url 'admin_panel:dashboard' %}" class="sidebar-link"><i class="bi bi-shield-lock"></i> {% trans "لوحة المالك" %}</a>
             {% endif %}
             <!-- ... (بعد روابط المستخدمين وقبل الـ hr) ... -->
 
@@ -399,10 +418,8 @@
 
             {% else %}
             <a href="{% url 'home' %}" class="sidebar-link"><i class="bi bi-house"></i> {% trans "الرئيسية" %}</a>
-            <a href="{% url 'account_login' %}" class="sidebar-link"><i class="bi bi-box-arrow-in-right"></i> {% trans
-                "تسجيل الدخول" %}</a>
-            <a href="{% url 'account_signup' %}" class="sidebar-link"><i class="bi bi-person-plus"></i> {% trans "إنشاء
-                حساب" %}</a>
+            <a href="{% url 'account_login' %}" class="sidebar-link"><i class="bi bi-box-arrow-in-right"></i> {% trans "تسجيل الدخول" %}</a>
+            <a href="{% url 'account_signup' %}" class="sidebar-link"><i class="bi bi-person-plus"></i> {% trans "إنشاء حساب" %}</a>
             {% endif %}
 
             <hr class="my-3">
@@ -549,13 +566,13 @@
                         </p>
                     </div>
                     <div class="col-md-6 text-md-end text-center">
-                        <p class="small mb-0 text-white-50 code-font">
-                            Designed & Developed By
-                            <a href="https://se-abdulrahman.vercel.app/" target="_blank"
-                                class="text-warning fw-bold text-decoration-none border-bottom border-warning border-opacity-50 pb-1 ms-1 hover-glow">
-                                Abdelrahman Tarek
+                        <div class="developer-credit d-inline-flex align-items-center">
+                            <span class="text-white-50 me-2" style="font-size: 0.85rem;">Designed & Developed by</span>
+                            <a href="https://se-abdulrahman.vercel.app/" target="_blank" class="dev-link">
+                                <i class="bi bi-code-slash me-1" style="color: #FFD700;"></i>
+                                <span class="dev-name fw-bold" style="letter-spacing: 0.3px;">Abdelrahman Tarek</span>
                             </a>
-                        </p>
+                        </div>
                     </div>
                 </div>
             </div>
