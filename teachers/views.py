@@ -922,36 +922,7 @@ def payment_callback(request):
 
 
 from exams.models import ExamResult
-def calculate_leaderboard(group):
-    # جلب الطلاب المقبولين فقط
-    students = group.enrollments.filter(is_active=True).select_related('student__user')
-    leaderboard = []
-    
-    for enroll in students:
-        total = 0
-        # 1. درجات السجلات
-        logs = PerformanceLog.objects.filter(student=enroll.student, group=group)
-        for l in logs:
-            total += (l.homework_score or 0)
-            total += (l.class_exam_score or 0) 
-            total += (l.recitation_score or 0)
-            total += (l.comprehensive_exam_score or 0)
-        
-        # 2. درجات الامتحانات الإلكترونية
-        exam_results = ExamResult.objects.filter(student=enroll.student, exam__group=group)
-        for r in exam_results:
-            total += r.score
-            
-        leaderboard.append({'student': enroll.student, 'total_score': total})
-    
-    # ترتيب تنازلي
-    leaderboard.sort(key=lambda x: x['total_score'], reverse=True)
-    
-    # إضافة المراكز
-    for i, item in enumerate(leaderboard):
-        item['rank'] = i + 1
-        
-    return leaderboard
+
 
 
 from .models import Group
@@ -960,7 +931,8 @@ def group_ranking(request, group_id):
     group, is_owner = get_group_permission(request, group_id, permission_type='students')
     if not group: return redirect('home')
 
-    leaderboard = calculate_leaderboard(group)
+    from core.utils import get_optimized_group_leaderboard
+    leaderboard = get_optimized_group_leaderboard(group)
     
     pending_count = group.enrollments.filter(is_active=False).count()
 
@@ -1247,38 +1219,7 @@ def teacher_package_students(request, package_id):
 # ==========================================
 # 1. دالة مساعدة (Logic Only) - لحساب الأرقام فقط
 # ==========================================
-def calculate_package_leaderboard(package):
-    # جلب الطلاب الذين دفعوا
-    enrollments = package.enrollments.filter(is_paid=True).select_related('student__user')
-    leaderboard = []
 
-    for enroll in enrollments:
-        std = enroll.student
-        
-        # نقاط الفيديو
-        v_points = VideoViewTracking.objects.filter(
-            student=std, package=package, is_completed=True
-        ).aggregate(total=Sum('points_awarded'))['total'] or 0
-        
-        # نقاط الامتحان
-        # (نبحث عن نتائج الامتحانات التابعة لهذه الحزمة)
-        e_points = PackageExamResult.objects.filter(
-            student=std, package=package
-        ).aggregate(total=Sum('score'))['total'] or 0
-        
-        leaderboard.append({
-            'student': std,
-            'score': v_points + e_points
-        })
-
-    # الترتيب التنازلي
-    leaderboard.sort(key=lambda x: x['score'], reverse=True)
-    
-    # إضافة المراكز
-    for i, item in enumerate(leaderboard):
-        item['rank'] = i + 1
-        
-    return leaderboard
 
 
 # ==========================================
@@ -1309,7 +1250,8 @@ def teacher_package_ranking(request, package_id):
         return redirect('home')
 
     # استدعاء دالة الحساب
-    leaderboard = calculate_package_leaderboard(package)
+    from core.utils import get_optimized_package_leaderboard
+    leaderboard = get_optimized_package_leaderboard(package)
 
     return render(request, 'teachers/package_dashboard/ranking.html', {
         'package': package,

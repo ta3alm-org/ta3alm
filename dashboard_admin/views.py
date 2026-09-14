@@ -20,7 +20,7 @@ from .decorators import admin_required, owner_required, finance_required, modera
 from .forms import (
     AdminUserEditForm, AdminTeacherEditForm,
     AdminStudentEditForm, AdminAssistantEditForm,
-    AppointAdminForm,
+    AppointAdminForm, CreateAdminForm,
 )
 
 User = get_user_model()
@@ -232,6 +232,13 @@ def edit_user(request, user_id):
     teacher_form = student_form = assistant_form = None
 
     if request.method == 'POST':
+        if 'generate_login_link' in request.POST:
+            from accounts.models import OneTimeLoginLink
+            link = OneTimeLoginLink.objects.create(user=target)
+            login_url = request.build_absolute_uri('/login/auto/' + str(link.token) + '/')
+            request.session['one_time_link'] = login_url
+            return redirect('admin_panel:edit_user', user_id=target.id)
+            
         if 'change_password' in request.POST:
             new_password = request.POST.get('new_password')
             if new_password:
@@ -294,6 +301,7 @@ def edit_user(request, user_id):
         'teacher_form':   teacher_form,
         'student_form':   student_form,
         'assistant_form': assistant_form,
+        'one_time_link':  request.session.pop('one_time_link', None),
     })
     return render(request, 'admin_panel/edit_user.html', ctx)
 
@@ -465,17 +473,67 @@ def manage_staff(request):
     if request.method == 'POST':
         action = request.POST.get('action')
 
+        if action == 'create':
+            create_form = CreateAdminForm(request.POST)
+            if create_form.is_valid():
+                email = create_form.cleaned_data['email']
+                password = create_form.cleaned_data['password']
+                first_name = create_form.cleaned_data['first_name']
+                last_name = create_form.cleaned_data['last_name']
+                admin_role = create_form.cleaned_data['admin_role']
+                
+                if admin_role == 'owner' and not request.user.is_superuser:
+                    messages.error(request, "عذراً، فقط السوبر يوزر يمكنه إنشاء مالك جديد.")
+                    return redirect('admin_panel:manage_staff')
+
+                target = User.objects.create_user(
+                    username=email,
+                    email=email,
+                    password=password,
+                    first_name=first_name,
+                    last_name=last_name,
+                    role='admin',
+                    is_staff=True if admin_role == 'owner' else False,
+                    is_superuser=True if admin_role == 'owner' else False,
+                )
+                
+                AdminProfile.objects.create(
+                    user=target,
+                    admin_role=admin_role,
+                    notes=create_form.cleaned_data.get('notes', ''),
+                    is_active_admin=True,
+                    appointed_by=request.user,
+                )
+                
+                AuditLog.log(request, AuditLog.ACTION_APPOINT_ADMIN,
+                             target_label=target.get_full_name() or email,
+                             target_id=target.id,
+                             details={'role': admin_role, 'type': 'create_new'})
+                messages.success(request, f"تم إنشاء حساب المسؤول ({target.get_full_name()}) بنجاح.")
+                return redirect('admin_panel:manage_staff')
+            else:
+                for field, errors in create_form.errors.items():
+                    for error in errors:
+                        messages.error(request, f"{field}: {error}")
+                return redirect('admin_panel:manage_staff')
+
         if action == 'appoint':
             form = AppointAdminForm(request.POST)
             if form.is_valid():
                 email = form.cleaned_data['user_email']
                 try:
                     target = User.objects.get(email=email)
-                    if target.is_superuser:
-                        messages.error(request, "المالك لا يحتاج لبروفايل إداري.")
+                    if target.is_superuser and form.cleaned_data['admin_role'] != 'owner':
+                        messages.error(request, "هذا المستخدم هو سوبر يوزر بالفعل ولا يمكن تغيير دوره لمستوى أقل.")
                     else:
+                        if form.cleaned_data['admin_role'] == 'owner':
+                            if not request.user.is_superuser:
+                                messages.error(request, "عذراً، فقط السوبر يوزر يمكنه إضافة مالك جديد.")
+                                return redirect('admin_panel:manage_staff')
+                            target.is_superuser = True
+                            target.is_staff = True
                         target.role = 'admin'
-                        target.save(update_fields=['role'])
+                        target.save(update_fields=['role', 'is_superuser', 'is_staff'])
                         AdminProfile.objects.update_or_create(
                             user=target,
                             defaults={
@@ -499,18 +557,26 @@ def manage_staff(request):
             profile_id = request.POST.get('profile_id')
             profile = get_object_or_404(AdminProfile, id=profile_id)
             name = profile.user.get_full_name() or profile.user.email
+            
+            if profile.admin_role == 'owner' and not request.user.is_superuser:
+                messages.error(request, "عذراً، فقط السوبر يوزر يمكنه إزالة مالك النظام.")
+                return redirect('admin_panel:manage_staff')
+                
             profile.user.role = 'student'   # إعادة لدور افتراضي محايد
-            profile.user.save(update_fields=['role'])
+            profile.user.is_superuser = False
+            profile.user.is_staff = False
+            profile.user.save(update_fields=['role', 'is_superuser', 'is_staff'])
             AuditLog.log(request, AuditLog.ACTION_REMOVE_ADMIN,
                          target_label=name, target_id=profile.user.id)
             profile.delete()
-            messages.warning(request, f"تم إزالة {name} من الفريق الإداري.")
+            messages.warning(request, f"تم إزالة {name} من الفريق الإداري وسحب الصلاحيات.")
 
         return redirect('admin_panel:manage_staff')
 
     ctx.update({
         'staff_list':    staff_list,
         'appoint_form':  AppointAdminForm(),
+        'create_form':   CreateAdminForm(),
         'admin_roles':   AdminRole.choices,
     })
     return render(request, 'admin_panel/manage_staff.html', ctx)

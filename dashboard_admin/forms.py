@@ -41,6 +41,7 @@ class AdminUserEditForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['role'].disabled = True
+        self.fields['role'].help_text = 'لا يمكن تغيير الدور مباشرة للحفاظ على سلامة البيانات. إذا لزم الأمر، قم بحذف الحساب وإنشاء حساب جديد بالدور المطلوب.'
 
     def clean_role(self):
         # Prevent role change through this form to avoid profile conflicts
@@ -134,3 +135,43 @@ CurriculumLessonFormSet = forms.inlineformset_factory(
         'order': forms.NumberInput(attrs={'class': 'form-control form-control-sm', 'style': 'width: 80px;'}),
     }
 )
+
+
+# ----------------------------------------------------------
+# إنشاء مسؤول جديد بالكامل (من الصفر)
+# ----------------------------------------------------------
+class CreateAdminForm(forms.ModelForm):
+    first_name = forms.CharField(
+        label='الاسم الأول',
+        widget=forms.TextInput(attrs={'class': 'form-control', 'required': True})
+    )
+    last_name = forms.CharField(
+        label='الاسم الأخير',
+        widget=forms.TextInput(attrs={'class': 'form-control', 'required': True})
+    )
+    email = forms.EmailField(
+        label='البريد الإلكتروني',
+        widget=forms.EmailInput(attrs={'class': 'form-control', 'required': True})
+    )
+    password = forms.CharField(
+        label='كلمة المرور',
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'required': True, 'minlength': '6'})
+    )
+
+    class Meta:
+        model = AdminProfile
+        fields = ['admin_role', 'notes']
+        labels = {
+            'admin_role': 'الدور الإداري',
+            'notes':      'ملاحظات',
+        }
+        widgets = {
+            'admin_role': forms.Select(attrs={'class': 'form-select'}),
+            'notes':      forms.Textarea(attrs={'class': 'form-control', 'rows': 2}),
+        }
+
+    def clean_email(self):
+        email = self.cleaned_data.get('email')
+        if User.objects.filter(email=email).exists():
+            raise forms.ValidationError("يوجد مستخدم بالفعل بهذا البريد الإلكتروني. يرجى استخدام (تعيين مسؤول موجود).")
+        return email

@@ -57,6 +57,9 @@
                         <div class="col-md-6">
                             <label class="form-label fw-bold small text-secondary">{{ field.label }}</label>
                             {{ field }}
+                            {% if field.help_text %}
+                            <div class="text-muted small mt-1" style="font-size: 0.75rem;"><i class="bi bi-info-circle me-1"></i>{{ field.help_text }}</div>
+                            {% endif %}
                             {% if field.errors %}
                             <div class="text-danger small mt-1 fw-bold"><i class="bi bi-exclamation-circle me-1"></i>{{ field.errors|join:", " }}</div>
                             {% endif %}
@@ -137,6 +140,51 @@
                 </div>
             </div>
         </form>
+
+        <!-- Auto Login Link Card -->
+        <div class="admin-card border-primary border border-opacity-25 shadow-sm mb-4" style="border-radius: 12px;">
+            <div class="p-4 p-md-5">
+                <div class="d-flex align-items-center mb-4">
+                    <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 45px; height: 45px; font-size: 1.2rem;">
+                        <i class="bi bi-box-arrow-in-right"></i>
+                    </div>
+                    <div>
+                        <h5 class="fw-bold text-primary mb-1">تسجيل الدخول السريع (One-Time Link)</h5>
+                        <p class="text-muted small mb-0">قم بتوليد رابط دخول يستخدم لمرة واحدة فقط للدخول السريع لهذا الحساب بدون كلمة مرور.</p>
+                    </div>
+                </div>
+                
+                <form method="POST" action="{% url 'admin_panel:edit_user' target_user.id %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="generate_login_link" value="1">
+                    <button type="submit" class="btn btn-outline-primary fw-bold px-4 shadow-sm">
+                        <i class="bi bi-link-45deg me-1"></i>توليد رابط دخول مباشر
+                    </button>
+                </form>
+                
+                {% if one_time_link %}
+                <div class="mt-4 p-3 bg-white border border-primary border-opacity-50 rounded" style="box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+                    <label class="form-label fw-bold text-success"><i class="bi bi-check-circle-fill me-1"></i>تم توليد الرابط بنجاح! انسخه الآن:</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control text-start font-monospace bg-light" id="generatedLinkInput" value="{{ one_time_link }}" readonly dir="ltr">
+                        <button class="btn btn-primary fw-bold" type="button" onclick="copyLink()">
+                            <i class="bi bi-clipboard me-1"></i>نسخ
+                        </button>
+                    </div>
+                    <p class="small text-danger mt-2 mb-0 fw-bold"><i class="bi bi-exclamation-triangle me-1"></i>هذا الرابط يعمل لمرة واحدة فقط ويحترق فور استخدامه.</p>
+                </div>
+                <script>
+                    function copyLink() {
+                        var copyText = document.getElementById("generatedLinkInput");
+                        copyText.select();
+                        copyText.setSelectionRange(0, 99999);
+                        navigator.clipboard.writeText(copyText.value);
+                        alert("تم نسخ الرابط الحصري بنجاح!");
+                    }
+                </script>
+                {% endif %}
+            </div>
+        </div>
 
         <!-- Security / Password Card -->
         <div class="admin-card border-danger border border-opacity-25 shadow-sm mb-5" style="border-radius: 12px;">

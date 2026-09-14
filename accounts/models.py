@@ -82,3 +82,33 @@ class StudentProfile(models.Model):
 
     def __str__(self):
         return self.user.get_full_name() or self.user.username
+
+import uuid
+class OneTimeLoginLink(models.Model):
+    user = models.ForeignKey(
+        User, 
+        on_delete=models.CASCADE, 
+        related_name='one_time_links',
+        verbose_name=_('المستخدم')
+    )
+    token = models.UUIDField(
+        default=uuid.uuid4, 
+        unique=True, 
+        editable=False,
+        verbose_name=_('رمز الدخول')
+    )
+    is_used = models.BooleanField(
+        default=False,
+        verbose_name=_('مستخدم')
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name=_('تاريخ الإنشاء')
+    )
+
+    class Meta:
+        verbose_name = _('رابط دخول لمرة واحدة')
+        verbose_name_plural = _('روابط الدخول')
+
+    def __str__(self):
+        return f"{self.user.username} - {'مستخدم' if self.is_used else 'صالح'}"

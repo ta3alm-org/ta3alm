@@ -203,3 +203,21 @@ from teachers.models import SubscriptionPlan
 def public_plans(request):
     plans = SubscriptionPlan.objects.all().order_by('price')
     return render(request, 'core/public_plans.html', {'plans': plans})
+
+def one_time_login_view(request, token):
+    from accounts.models import OneTimeLoginLink
+    from django.contrib.auth import login
+    from django.shortcuts import get_object_or_404, redirect
+    from django.contrib import messages
+    
+    link = get_object_or_404(OneTimeLoginLink, token=token)
+    if link.is_used:
+        messages.error(request, "عذراً، هذا الرابط تم استخدامه من قبل وانتهت صلاحيته.")
+        return redirect('home')
+        
+    link.is_used = True
+    link.save(update_fields=['is_used'])
+    
+    login(request, link.user, backend='accounts.backends.MultiFieldAuthBackend')
+    messages.success(request, f"مرحباً بك {link.user.get_full_name() or link.user.email}، تم تسجيل الدخول بنجاح.")
+    return redirect(link.user.get_dashboard_url())

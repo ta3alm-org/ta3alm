@@ -79,15 +79,20 @@
                         {{ s.appointed_at|date:"j M Y" }}
                     </td>
                     <td>
-                        <form method="POST"
-                              onsubmit="return confirm('إزالة {{ s.user.get_full_name }} من فريق الإدارة؟');">
-                            {% csrf_token %}
-                            <input type="hidden" name="action" value="remove">
-                            <input type="hidden" name="profile_id" value="{{ s.id }}">
-                            <button class="action-btn action-btn-delete" title="إزالة">
-                                <i class="bi bi-person-dash-fill"></i>
-                            </button>
-                        </form>
+                        <div class="d-flex gap-1 align-items-center">
+                            <a href="{% url 'admin_panel:edit_user' s.user.id %}" class="action-btn action-btn-edit" title="تعديل الإعدادات والمرور">
+                                <i class="bi bi-gear-fill"></i>
+                            </a>
+                            <form method="POST" class="d-inline"
+                                  onsubmit="return confirm('إزالة {{ s.user.get_full_name }} من فريق الإدارة؟');">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="remove">
+                                <input type="hidden" name="profile_id" value="{{ s.id }}">
+                                <button type="submit" class="action-btn action-btn-delete" title="إزالة و سحب الصلاحيات">
+                                    <i class="bi bi-person-dash-fill"></i>
+                                </button>
+                            </form>
+                        </div>
                     </td>
                 </tr>
                 {% empty %}
@@ -103,45 +108,96 @@
     </div>
 </div>
 
-<!-- Appoint Modal -->
+<!-- Appoint / Create Modal -->
 <div class="modal fade" id="appointModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content" style="border-radius:16px; border:none;">
-            <div class="modal-header border-0">
+            <div class="modal-header border-bottom-0 pb-0">
                 <h5 class="modal-title fw-bold">
-                    <i class="bi bi-person-plus-fill me-2" style="color:var(--admin-accent);"></i>تعيين مسؤول جديد
+                    <i class="bi bi-person-plus-fill me-2" style="color:var(--admin-accent);"></i>إضافة مسؤول للنظام
                 </h5>
                 <button class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <form method="POST">
-                {% csrf_token %}
-                <input type="hidden" name="action" value="appoint">
-                <div class="modal-body">
-                    <p class="text-muted small mb-3">أدخل إيميل مستخدم موجود في المنصة لتعيينه مسؤولاً إدارياً.</p>
-                    {% for field in appoint_form %}
-                    <div class="mb-3">
-                        <label class="form-label fw-bold small text-muted">{{ field.label }}</label>
-                        {{ field }}
-                        {% if field.errors %}<div class="text-danger small">{{ field.errors|join:", " }}</div>{% endif %}
-                    </div>
-                    {% endfor %}
+            <div class="modal-body">
+                <ul class="nav nav-tabs nav-fill mb-4 border-bottom-0 gap-2" id="adminTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active fw-bold border-0 rounded bg-light text-dark" id="create-tab" data-bs-toggle="tab" data-bs-target="#create-pane" type="button" role="tab" style="padding: 12px;">
+                            <i class="bi bi-person-add me-2"></i>إنشاء حساب جديد كلياً
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link fw-bold border-0 rounded bg-light text-dark" id="appoint-tab" data-bs-toggle="tab" data-bs-target="#appoint-pane" type="button" role="tab" style="padding: 12px;">
+                            <i class="bi bi-person-check me-2"></i>ترقية مستخدم موجود
+                        </button>
+                    </li>
+                </ul>
 
-                    <!-- Role descriptions -->
-                    <div class="alert alert-info small p-2 mt-2" style="border-radius:10px;">
-                        <strong>صلاحيات الأدوار:</strong><br>
-                        🔴 <strong>مالك:</strong> كل الصلاحيات<br>
-                        🔵 <strong>مشرف:</strong> إدارة + تعديل المستخدمين<br>
-                        🟢 <strong>دعم فني:</strong> عرض المستخدمين فقط<br>
-                        🟡 <strong>مسؤول مالي:</strong> التقارير المالية فقط
+                <style>
+                    .nav-tabs .nav-link.active {
+                        background-color: var(--admin-accent) !important;
+                        color: white !important;
+                    }
+                </style>
+
+                <div class="tab-content" id="adminTabsContent">
+                    <!-- Create New Admin -->
+                    <div class="tab-pane fade show active" id="create-pane" role="tabpanel" tabindex="0">
+                        <form method="POST">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="create">
+                            <div class="row g-3">
+                                {% for field in create_form %}
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold small text-muted">{{ field.label }}</label>
+                                    {{ field }}
+                                </div>
+                                {% endfor %}
+                            </div>
+                            <div class="mt-4 text-end">
+                                <button type="button" class="btn btn-light me-2" data-bs-dismiss="modal">إلغاء</button>
+                                <button type="submit" class="btn fw-bold px-4 shadow-sm" style="background:var(--admin-accent); color:white;">
+                                    <i class="bi bi-plus-circle me-1"></i>إنشاء الحساب وتعيينه
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Appoint Existing Admin -->
+                    <div class="tab-pane fade" id="appoint-pane" role="tabpanel" tabindex="0">
+                        <form method="POST">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="appoint">
+                            <p class="text-muted small mb-3">أدخل إيميل مستخدم موجود بالفعل في المنصة (طالب/معلم) لترقيته إلى مسؤول.</p>
+                            
+                            <div class="row g-3">
+                                {% for field in appoint_form %}
+                                <div class="col-12">
+                                    <label class="form-label fw-bold small text-muted">{{ field.label }}</label>
+                                    {{ field }}
+                                </div>
+                                {% endfor %}
+                            </div>
+
+                            <div class="mt-4 text-end">
+                                <button type="button" class="btn btn-light me-2" data-bs-dismiss="modal">إلغاء</button>
+                                <button type="submit" class="btn fw-bold px-4 shadow-sm" style="background:var(--admin-accent); color:white;">
+                                    <i class="bi bi-check-circle me-1"></i>ترقية وتعيين
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
-                <div class="modal-footer border-0">
-                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">إلغاء</button>
-                    <button type="submit" class="btn fw-bold px-4" style="background:var(--admin-accent); color:white;">
-                        <i class="bi bi-check-circle me-1"></i>تعيين
-                    </button>
+
+                <!-- Role descriptions -->
+                <div class="alert alert-info small p-2 mt-4 mb-0" style="border-radius:10px; text-align: right;">
+                    <strong>صلاحيات الأدوار:</strong><br>
+                    🔴 <strong>مالك (Owner):</strong> يصبح Superuser وله كل الصلاحيات. لا يمكن إضافته إلا من مالك آخر.<br>
+                    🔵 <strong>مشرف:</strong> إدارة كاملة + تعديل المستخدمين بدون صلاحيات حساسة.<br>
+                    🟢 <strong>دعم فني:</strong> عرض المستخدمين والرد على الدعم فقط.<br>
+                    🟡 <strong>مسؤول مالي:</strong> مشاهدة التقارير المالية والمدفوعات فقط.
                 </div>
-            </form>
+
+            </div>
         </div>
     </div>
 </div>

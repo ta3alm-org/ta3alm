@@ -396,36 +396,7 @@ def student_settings(request):
     return render(request, 'students/settings.html', {'student': request.user})
 
 # دالة مساعدة لحساب الترتيب (ضعها في بداية الملف أو نهايته)
-def calculate_leaderboard(group):
-    # جلب الطلاب المقبولين فقط
-    students = group.enrollments.filter(is_active=True).select_related('student__user')
-    leaderboard = []
-    
-    for enroll in students:
-        total = 0
-        # 1. درجات السجلات
-        logs = PerformanceLog.objects.filter(student=enroll.student, group=group)
-        for l in logs:
-            total += (l.homework_score or 0)
-            total += (l.class_exam_score or 0) 
-            total += (l.recitation_score or 0)
-            total += (l.comprehensive_exam_score or 0)
-        
-        # 2. درجات الامتحانات الإلكترونية
-        exam_results = ExamResult.objects.filter(student=enroll.student, exam__group=group)
-        for r in exam_results:
-            total += r.score
-            
-        leaderboard.append({'student': enroll.student, 'total_score': total})
-    
-    # ترتيب تنازلي
-    leaderboard.sort(key=lambda x: x['total_score'], reverse=True)
-    
-    # إضافة المراكز
-    for i, item in enumerate(leaderboard):
-        item['rank'] = i + 1
-        
-    return leaderboard
+
 
 # ==========================================
 # صفحة الترتيب للطالب (الدالة الناقصة)
@@ -435,7 +406,8 @@ def student_group_ranking(request, group_id):
     group, status = check_student_access(request.user, group_id)
     if status != "ok": return redirect('student_dashboard')
 
-    leaderboard = calculate_leaderboard(group)
+    from core.utils import get_optimized_group_leaderboard
+    leaderboard = get_optimized_group_leaderboard(group)
     
     # معرفة ترتيب الطالب الحالي
     my_rank = next((item['rank'] for item in leaderboard if item['student'] == request.user.student_profile), '-')
