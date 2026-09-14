@@ -232,6 +232,17 @@ def edit_user(request, user_id):
     teacher_form = student_form = assistant_form = None
 
     if request.method == 'POST':
+        if 'change_password' in request.POST:
+            new_password = request.POST.get('new_password')
+            if new_password:
+                target.set_password(new_password)
+                target.save()
+                AuditLog.log(request, AuditLog.ACTION_EDIT_USER, target_label=f"تغيير كلمة مرور {target.get_full_name()}", target_id=target.id)
+                messages.success(request, "تم تغيير كلمة المرور بنجاح.")
+            else:
+                messages.error(request, "يرجى إدخال كلمة مرور جديدة.")
+            return redirect('admin_panel:edit_user', user_id=target.id)
+
         user_form = AdminUserEditForm(request.POST, instance=target)
 
         if target.role == 'teacher' and hasattr(target, 'teacher_profile'):

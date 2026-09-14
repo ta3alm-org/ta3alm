@@ -133,6 +133,32 @@
             </div>
         </div>
     </div>
-    </form>
+    </div>
+</form>
+
+<div class="row mt-4">
+    <div class="col-lg-6 mx-auto">
+        <!-- تغيير كلمة المرور -->
+        <div class="admin-card border-danger border border-opacity-25">
+            <div class="admin-card-header bg-danger bg-opacity-10 border-danger border-bottom border-opacity-25">
+                <span class="admin-card-title text-danger fw-bold"><i class="bi bi-key-fill me-2"></i>تغيير كلمة المرور</span>
+            </div>
+            <div class="p-4">
+                <form method="POST" action="{% url 'admin_panel:edit_user' target_user.id %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="change_password" value="1">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-muted">تعيين كلمة مرور جديدة لهذا الحساب</label>
+                        <input type="password" name="new_password" class="form-control" required minlength="6" placeholder="اكتب كلمة المرور الجديدة هنا...">
+                    </div>
+                    <button type="submit" class="btn btn-danger fw-bold px-4" onsubmit="return confirm('تأكيد تغيير كلمة المرور؟');">
+                        <i class="bi bi-shield-lock-fill me-1"></i>حفظ كلمة المرور
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 </div>
 {% endblock %}
