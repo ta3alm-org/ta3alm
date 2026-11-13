@@ -112,10 +112,10 @@ else:
 MIDDLEWARE = [
     'ta3alm_project.middleware.SubdomainAdminMiddleware',  # ← أول شيء حتى يعمل قبل كل شيء
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',               # ← قبل أي Middleware آخر لضمان عمل CORS مع Flutter Web/Mobile
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.locale.LocaleMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -152,18 +152,11 @@ REST_FRAMEWORK = {
 }
 
 # ==========================================================
-# CORS — تحديد النطاقات المسموح بها (لا wildcard في الإنتاج)
+# CORS — السماح لتطبيق Flutter (Web / Mobile / Desktop) بالاتصال بـ API
 # ==========================================================
-CORS_ALLOW_ALL_ORIGINS = DEBUG  # True فقط في التطوير المحلي
-
-CORS_ALLOWED_ORIGINS = [
-    origin.strip()
-    for origin in os.environ.get(
-        'CORS_ALLOWED_ORIGINS',
-        'http://localhost:3000,http://127.0.0.1:3000'
-    ).split(',')
-    if origin.strip()
-]
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_URLS_REGEX = r'^/api/.*$'
+CORS_ALLOW_CREDENTIALS = True
 
 # ==========================================================
 # إعدادات الأمان (Security Settings)
