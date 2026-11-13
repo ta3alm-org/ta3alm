@@ -82,6 +82,7 @@ INSTALLED_APPS = [
     'assistants',
     'bot_api',
     'dashboard_admin',   # ✅ لوحة الإدارة المستقلة
+    'api_v1',            # ✅ واجهة برمجة التطبيقات المتكاملة لتطبيق الموبايل
 ]
 
 AUTH_USER_MODEL = 'accounts.User'
@@ -131,19 +132,22 @@ MIDDLEWARE = [
 # ==========================================================
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
+        'api_v1.authentication.JWTAndTokenAuthentication',
         'rest_framework.authentication.TokenAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticatedOrReadOnly',
     ],
+    'DEFAULT_PAGINATION_CLASS': 'api_v1.pagination.StandardResultsSetPagination',
+    'PAGE_SIZE': 20,
     'DEFAULT_THROTTLE_CLASSES': [
         'rest_framework.throttling.AnonRateThrottle',
         'rest_framework.throttling.UserRateThrottle',
     ],
     'DEFAULT_THROTTLE_RATES': {
-        'anon': '100/hour',
-        'user': '1000/hour',
+        'anon': '300/hour',
+        'user': '3000/hour',
     },
 }
 

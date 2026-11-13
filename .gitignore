@@ -22,3 +22,15 @@ env/
 # Editor directories
 .idea/
 .vscode/
+
+# Flutter Mobile Application (لا ترفع مع مشروع الويب على Vercel)
+flutter_app/
+run_flutter_app.bat
+*.apk
+*.aab
+*.ipa
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+pubspec.lock

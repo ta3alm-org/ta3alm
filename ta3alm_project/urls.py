@@ -37,7 +37,7 @@ urlpatterns = [
     path('i18n/', include('django.conf.urls.i18n')),
 
     # API endpoints (بدون i18n)
-    path('api/v1/',  include('teachers.api_urls')),
+    path('api/v1/',  include('api_v1.urls')),
     path('api/auth/', include('accounts.api_urls')),
     path('api/bot/', include('bot_api.urls')),
 ]
