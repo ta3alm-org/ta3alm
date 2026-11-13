@@ -9,6 +9,7 @@ from django.conf.urls.i18n import i18n_patterns
 from django.contrib.sitemaps.views import sitemap
 from django.views.generic.base import TemplateView
 from accounts import views as account_views
+from api_v1.views_public import AndroidAssetLinksView
 from core.sitemaps import StaticViewSitemap, TeacherSitemap, PackageSitemap
 
 # ==========================================================
@@ -24,6 +25,11 @@ sitemaps = {
 # الروابط العامة (بدون i18n prefix)
 # ==========================================================
 urlpatterns = [
+    path(
+        '.well-known/assetlinks.json',
+        AndroidAssetLinksView.as_view(),
+        name='android_assetlinks',
+    ),
     path(
         'sitemap.xml',
         sitemap,

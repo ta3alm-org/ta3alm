@@ -318,3 +318,24 @@ class VideoSecurityAndIntegrityTests(APITestCase):
         self.assertEqual(clamped_resp.data['position_seconds'], 600)
         self.assertEqual(clamped_resp.data['duration_seconds'], 600)
         self.assertTrue(clamped_resp.data['is_completed'])
+
+    def test_android_assetlinks_well_known_endpoint(self):
+        sample_fp = 'ab' * 32
+        with override_settings():
+            import os
+            prev = os.environ.get('ANDROID_ASSETLINKS_SHA256')
+            os.environ['ANDROID_ASSETLINKS_SHA256'] = sample_fp
+            try:
+                resp = self.client.get('/.well-known/assetlinks.json')
+            finally:
+                if prev is None:
+                    os.environ.pop('ANDROID_ASSETLINKS_SHA256', None)
+                else:
+                    os.environ['ANDROID_ASSETLINKS_SHA256'] = prev
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertEqual(len(body), 1)
+        self.assertEqual(body[0]['relation'], ['delegate_permission/common.handle_all_urls'])
+        self.assertEqual(body[0]['target']['package_name'], 'online.ta3alm.ta3alm_flutter')
+        self.assertEqual(body[0]['target']['sha256_cert_fingerprints'], [':'.join(['AB'] * 32)])
