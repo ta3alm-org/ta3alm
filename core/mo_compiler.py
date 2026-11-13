@@ -121,6 +121,7 @@ def ensure_mo_compiled(base_dir: Path | str | None = None) -> bool:
     """
     يتحقق من جميع ملفات django.po داخل مجلد locale ويقوم بترجمتها تلقائياً إلى django.mo
     إذا كان ملف .po أحدث من .mo أو إذا لم يكن .mo موجوداً.
+    يدعم أيضاً بيئة Vercel (Read-Only Filesystem) عبر الكتابة في /tmp عند الحاجة.
     """
     if base_dir is None:
         from django.conf import settings
@@ -139,11 +140,27 @@ def ensure_mo_compiled(base_dir: Path | str | None = None) -> bool:
             need_compile = (
                 not mo_path.exists()
                 or po_path.stat().st_mtime >= mo_path.stat().st_mtime
+                or mo_path.stat().st_size < 1024
             )
             if need_compile:
                 messages = _parse_po_file(po_path)
                 mo_bytes = _generate_mo_bytes(messages)
-                mo_path.write_bytes(mo_bytes)
+                try:
+                    mo_path.write_bytes(mo_bytes)
+                except OSError:
+                    # في بيئة Vercel يكون نظام الملفات للقراءة فقط، فنحفظ الملف في /tmp
+                    import tempfile
+                    lang = po_path.parent.parent.name
+                    tmp_locale_root = Path(tempfile.gettempdir()) / 'ta3alm_locale'
+                    tmp_mo = tmp_locale_root / lang / 'LC_MESSAGES' / 'django.mo'
+                    tmp_mo.parent.mkdir(parents=True, exist_ok=True)
+                    tmp_mo.write_bytes(mo_bytes)
+                    try:
+                        from django.conf import settings
+                        if tmp_locale_root not in [Path(p) for p in settings.LOCALE_PATHS]:
+                            settings.LOCALE_PATHS = [tmp_locale_root] + list(settings.LOCALE_PATHS)
+                    except Exception:
+                        pass
                 updated = True
         except Exception as exc:
             print(f"[mo_compiler] Error compiling {po_path}: {exc}")
