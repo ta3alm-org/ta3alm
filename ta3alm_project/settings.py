@@ -337,7 +337,7 @@ LOGOUT_REDIRECT_URL = '/'
 ACCOUNT_LOGIN_METHODS = {'email'}                          # تسجيل الدخول بالإيميل فقط
 ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*']  # الحقول المطلوبة عند التسجيل
 ACCOUNT_EMAIL_VERIFICATION = 'none'                        # لا إيميل تفعيل
-ACCOUNT_LOGOUT_ON_GET = False                              # ✅ حماية من CSRF على Logout
+ACCOUNT_LOGOUT_ON_GET = True                               # تسجيل الخروج المباشر لتجنب تعارض القوالب
 
 SOCIALACCOUNT_AUTO_SIGNUP = True
 SOCIALACCOUNT_EMAIL_VERIFICATION = 'none'

@@ -396,36 +396,10 @@ def student_settings(request):
     return render(request, 'students/settings.html', {'student': request.user})
 
 # دالة مساعدة لحساب الترتيب (ضعها في بداية الملف أو نهايته)
+from core.utils import get_optimized_group_leaderboard, get_optimized_package_leaderboard
+
 def calculate_leaderboard(group):
-    # جلب الطلاب المقبولين فقط
-    students = group.enrollments.filter(is_active=True).select_related('student__user')
-    leaderboard = []
-    
-    for enroll in students:
-        total = 0
-        # 1. درجات السجلات
-        logs = PerformanceLog.objects.filter(student=enroll.student, group=group)
-        for l in logs:
-            total += (l.homework_score or 0)
-            total += (l.class_exam_score or 0) 
-            total += (l.recitation_score or 0)
-            total += (l.comprehensive_exam_score or 0)
-        
-        # 2. درجات الامتحانات الإلكترونية
-        exam_results = ExamResult.objects.filter(student=enroll.student, exam__group=group)
-        for r in exam_results:
-            total += r.score
-            
-        leaderboard.append({'student': enroll.student, 'total_score': total})
-    
-    # ترتيب تنازلي
-    leaderboard.sort(key=lambda x: x['total_score'], reverse=True)
-    
-    # إضافة المراكز
-    for i, item in enumerate(leaderboard):
-        item['rank'] = i + 1
-        
-    return leaderboard
+    return get_optimized_group_leaderboard(group)
 
 # ==========================================
 # صفحة الترتيب للطالب (الدالة الناقصة)
@@ -727,38 +701,7 @@ from django.db.models import Sum # تأكد من الاستيراد
 @login_required
 def package_leaderboard(request, package_id):
     package = get_object_or_404(CoursePackage, id=package_id)
-    
-    enrollments = package.enrollments.filter(is_paid=True)
-    leaderboard = []
-    
-    for enroll in enrollments:
-        std = enroll.student
-        
-        # 1. نقاط الفيديوهات
-        v_agg = VideoViewTracking.objects.filter(
-            student=std, package=package
-        ).aggregate(total=Sum('points_awarded'))
-        v_points = v_agg['total'] if v_agg['total'] is not None else 0
-        
-        # 2. نقاط الامتحانات
-        e_agg = PackageExamResult.objects.filter(
-            student=std, package=package
-        ).aggregate(total=Sum('score'))
-        e_points = e_agg['total'] if e_agg['total'] is not None else 0
-        
-        # المجموع
-        total_score = v_points + e_points
-        
-        leaderboard.append({'student': std, 'score': total_score})
-    
-    # الترتيب
-    leaderboard.sort(key=lambda x: x['score'], reverse=True)
-    
-    # المراكز
-    for i, item in enumerate(leaderboard):
-        item['rank'] = i + 1
-    
-    # ترتيبي
+    leaderboard = get_optimized_package_leaderboard(package)
     my_rank = next((x['rank'] for x in leaderboard if x['student'] == request.user.student_profile), '-')
 
     return render(request, 'students/package_leaderboard.html', {

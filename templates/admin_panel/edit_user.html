@@ -1,92 +1,95 @@
 {% extends 'admin_panel/base_admin.html' %}
 {% load i18n %}
-
-{% block page_title %}تعديل: {{ target_user.get_full_name }}{% endblock %}
+{% block page_title %}تعديل المستخدم — {{ target_user.get_full_name }}{% endblock %}
 {% block nav_users %}active{% endblock %}
 {% block breadcrumb %}
 <span class="sep">/</span>
-<a href="{% url 'admin_panel:manage_users' %}">المستخدمون</a>
+<a href="{% url 'admin_panel:manage_users' %}" class="text-muted text-decoration-none">المستخدمون</a>
 <span class="sep">/</span>
 <span class="current">تعديل</span>
 {% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1>
-        <i class="bi bi-pencil-fill me-2" style="color:var(--admin-accent);"></i>
-        تعديل: {{ target_user.get_full_name|default:target_user.email }}
-    </h1>
-    <p>
-        <span class="role-badge
-            {% if target_user.role == 'teacher' %}role-teacher
-            {% elif target_user.role == 'student' %}role-student
-            {% elif target_user.role == 'assistant' %}role-assistant
-            {% else %}role-admin{% endif %} me-2">
-            {{ target_user.get_role_display }}
-        </span>
-        {{ target_user.email }}
-    </p>
+<div class="page-header d-flex align-items-center justify-content-between flex-wrap gap-3 mb-4">
+    <div class="d-flex align-items-center gap-3">
+        <div class="user-avatar" style="width:56px;height:56px;font-size:1.4rem;border-radius:14px;">
+            {{ target_user.first_name|slice:":1"|upper|default:"U" }}
+        </div>
+        <div>
+            <h1 class="mb-1">{{ target_user.get_full_name|default:target_user.username }}</h1>
+            <p class="mb-0 text-muted">
+                {{ target_user.email }}
+                <span class="role-badge role-{{ target_user.role }} ms-2">{{ target_user.get_role_display }}</span>
+            </p>
+        </div>
+    </div>
+    <a href="{% url 'admin_panel:manage_users' %}" class="btn btn-light fw-bold px-3">
+        <i class="bi bi-arrow-right me-1"></i> العودة للقائمة
+    </a>
 </div>
 
-<form method="POST">
-    {% csrf_token %}
-    <div class="row g-4">
-        <!-- بيانات أساسية -->
-        <div class="col-lg-6">
-            <div class="admin-card">
+<div class="row g-4">
+    <!-- العمود الأيمن: البيانات الأساسية وبيانات الدور -->
+    <div class="col-lg-7">
+        <form method="POST" id="editUserForm">
+            {% csrf_token %}
+            <div class="admin-card mb-4">
                 <div class="admin-card-header">
-                    <span class="admin-card-title"><i class="bi bi-person-fill me-2"></i>البيانات الأساسية</span>
+                    <span class="admin-card-title">
+                        <i class="bi bi-person-fill me-2" style="color:var(--admin-accent);"></i>البيانات الأساسية
+                    </span>
                 </div>
                 <div class="p-4">
-                    {% for field in user_form %}
-                    <div class="mb-3">
-                        <label class="form-label fw-bold small text-muted">{{ field.label }}</label>
-                        {{ field }}
-                        {% if field.errors %}
-                        <div class="text-danger small mt-1">{{ field.errors|join:", " }}</div>
-                        {% endif %}
-                    </div>
-                    {% endfor %}
-                    <div class="d-flex gap-2 mt-4">
-                        <button type="submit" class="btn btn-primary fw-bold px-4">
-                            <i class="bi bi-check-circle me-1"></i>حفظ جميع التغييرات
-                        </button>
-                        <a href="{% url 'admin_panel:manage_users' %}" class="btn btn-light fw-bold">إلغاء</a>
+                    <div class="row g-3">
+                        {% for field in user_form %}
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small text-muted">{{ field.label }}</label>
+                            {{ field }}
+                            {% if field.help_text %}
+                                <div class="text-muted mt-1" style="font-size: 0.75rem;"><i class="bi bi-info-circle me-1"></i>{{ field.help_text }}</div>
+                            {% endif %}
+                            {% if field.errors %}
+                                <div class="text-danger small mt-1">{{ field.errors|join:", " }}</div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- بيانات فرعية -->
-        <div class="col-lg-6">
             {% if teacher_form %}
-            <div class="admin-card">
+            <div class="admin-card mb-4">
                 <div class="admin-card-header">
-                    <span class="admin-card-title"><i class="bi bi-person-video3 me-2 text-primary"></i>بيانات المعلم</span>
+                    <span class="admin-card-title">
+                        <i class="bi bi-person-video3 me-2" style="color:#1565c0;"></i>بيانات المعلم والاشتراك
+                    </span>
                 </div>
                 <div class="p-4">
-                    {% for field in teacher_form %}
-                    <div class="mb-3">
-                        <label class="form-label fw-bold small text-muted">{{ field.label }}</label>
-                        {{ field }}
-                        {% if field.errors %}<div class="text-danger small">{{ field.errors|join:", " }}</div>{% endif %}
+                    <div class="row g-3">
+                        {% for field in teacher_form %}
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small text-muted">{{ field.label }}</label>
+                            {{ field }}
+                            {% if field.errors %}<div class="text-danger small mt-1">{{ field.errors|join:", " }}</div>{% endif %}
+                        </div>
+                        {% endfor %}
                     </div>
-                    {% endfor %}
                 </div>
             </div>
             {% endif %}
 
             {% if student_form %}
-            <div class="admin-card">
+            <div class="admin-card mb-4">
                 <div class="admin-card-header">
-                    <span class="admin-card-title"><i class="bi bi-mortarboard me-2 text-success"></i>بيانات الطالب</span>
+                    <span class="admin-card-title">
+                        <i class="bi bi-mortarboard-fill me-2" style="color:#2e7d32;"></i>بيانات الطالب
+                    </span>
                 </div>
                 <div class="p-4">
                     {% for field in student_form %}
                     <div class="mb-3">
                         <label class="form-label fw-bold small text-muted">{{ field.label }}</label>
                         {{ field }}
-                        {% if field.errors %}<div class="text-danger small">{{ field.errors|join:", " }}</div>{% endif %}
                     </div>
                     {% endfor %}
                 </div>
@@ -94,45 +97,131 @@
             {% endif %}
 
             {% if assistant_form %}
-            <div class="admin-card">
+            <div class="admin-card mb-4">
                 <div class="admin-card-header">
-                    <span class="admin-card-title"><i class="bi bi-person-badge me-2" style="color:var(--admin-gold);"></i>بيانات المساعد</span>
+                    <span class="admin-card-title">
+                        <i class="bi bi-person-check-fill me-2" style="color:#e65100;"></i>بيانات المساعد
+                    </span>
                 </div>
                 <div class="p-4">
                     {% for field in assistant_form %}
                     <div class="mb-3">
                         <label class="form-label fw-bold small text-muted">{{ field.label }}</label>
                         {{ field }}
-                        {% if field.errors %}<div class="text-danger small">{{ field.errors|join:", " }}</div>{% endif %}
                     </div>
                     {% endfor %}
                 </div>
             </div>
             {% endif %}
 
-            <!-- معلومات إضافية (read-only) -->
-        <div class="admin-card mt-3">
+            <div class="d-flex gap-2 mb-4">
+                <button type="submit" class="btn btn-primary fw-bold px-4 py-2" style="border-radius:10px;">
+                    <i class="bi bi-check2-circle me-1"></i>حفظ جميع التغييرات
+                </button>
+                <a href="{% url 'admin_panel:manage_users' %}" class="btn btn-light px-4 py-2" style="border-radius:10px;">إلغاء</a>
+            </div>
+        </form>
+    </div>
+
+    <!-- العمود الأيسر: الأمان، الدخول المباشر، ومعلومات النشاط -->
+    <div class="col-lg-5">
+        <!-- 1. معلومات النشاط -->
+        <div class="admin-card mb-4">
             <div class="admin-card-header">
-                <span class="admin-card-title"><i class="bi bi-info-circle me-2"></i>معلومات إضافية</span>
+                <span class="admin-card-title"><i class="bi bi-activity me-2 text-primary"></i>معلومات النشاط</span>
             </div>
             <div class="p-4">
-                <div class="row g-2" style="font-size:0.875rem;">
-                    <div class="col-6"><span class="text-muted">تاريخ الانضمام:</span></div>
-                    <div class="col-6 fw-bold">{{ target_user.date_joined|date:"j M Y" }}</div>
-                    <div class="col-6"><span class="text-muted">آخر دخول:</span></div>
-                    <div class="col-6 fw-bold">{{ target_user.last_login|date:"j M Y H:i"|default:"—" }}</div>
-                    <div class="col-6"><span class="text-muted">محظور؟</span></div>
-                    <div class="col-6">
-                        {% if target_user.is_banned %}
-                        <span class="role-badge status-banned">نعم</span>
-                        {% else %}
-                        <span class="role-badge status-active">لا</span>
-                        {% endif %}
-                    </div>
+                <div class="d-flex justify-content-between py-2 border-bottom">
+                    <span class="text-muted small">تاريخ الانضمام:</span>
+                    <span class="fw-bold small">{{ target_user.date_joined|date:"j M Y" }}</span>
+                </div>
+                <div class="d-flex justify-content-between py-2 border-bottom">
+                    <span class="text-muted small">آخر دخول:</span>
+                    <span class="fw-bold small">{{ target_user.last_login|date:"j M Y H:i"|default:"لم يسجل دخول" }}</span>
+                </div>
+                <div class="d-flex justify-content-between py-2">
+                    <span class="text-muted small">حالة الحساب:</span>
+                    {% if target_user.is_banned %}
+                        <span class="role-badge status-banned">محظور</span>
+                    {% else %}
+                        <span class="role-badge status-active">نشط</span>
+                    {% endif %}
                 </div>
             </div>
         </div>
+
+        <!-- 2. رابط تسجيل دخول مباشر (لمرة واحدة) -->
+        <div class="admin-card mb-4" style="border: 1px solid #e0e7ff;">
+            <div class="admin-card-header" style="background: #f8faff;">
+                <span class="admin-card-title text-primary">
+                    <i class="bi bi-link-45deg me-1"></i>رابط دخول مباشر (لمرة واحدة)
+                </span>
+            </div>
+            <div class="p-4">
+                <p class="text-muted small mb-3">
+                    يمكنك توليد رابط دخول سحري صالح للاستخدام <strong>مرة واحدة فقط</strong> وإرساله للمستخدم لتسجيل الدخول فوراً دون الحاجة لكلمة المرور.
+                </p>
+
+                {% if one_time_link %}
+                <div class="p-3 mb-3 rounded-3" style="background:#f0fdf4; border:1px solid #bbf7d0;">
+                    <label class="form-label fw-bold small text-success mb-1">
+                        <i class="bi bi-check-circle-fill me-1"></i>تم توليد الرابط بنجاح (انسخه الآن):
+                    </label>
+                    <div class="input-group">
+                        <input type="text" id="magicLoginLink" class="form-control form-control-sm text-start" dir="ltr" value="{{ one_time_link }}" readonly>
+                        <button type="button" class="btn btn-success btn-sm fw-bold" onclick="copyMagicLink()">
+                            <i class="bi bi-clipboard me-1"></i>نسخ
+                        </button>
+                    </div>
+                    <small id="copyFeedback" class="text-success fw-bold d-none mt-1 d-block">تم النسخ إلى الحافظة! ✅</small>
+                </div>
+                {% endif %}
+
+                <form method="POST">
+                    {% csrf_token %}
+                    <input type="hidden" name="generate_login_link" value="1">
+                    <button type="submit" class="btn btn-outline-primary w-100 fw-bold" style="border-radius:10px;">
+                        <i class="bi bi-magic me-1"></i>توليد رابط دخول جديد
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- 3. الأمان وتغيير كلمة المرور -->
+        <div class="admin-card">
+            <div class="admin-card-header">
+                <span class="admin-card-title text-danger">
+                    <i class="bi bi-shield-lock-fill me-2"></i>تعيين كلمة مرور جديدة
+                </span>
+            </div>
+            <div class="p-4">
+                <form method="POST">
+                    {% csrf_token %}
+                    <input type="hidden" name="change_password" value="1">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-muted">كلمة المرور الجديدة</label>
+                        <input type="password" name="new_password" class="form-control" placeholder="أدخل كلمة المرور الجديدة..." required minlength="6">
+                        <div class="text-muted mt-1" style="font-size:0.75rem;">يجب ألا تقل عن 6 أحرف أو أرقام.</div>
+                    </div>
+                    <button type="submit" class="btn btn-danger w-100 fw-bold" style="border-radius:10px;">
+                        <i class="bi bi-key-fill me-1"></i>تحديث كلمة المرور فوراً
+                    </button>
+                </form>
+            </div>
+        </div>
     </div>
-    </form>
 </div>
+
+<script>
+function copyMagicLink() {
+    const input = document.getElementById('magicLoginLink');
+    if (!input) return;
+    input.select();
+    input.setSelectionRange(0, 99999);
+    navigator.clipboard.writeText(input.value).then(() => {
+        const fb = document.getElementById('copyFeedback');
+        if (fb) fb.classList.remove('d-none');
+    });
+}
+</script>
 {% endblock %}
