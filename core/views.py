@@ -116,10 +116,18 @@ def all_notifications(request):
 
 
 # ==========================================================
-# 6. دليل المنصة
+# 6. دليل المنصة والصفحات القانونية
 # ==========================================================
 def platform_guide(request):
     return render(request, 'core/guide.html')
+
+
+def privacy_policy(request):
+    return render(request, 'core/privacy.html')
+
+
+def terms_of_service(request):
+    return render(request, 'core/terms.html')
 
 # ==========================================================
 # 7. صفحة الدفع اليدوي

@@ -8,7 +8,7 @@ class StaticViewSitemap(Sitemap):
 
     def items(self):
         # تأكد أن هذه الأسماء موجودة في urls.py لديك
-        return ['home'] 
+        return ['home', 'privacy_policy', 'terms_of_service', 'platform_guide']
 
     def location(self, item):
         return reverse(item)

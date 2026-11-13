@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+{% load i18n %}
+
+{% block title %}
+{% if LANGUAGE_CODE == 'en' %}Terms of Service — Ta3alm{% else %}الشروط والأحكام — منصة تعلّم{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-10">
+            <div class="card border-0 shadow-lg rounded-4 overflow-hidden">
+                <div class="p-4 p-md-5 text-white" style="background: linear-gradient(135deg, #520000 0%, #800000 60%, #2b0000 100%);">
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                        <div>
+                            <span class="badge bg-warning text-dark fw-bold mb-2 px-3 py-2 rounded-pill">
+                                <i class="bi bi-file-earmark-check-fill me-1"></i>
+                                {% if LANGUAGE_CODE == 'en' %}Platform Terms{% else %}شروط الاستخدام{% endif %}
+                            </span>
+                            <h1 class="h2 fw-bold mb-1">
+                                {% if LANGUAGE_CODE == 'en' %}Terms of Service — Ta3alm Platform{% else %}الشروط والأحكام — منصة تعلّم (Ta3alm){% endif %}
+                            </h1>
+                            <p class="mb-0 text-white-50 small">
+                                {% if LANGUAGE_CODE == 'en' %}Last updated: November 2026{% else %}آخر تحديث: نوفمبر 2026{% endif %}
+                            </p>
+                        </div>
+                        <a href="{% url 'privacy_policy' %}" class="btn btn-outline-warning btn-sm rounded-pill px-3 fw-bold">
+                            <i class="bi bi-shield-lock me-1"></i>
+                            {% if LANGUAGE_CODE == 'en' %}Privacy Policy{% else %}سياسة الخصوصية{% endif %}
+                        </a>
+                    </div>
+                </div>
+
+                <div class="card-body p-4 p-md-5 lh-lg">
+                    {% if LANGUAGE_CODE == 'en' %}
+                    <p class="lead text-muted mb-4">
+                        By creating an account or accessing <strong>Ta3alm</strong> (website or mobile application), you agree to comply with the following terms and conditions.
+                    </p>
+
+                    <h4 class="fw-bold text-primary mt-4 mb-2">1. Account Eligibility &amp; Responsibility</h4>
+                    <ul>
+                        <li>Users must provide accurate information during registration and select the appropriate role (Student, Teacher, or Assistant).</li>
+                        <li>Each account is strictly personal. Sharing login credentials, session tokens, or single-use lecture access codes with others is prohibited.</li>
+                    </ul>
+
+                    <h4 class="fw-bold text-primary mt-4 mb-2">2. Intellectual Property &amp; Anti-Piracy</h4>
+                    <ul>
+                        <li>All educational videos, PDFs, exams, and course materials published by teachers on Ta3alm remain the intellectual property of their respective teachers and the platform.</li>
+                        <li>Screen recording, downloading, copying, redistributing, or attempting to bypass application integrity and player protections is strictly forbidden and results in immediate permanent account suspension.</li>
+                    </ul>
+
+                    <h4 class="fw-bold text-primary mt-4 mb-2">3. Subscriptions, Access Codes &amp; Payments</h4>
+                    <ul>
+                        <li>Course packages and center lecture access codes grant access strictly for the specified number of views or subscription duration.</li>
+                        <li>Manual payment requests are activated after verification by platform administration.</li>
+                        <li>Teachers are responsible for the accuracy and educational quality of the courses and exams they publish.</li>
+                    </ul>
+
+                    <h4 class="fw-bold text-primary mt-4 mb-2">4. Acceptable Use &amp; Termination</h4>
+                    <p>
+                        We reserve the right to suspend or terminate any account that violates platform security, attempts reverse engineering/tampering, abuses exam systems, or infringes teachers' content rights.
+                    </p>
+
+                    <h4 class="fw-bold text-primary mt-4 mb-2">5. Contact Information</h4>
+                    <p>
+                        For inquiries, disputes, or account support, please contact us at
+                        <a href="mailto:support@ta3alm.online" class="fw-bold">support@ta3alm.online</a>
+                        or via WhatsApp at <span dir="ltr">+201507200894</span>.
+                    </p>
+                    {% else %}
+                    <p class="lead text-muted mb-4">
+                        باستخدامك لموقع أو تطبيق <strong>منصة تعلّم (Ta3alm)</strong>، فإنك توافق على الالتزام بالشروط والأحكام التالية:
+                    </p>
+
+                    <h4 class="fw-bold text-primary mt-4 mb-2">1. إنشاء الحساب ومسؤولية الاستخدام</h4>
+                    <ul>
+                        <li>يلتزم المستخدم بإدخال بيانات صحيحة عند التسجيل واختيار الصفة المناسبة (طالب، معلم، أو مساعد).</li>
+                        <li>الحساب شخصي بالكامل، ويُمنع مشاركة بيانات الدخول أو أكواد فتح المحاضرات مع أي أشخاص آخرين.</li>
+                    </ul>
+
+                    <h4 class="fw-bold text-primary mt-4 mb-2">2. حقوق الملكية الفكرية ومنع القرصنة</h4>
+                    <ul>
+                        <li>جميع الفيديوهات والملفات والامتحانات والمواد العلمية مملوكة للمعلمين أصحاب المحتوى ولمنصة تعلّم.</li>
+                        <li>يُحظر تمامًا تصوير الشاشة أو تحميل المحاضرات أو إعادة نشرها أو محاولة فك تشفير المشغل أو تجاوز حمايات التطبيق، ويعرض ذلك الحساب للحظر الدائم والمساءلة القانونية.</li>
+                    </ul>
+
+                    <h4 class="fw-bold text-primary mt-4 mb-2">3. الاشتراكات والمدفوعات وأكواد المشاهدة</h4>
+                    <ul>
+                        <li>تمنح أكواد المحاضرات واشتراكات الحزم صلاحية المشاهدة وفق عدد المشاهدات أو المدة المحددة من المعلم فقط.</li>
+                        <li>طلبات الدفع اليدوي تُفعَّل بعد مراجعة إيصال التحويل من إدارة المنصة.</li>
+                        <li>يتحمل المعلم المسؤولية الكاملة عن المحتوى العلمي والاختبارات المنشورة تحت حسابه.</li>
+                    </ul>
+
+                    <h4 class="fw-bold text-primary mt-4 mb-2">4. إيقاف الحسابات المخالفة</h4>
+                    <p>
+                        تحتفظ إدارة المنصة بحق إيقاف أو حظر أي حساب يثبت مخالفته لقواعد الأمان، أو محاولة التلاعب بالتطبيق أو الامتحانات، أو التعدي على حقوق المعلمين.
+                    </p>
+
+                    <h4 class="fw-bold text-primary mt-4 mb-2">5. التواصل والدعم</h4>
+                    <p>
+                        لأي استفسار أو بلاغ بخصوص الشروط والأحكام، يمكنكم مراسلتنا على البريد الرسمي
+                        <a href="mailto:support@ta3alm.online" class="fw-bold">support@ta3alm.online</a>
+                        أو عبر واتساب على الرقم <span dir="ltr">+201507200894</span>.
+                    </p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

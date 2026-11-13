@@ -10,6 +10,7 @@ from django.contrib.sitemaps.views import sitemap
 from django.views.generic.base import TemplateView
 from accounts import views as account_views
 from api_v1.views_public import AndroidAssetLinksView
+from core import views as core_views
 from core.sitemaps import StaticViewSitemap, TeacherSitemap, PackageSitemap
 
 # ==========================================================
@@ -30,6 +31,9 @@ urlpatterns = [
         AndroidAssetLinksView.as_view(),
         name='android_assetlinks',
     ),
+    path('privacy/', core_views.privacy_policy, name='privacy_policy_direct'),
+    path('privacy-policy/', core_views.privacy_policy, name='privacy_policy_direct_alias'),
+    path('terms/', core_views.terms_of_service, name='terms_of_service_direct'),
     path(
         'sitemap.xml',
         sitemap,

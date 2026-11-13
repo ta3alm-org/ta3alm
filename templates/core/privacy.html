@@ -1,0 +1,149 @@
+{% extends 'base.html' %}
+{% load i18n %}
+
+{% block title %}
+{% if LANGUAGE_CODE == 'en' %}Privacy Policy — Ta3alm{% else %}سياسة الخصوصية — منصة تعلّم{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-10">
+            <div class="card border-0 shadow-lg rounded-4 overflow-hidden">
+                <div class="p-4 p-md-5 text-white" style="background: linear-gradient(135deg, #520000 0%, #800000 60%, #2b0000 100%);">
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                        <div>
+                            <span class="badge bg-warning text-dark fw-bold mb-2 px-3 py-2 rounded-pill">
+                                <i class="bi bi-shield-lock-fill me-1"></i>
+                                {% if LANGUAGE_CODE == 'en' %}Legal &amp; Privacy{% else %}الأمان والخصوصية{% endif %}
+                            </span>
+                            <h1 class="h2 fw-bold mb-1">
+                                {% if LANGUAGE_CODE == 'en' %}Privacy Policy — Ta3alm Platform{% else %}سياسة الخصوصية — منصة تعلّم (Ta3alm){% endif %}
+                            </h1>
+                            <p class="mb-0 text-white-50 small">
+                                {% if LANGUAGE_CODE == 'en' %}Last updated: November 2026 | Applies to ta3alm.online &amp; Ta3alm Android App{% else %}آخر تحديث: نوفمبر 2026 | تنطبق على موقع ta3alm.online وتطبيق تعلّم على Android{% endif %}
+                            </p>
+                        </div>
+                        <a href="{% url 'terms_of_service' %}" class="btn btn-outline-warning btn-sm rounded-pill px-3 fw-bold">
+                            <i class="bi bi-file-text me-1"></i>
+                            {% if LANGUAGE_CODE == 'en' %}Terms of Use{% else %}الشروط والأحكام{% endif %}
+                        </a>
+                    </div>
+                </div>
+
+                <div class="card-body p-4 p-md-5 lh-lg">
+                    {% if LANGUAGE_CODE == 'en' %}
+                    <p class="lead text-muted mb-4">
+                        At <strong>Ta3alm</strong> (<code>https://ta3alm.online</code>), we respect your privacy and are committed to safeguarding the personal data of students, teachers, and assistants across our website and mobile application.
+                    </p>
+
+                    <h4 class="fw-bold text-primary mt-4 mb-2">1. Information We Collect</h4>
+                    <ul>
+                        <li><strong>Account &amp; Profile Information:</strong> Name, email address, phone number, user role (Student, Teacher, or Assistant), academic grade, and unique platform ID.</li>
+                        <li><strong>Google Sign-In Information:</strong> When you sign in with Google, we receive your basic Google profile information (name, email address, and profile photo) solely to authenticate and create or access your Ta3alm account.</li>
+                        <li><strong>Educational Activity:</strong> Course enrollments, group memberships, lecture access code redemptions, video watch progress, exam attempts, and grades.</li>
+                        <li><strong>Payments &amp; Verification:</strong> Transaction references and payment receipt images uploaded voluntarily for manual subscription verification.</li>
+                        <li><strong>Security &amp; Integrity Signals:</strong> Device integrity verification (via Google Play Integrity API) and session identifiers used strictly to protect educational content and prevent unauthorized sharing or tampering.</li>
+                    </ul>
+
+                    <h4 class="fw-bold text-primary mt-4 mb-2">2. How We Use Your Information</h4>
+                    <ul>
+                        <li>To authenticate your account and deliver courses, lectures, and exams.</li>
+                        <li>To enforce lecture view limits, course entitlements, and anti-piracy protections.</li>
+                        <li>To send important educational notifications, exam results, and support responses.</li>
+                        <li>We <strong>never</strong> sell, rent, or trade your personal data to third parties or advertisers.</li>
+                    </ul>
+
+                    <h4 class="fw-bold text-primary mt-4 mb-2">3. Third-Party Services</h4>
+                    <p>To operate the platform securely, Ta3alm integrates with trusted providers:</p>
+                    <ul>
+                        <li><strong>Google OAuth &amp; Play Integrity:</strong> For secure sign-in and Android app integrity protection.</li>
+                        <li><strong>YouTube Player Services:</strong> For embedded educational video delivery (subject to Google's Privacy Policy and YouTube Terms).</li>
+                        <li><strong>Cloudinary &amp; Payment Providers (e.g., Paymob):</strong> For media storage and secure payment processing.</li>
+                    </ul>
+
+                    <h4 class="fw-bold text-primary mt-4 mb-2">4. Data Security &amp; Storage</h4>
+                    <p>
+                        All communications between our app, website, and servers use HTTPS/TLS encryption. Passwords are stored using cryptographic hashing, and access to protected educational content uses short-lived server-authorized sessions.
+                    </p>
+
+                    <h4 class="fw-bold text-primary mt-4 mb-2">5. Children &amp; Student Privacy</h4>
+                    <p>
+                        Ta3alm serves school and pre-university students under parent/guardian and teacher supervision. Parents or guardians may contact us at any time to review or request deletion of a student's data.
+                    </p>
+
+                    <h4 class="fw-bold text-primary mt-4 mb-2">6. Your Rights &amp; Account Deletion</h4>
+                    <p>
+                        You may update your profile data from your account settings or request permanent deletion of your account and personal data at any time by contacting our support team:
+                    </p>
+                    {% else %}
+                    <p class="lead text-muted mb-4">
+                        تحرص <strong>منصة تعلّم (Ta3alm)</strong> (<code>https://ta3alm.online</code>) على حماية خصوصية الطلاب والمعلمين والمساعدين، وتلتزم بشفافية كاملة حول كيفية جمع بياناتكم واستخدامها وحمايتها عبر الموقع وتطبيق الهاتف.
+                    </p>
+
+                    <h4 class="fw-bold text-primary mt-4 mb-2">1. البيانات التي نقوم بجمعها</h4>
+                    <ul>
+                        <li><strong>بيانات الحساب والملف الشخصي:</strong> الاسم، البريد الإلكتروني، رقم الهاتف، نوع الحساب (طالب، معلم، أو مساعد)، الصف الدراسي، وكود التعريف الخاص بالمستخدم.</li>
+                        <li><strong>بيانات تسجيل الدخول عبر Google:</strong> عند اختيار تسجيل الدخول بحساب Google، نستقبل بياناتك الأساسية المصرح بها فقط (الاسم، البريد الإلكتروني، وصورة الحساب) لغرض إنشاء حسابك أو تسجيل دخولك إلى منصة تعلّم.</li>
+                        <li><strong>النشاط التعليمي:</strong> الاشتراكات في الكورسات والمجموعات، أكواد فتح المحاضرات، نسبة التقدم في المشاهدة، وإجابات ودرجات الامتحانات.</li>
+                        <li><strong>بيانات الدفع والتحقق:</strong> أرقام التحويل أو صور إيصالات الدفع التي يرفعها المستخدم طوعًا لتأكيد الاشتراكات اليدوية أو الإلكترونية.</li>
+                        <li><strong>بيانات الأمان وحماية المحتوى:</strong> رموز الجلسة وفحوصات سلامة التطبيق (عبر Google Play Integrity API) لمنع مشاركة الحسابات أو تسريب محتوى المعلمين.</li>
+                    </ul>
+
+                    <h4 class="fw-bold text-primary mt-4 mb-2">2. كيف نستخدم بياناتك؟</h4>
+                    <ul>
+                        <li>لتمكينك من تسجيل الدخول والوصول إلى المحاضرات والامتحانات والدرجات.</li>
+                        <li>للتحقق من الصلاحيات وعدد المشاهدات المتاح لكل محاضرة ومنع إساءة الاستخدام.</li>
+                        <li>لإرسال الإشعارات التعليمية، نتائج الامتحانات، والرد على طلبات الدعم الفني.</li>
+                        <li>نلتزم التزامًا كاملًا بعدم بيع أو تأجير أو مشاركة بياناتك الشخصية مع أي جهات إعلانية أو أطراف ثالثة لأغراض تسويقية.</li>
+                    </ul>
+
+                    <h4 class="fw-bold text-primary mt-4 mb-2">3. الخدمات الخارجية المرتبطة</h4>
+                    <p>تعتمد المنصة على خدمات موثوقة لتشغيل المزايا الأساسية بأمان:</p>
+                    <ul>
+                        <li><strong>خدمات Google (OAuth &amp; Play Integrity):</strong> لتسجيل الدخول الآمن والتحقق من سلامة تطبيق Android.</li>
+                        <li><strong>مشغل فيديو YouTube:</strong> لتشغيل الدروس التعليمية المضمّنة وفق سياسات خصوصية Google وشروط YouTube.</li>
+                        <li><strong>Cloudinary وبوابات الدفع المعتمدة (مثل Paymob):</strong> لتخزين صور الملفات/الإيصالات ومعالجة المدفوعات بأمان.</li>
+                    </ul>
+
+                    <h4 class="fw-bold text-primary mt-4 mb-2">4. أمن المعلومات وحمايتها</h4>
+                    <p>
+                        تتم جميع الاتصالات بين التطبيق والموقع والخوادم عبر بروتوكول مشفّر (HTTPS/TLS)، ويتم تشفير كلمات المرور ورموز الجلسات، مع استخدام جلسات تشغيل قصيرة الأجل لحماية روابط المحاضرات والمحتوى التعليمي.
+                    </p>
+
+                    <h4 class="fw-bold text-primary mt-4 mb-2">5. خصوصية الطلاب والقصّر</h4>
+                    <p>
+                        تخدم المنصة طلاب المراحل التعليمية المختلفة تحت إشراف أولياء الأمور والمعلمين. يحق لولي الأمر التواصل معنا في أي وقت لمراجعة بيانات الطالب أو طلب تعديلها أو حذفها.
+                    </p>
+
+                    <h4 class="fw-bold text-primary mt-4 mb-2">6. حقوقك وطلب حذف الحساب والبيانات</h4>
+                    <p>
+                        يحق لك تعديل بياناتك من إعدادات حسابك، أو طلب حذف حسابك وبياناتك الشخصية نهائيًا في أي وقت عبر التواصل مع فريق الدعم الفني:
+                    </p>
+                    {% endif %}
+
+                    <div class="alert alert-light border rounded-4 p-4 mt-3 mb-0">
+                        <div class="row g-3 align-items-center">
+                            <div class="col-md-6">
+                                <div class="fw-bold mb-1">
+                                    <i class="bi bi-envelope-fill text-danger me-2"></i>
+                                    {% if LANGUAGE_CODE == 'en' %}Official Support &amp; Privacy Email{% else %}البريد الرسمي للدعم والخصوصية{% endif %}
+                                </div>
+                                <a href="mailto:support@ta3alm.online" class="text-decoration-none fw-bold">support@ta3alm.online</a>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="fw-bold mb-1">
+                                    <i class="bi bi-whatsapp text-success me-2"></i>
+                                    {% if LANGUAGE_CODE == 'en' %}WhatsApp Support{% else %}دعم واتساب المباشر{% endif %}
+                                </div>
+                                <a href="https://wa.me/201507200894" target="_blank" class="text-decoration-none fw-bold" dir="ltr">+201507200894</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

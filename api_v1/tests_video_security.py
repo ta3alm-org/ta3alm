@@ -339,3 +339,8 @@ class VideoSecurityAndIntegrityTests(APITestCase):
         self.assertEqual(body[0]['relation'], ['delegate_permission/common.handle_all_urls'])
         self.assertEqual(body[0]['target']['package_name'], 'online.ta3alm.ta3alm_flutter')
         self.assertEqual(body[0]['target']['sha256_cert_fingerprints'], [':'.join(['AB'] * 32)])
+
+    def test_privacy_and_terms_pages_accessible(self):
+        for url in ('/privacy/', '/privacy-policy/', '/terms/', '/ar/privacy/', '/en/terms/'):
+            resp = self.client.get(url)
+            self.assertEqual(resp.status_code, 200, f'Expected 200 OK for {url}')
