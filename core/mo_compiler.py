@@ -117,10 +117,10 @@ def _generate_mo_bytes(messages: dict[str, str]) -> bytes:
     return output
 
 
-def ensure_mo_compiled(base_dir: Path | str | None = None) -> bool:
+def ensure_mo_compiled(base_dir: Path | str | None = None, force: bool = False) -> bool:
     """
     يتحقق من جميع ملفات django.po داخل مجلد locale ويقوم بترجمتها تلقائياً إلى django.mo
-    إذا كان ملف .po أحدث من .mo أو إذا لم يكن .mo موجوداً.
+    إذا كان ملف .po أحدث من .mo أو إذا لم يكن .mo موجوداً أو عند تمرير force=True.
     يدعم أيضاً بيئة Vercel (Read-Only Filesystem) عبر الكتابة في /tmp عند الحاجة.
     """
     if base_dir is None:
@@ -138,7 +138,8 @@ def ensure_mo_compiled(base_dir: Path | str | None = None) -> bool:
         mo_path = po_path.with_suffix('.mo')
         try:
             need_compile = (
-                not mo_path.exists()
+                force
+                or not mo_path.exists()
                 or po_path.stat().st_mtime >= mo_path.stat().st_mtime
                 or mo_path.stat().st_size < 1024
             )

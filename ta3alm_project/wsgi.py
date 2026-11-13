@@ -23,3 +23,10 @@ from django.core.wsgi import get_wsgi_application
 application = get_wsgi_application()
 app = application
 
+try:
+    from core.mo_compiler import ensure_mo_compiled
+    ensure_mo_compiled(BASE_DIR)
+except Exception:
+    pass
+
+

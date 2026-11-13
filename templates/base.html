@@ -337,31 +337,71 @@
             {% if user.is_authenticated %}
             <!-- روابط لوحة التحكم حسب الدور -->
             {% if user.role == 'teacher' %}
-            <a href="{% url 'teacher_dashboard' %}" class="sidebar-link"><i class="bi bi-speedometer2"></i> {% trans "لوحة المعلم" %}</a>
-            <a href="{% url 'teacher_packages' %}" class="sidebar-link"><i class="bi bi-box-seam"></i> {% trans "إدارة الحزم" %}</a>
-            <a href="{% url 'manage_assistants' %}" class="sidebar-link"><i class="bi bi-people"></i> {% trans "المساعدين" %}</a>
-            <a href="{% url 'teacher_wallet' %}" class="sidebar-link"><i class="bi bi-wallet2"></i> {% trans "المحفظة" %}</a>
-            <a href="{% url 'subscription_info' %}" class="sidebar-link"><i class="bi bi-star"></i> {% trans "الاشتراك" %}</a>
-            <a href="{% url 'teacher_settings' %}" class="sidebar-link"><i class="bi bi-gear"></i> {% trans "الملف الشخصي" %}</a>
+            <a href="{% url 'teacher_dashboard' %}" class="sidebar-link">
+                <i class="bi bi-speedometer2"></i>
+                <span>{% trans "لوحة المعلم" %}</span>
+            </a>
+            <a href="{% url 'teacher_packages' %}" class="sidebar-link">
+                <i class="bi bi-box-seam"></i>
+                <span>{% trans "إدارة الحزم" %}</span>
+            </a>
+            <a href="{% url 'manage_assistants' %}" class="sidebar-link">
+                <i class="bi bi-people"></i>
+                <span>{% trans "المساعدين" %}</span>
+            </a>
+            <a href="{% url 'teacher_wallet' %}" class="sidebar-link">
+                <i class="bi bi-wallet2"></i>
+                <span>{% trans "المحفظة" %}</span>
+            </a>
+            <a href="{% url 'subscription_info' %}" class="sidebar-link">
+                <i class="bi bi-star"></i>
+                <span>{% trans "الاشتراك" %}</span>
+            </a>
+            <a href="{% url 'teacher_settings' %}" class="sidebar-link">
+                <i class="bi bi-gear"></i>
+                <span>{% trans "الملف الشخصي" %}</span>
+            </a>
 
             {% elif user.role == 'student' %}
-            <a href="{% url 'student_dashboard' %}" class="sidebar-link"><i class="bi bi-speedometer2"></i> {% trans "لوحة الطالب" %}</a>
-            <a href="{% url 'search_groups' %}" class="sidebar-link"><i class="bi bi-search"></i> {% trans "بحث عن مدرس" %}</a>
-            <a href="{% url 'list_packages' %}" class="sidebar-link"><i class="bi bi-shop"></i> {% trans "تصفح الكورسات" %}</a>
-            <a href="{% url 'student_settings' %}" class="sidebar-link"><i class="bi bi-person-gear"></i> {% trans "بياناتي" %}</a>
+            <a href="{% url 'student_dashboard' %}" class="sidebar-link">
+                <i class="bi bi-speedometer2"></i>
+                <span>{% trans "لوحة الطالب" %}</span>
+            </a>
+            <a href="{% url 'search_groups' %}" class="sidebar-link">
+                <i class="bi bi-search"></i>
+                <span>{% trans "بحث عن مدرس" %}</span>
+            </a>
+            <a href="{% url 'list_packages' %}" class="sidebar-link">
+                <i class="bi bi-shop"></i>
+                <span>{% trans "تصفح الكورسات" %}</span>
+            </a>
+            <a href="{% url 'student_settings' %}" class="sidebar-link">
+                <i class="bi bi-person-gear"></i>
+                <span>{% trans "بياناتي" %}</span>
+            </a>
 
             {% elif user.role == 'assistant' %}
-            <a href="{% url 'assistant_dashboard' %}" class="sidebar-link"><i class="bi bi-speedometer2"></i> {% trans "لوحة المساعد" %}</a>
-            <a href="{% url 'find_teacher' %}" class="sidebar-link"><i class="bi bi-briefcase"></i> {% trans "بحث عن عمل" %}</a>
+            <a href="{% url 'assistant_dashboard' %}" class="sidebar-link">
+                <i class="bi bi-speedometer2"></i>
+                <span>{% trans "لوحة المساعد" %}</span>
+            </a>
+            <a href="{% url 'find_teacher' %}" class="sidebar-link">
+                <i class="bi bi-briefcase"></i>
+                <span>{% trans "بحث عن عمل" %}</span>
+            </a>
 
             {% elif user.is_superuser %}
-            <a href="{% url 'admin_panel:dashboard' %}" class="sidebar-link"><i class="bi bi-shield-lock"></i> {% trans "لوحة المالك" %}</a>
+            <a href="{% url 'admin_panel:dashboard' %}" class="sidebar-link">
+                <i class="bi bi-shield-lock"></i>
+                <span>{% trans "لوحة المالك" %}</span>
+            </a>
             {% endif %}
             <!-- ... (بعد روابط المستخدمين وقبل الـ hr) ... -->
 
             <!-- رابط الدليل (للجميع) -->
             <a href="{% url 'platform_guide' %}" class="sidebar-link mt-2">
-                <i class="bi bi-info-circle-fill text-primary"></i> {% trans "دليل المنصة" %}
+                <i class="bi bi-info-circle-fill text-primary"></i>
+                <span>{% trans "دليل المنصة" %}</span>
             </a>
 
             <hr class="my-3">
@@ -378,14 +418,24 @@
             <form method="post" action="{% url 'account_logout' %}">
                 {% csrf_token %}
                 <button type="submit" class="sidebar-link w-100 text-start border-0 bg-transparent text-danger">
-                    <i class="bi bi-box-arrow-right text-danger"></i> {% trans "تسجيل الخروج" %}
+                    <i class="bi bi-box-arrow-right text-danger"></i>
+                    <span>{% trans "تسجيل الخروج" %}</span>
                 </button>
             </form>
 
             {% else %}
-            <a href="{% url 'home' %}" class="sidebar-link"><i class="bi bi-house"></i> {% trans "الرئيسية" %}</a>
-            <a href="{% url 'account_login' %}" class="sidebar-link"><i class="bi bi-box-arrow-in-right"></i> {% trans "تسجيل الدخول" %}</a>
-            <a href="{% url 'account_signup' %}" class="sidebar-link"><i class="bi bi-person-plus"></i> {% trans "إنشاء حساب" %}</a>
+            <a href="{% url 'home' %}" class="sidebar-link">
+                <i class="bi bi-house"></i>
+                <span>{% trans "الرئيسية" %}</span>
+            </a>
+            <a href="{% url 'account_login' %}" class="sidebar-link">
+                <i class="bi bi-box-arrow-in-right"></i>
+                <span>{% trans "تسجيل الدخول" %}</span>
+            </a>
+            <a href="{% url 'account_signup' %}" class="sidebar-link">
+                <i class="bi bi-person-plus"></i>
+                <span>{% trans "إنشاء حساب" %}</span>
+            </a>
             {% endif %}
 
             <hr class="my-3">

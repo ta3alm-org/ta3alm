@@ -3624,6 +3624,12 @@ msgstr "Register now and start your journey to excellence."
 msgid "تعلّم"
 msgstr "Ta3alm"
 
+msgid "إدارة الحزم"
+msgstr "Manage Packages"
+
+msgid "لوحة المساعد"
+msgstr "Assistant Dashboard"
+
 msgid "المنصة التعليمية الرائدة لربط نخبة المعلمين بالطلاب وأولياء الأمور في مصر والوطن العربي. نقدم بيئة تعليمية ذكية وتفاعلية تواكب متطلبات التفوق الدراسي وبناء المستقبل."
 msgstr "The leading educational platform connecting elite teachers with students and parents in Egypt and the Arab world. We provide a smart, interactive learning environment for academic excellence."
 
