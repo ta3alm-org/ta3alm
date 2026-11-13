@@ -5,6 +5,7 @@ core/views.py — الصفحات العامة للمنصة
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.db.models import Q
+from django.utils.translation import gettext as _
 
 from teachers.models import TeacherProfile
 from core.models import Subject, Notification
@@ -45,13 +46,13 @@ def signup_redirect(request, role):
         request.session['selected_role'] = role
 
     role_names = {
-        'student':   'طالب',
-        'teacher':   'معلم',
-        'assistant': 'مساعد',
+        'student':   _('طالب'),
+        'teacher':   _('معلم'),
+        'assistant': _('مساعد'),
     }
     return render(request, 'account/role_signup.html', {
         'role':      role,
-        'role_name': role_names.get(role, 'مستخدم'),
+        'role_name': role_names.get(role, _('مستخدم')),
     })
 
 
@@ -87,7 +88,7 @@ def custom_login_redirect(request):
 
     # دور 'center' أو دور غير معروف → الرئيسية مع رسالة توضيح
     from django.contrib import messages
-    messages.info(request, "لوحة التحكم الخاصة بك قيد التطوير.")
+    messages.info(request, _("لوحة التحكم الخاصة بك قيد التطوير."))
     return redirect('home')
 
 
@@ -139,7 +140,7 @@ def manual_checkout_view(request):
     amount = request.GET.get('amount')
 
     if not payment_type or not target_id or not amount:
-        messages.error(request, "بيانات الدفع غير مكتملة.")
+        messages.error(request, _("بيانات الدفع غير مكتملة."))
         return redirect('home')
 
     if request.method == 'POST':
@@ -151,7 +152,7 @@ def manual_checkout_view(request):
             payment.target_id = target_id
             payment.amount = amount
             payment.save()
-            messages.success(request, "تم إرسال طلب الدفع بنجاح. يرجى الانتظار حتى تتم مراجعته من قبل الإدارة.")
+            messages.success(request, _("تم إرسال طلب الدفع بنجاح. يرجى الانتظار حتى تتم مراجعته من قبل الإدارة."))
             if request.user.role == 'student':
                 return redirect('student_dashboard')
             elif request.user.role == 'teacher':
@@ -194,3 +195,12 @@ def ajax_get_lessons(request):
         data.append(unit_data)
 
     return JsonResponse({'units': data})
+
+# ==========================================================
+# 9. صفحة الباقات العامة (Public Pricing Page)
+# ==========================================================
+from teachers.models import SubscriptionPlan
+
+def public_plans(request):
+    plans = SubscriptionPlan.objects.all().order_by('price')
+    return render(request, 'core/public_plans.html', {'plans': plans})

@@ -1,4 +1,5 @@
 from django import forms
+from django.utils.translation import gettext_lazy as _
 from .models import PerformanceLog
 
 class PerformanceForm(forms.ModelForm):
@@ -15,19 +16,19 @@ class PerformanceForm(forms.ModelForm):
         ]
         widgets = {
             'is_present': forms.CheckboxInput(attrs={'class': 'form-check-input', 'checked': True}),
-            'note': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'ملاحظات...'}),
+            'note': forms.TextInput(attrs={'class': 'form-control', 'placeholder': _('ملاحظات...')}),
             
             # تنسيق حقول الدرجات (تحديد placeholder)
-            'homework_score': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': 'الدرجة'}),
+            'homework_score': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': _('الدرجة')}),
             'homework_max': forms.NumberInput(attrs={'class': 'form-control', 'value': 10}),
             
-            'class_exam_score': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': 'الدرجة'}),
+            'class_exam_score': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': _('الدرجة')}),
             'class_exam_max': forms.NumberInput(attrs={'class': 'form-control', 'value': 10}),
             
-            'recitation_score': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': 'الدرجة'}),
+            'recitation_score': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': _('الدرجة')}),
             'recitation_max': forms.NumberInput(attrs={'class': 'form-control', 'value': 10}),
 
-            'comprehensive_exam_score': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': 'الدرجة'}),
+            'comprehensive_exam_score': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': _('الدرجة')}),
             'comprehensive_exam_max': forms.NumberInput(attrs={'class': 'form-control', 'value': 50}),
             'session_number': forms.NumberInput(attrs={'class': 'form-control', 'min': 1}),
         }

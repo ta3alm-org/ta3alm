@@ -1,4 +1,4 @@
-"""
+﻿"""
 core/urls.py — الروابط العامة للمنصة
 (روابط الإدارة انتقلت إلى dashboard_admin/urls.py)
 """
@@ -15,4 +15,5 @@ urlpatterns = [
     path('guide/',                              views.platform_guide,        name='platform_guide'),
     path('checkout/manual/',                    views.manual_checkout_view,  name='manual_checkout'),
     path('ajax/get_lessons/',                   views.ajax_get_lessons,      name='ajax_get_lessons'),
+    path('plans/',                               views.public_plans,          name='public_plans'),
 ]

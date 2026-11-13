@@ -291,10 +291,8 @@ msgid "مسموح بصور الأسئلة"
 msgstr "Question Images Allowed"
 
 #: .\teachers\models.py:39
-#, fuzzy
-#| msgid "إضافة باقة جديدة"
 msgid "باقة افتراضية (مجانية)"
-msgstr "Add New Plan"
+msgstr "Default Plan (Free)"
 
 #: .\teachers\models.py:56
 msgid "نبذة عن المعلم"
@@ -777,10 +775,8 @@ msgid "لوحة المالك"
 msgstr "Owner Dashboard"
 
 #: .\templates\base.html:163
-#, fuzzy
-#| msgid "زميل في المنصة"
 msgid "دليل المنصة"
-msgstr "Platform Colleague"
+msgstr "Platform Guide"
 
 #: .\templates\base.html:168 .\templates\base.html:195
 msgid "الإعدادات العامة"
@@ -841,10 +837,8 @@ msgid "منصة تعلّم - قسم الأمن والحماية - انقر لل�
 msgstr "Ta3alm Security Dept - Click to contact"
 
 #: .\templates\core\guide.html:3
-#, fuzzy
-#| msgid "زميل في المنصة"
 msgid "دليل استخدام المنصة"
-msgstr "Platform Colleague"
+msgstr "Platform User Guide"
 
 #: .\templates\core\guide.html:9
 msgid "الدليل الشامل لاستخدام منصة تعلّم"
@@ -855,46 +849,32 @@ msgid "كل ما تحتاج معرفته عن الأزرار والوظائف و
 msgstr "Everything you need to know about buttons, functions, and features"
 
 #: .\templates\core\guide.html:20
-#, fuzzy
-#| msgid "لوحة المعلم"
 msgid "دليل المعلم"
-msgstr "Teacher Dashboard"
+msgstr "Teacher Guide"
 
 #: .\templates\core\guide.html:27
-#, fuzzy
-#| msgid "لوحة الطالب"
 msgid "دليل الطالب"
-msgstr "Student Dashboard"
+msgstr "Student Guide"
 
 #: .\templates\core\guide.html:34
-#, fuzzy
-#| msgid "لوحة المساعد"
 msgid "دليل المساعد"
-msgstr "Assistant Dashboard"
+msgstr "Assistant Guide"
 
 #: .\templates\core\guide.html:40
-#, fuzzy
-#| msgid "الطلاب والغياب"
 msgid "الأمان والخصوصية"
-msgstr "Students & Attendance"
+msgstr "Security & Privacy"
 
 #: .\templates\core\guide.html:50
-#, fuzzy
-#| msgid "رصد الدرجات والغياب"
 msgid "شرح الأزرار والوظائف"
-msgstr "Log Grades & Attendance"
+msgstr "Buttons & Functions Explained"
 
 #: .\templates\core\guide.html:56
-#, fuzzy
-#| msgid "إدارة المجموعات والطلاب"
 msgid "إدارة المجموعات (Offline)"
-msgstr "Manage Groups & Students"
+msgstr "Manage Groups (Offline)"
 
 #: .\templates\core\guide.html:62
-#, fuzzy
-#| msgid "إضافة مجموعة"
 msgid "إضافة مجموعة:"
-msgstr "Add Group"
+msgstr "Add Group:"
 
 #: .\templates\core\guide.html:62
 msgid "لإنشاء فصل جديد (مثلاً: سنتر الأقصى - السبت)."
@@ -906,222 +886,168 @@ msgid "تعديل:"
 msgstr "Edit:"
 
 #: .\templates\core\guide.html:63
-#, fuzzy
-#| msgid "جرب تغيير كلمات البحث أو الفلاتر."
 msgid "لتغيير اسم المجموعة أو الصف الدراسي."
-msgstr "Try changing search terms or filters."
+msgstr "To change the group name or grade."
 
 #: .\templates\core\guide.html:64
 msgid "حذف:"
-msgstr "delete:"
+msgstr "Delete:"
 
 #: .\templates\core\guide.html:64
 msgid "لإلغاء المجموعة نهائياً (احذر: يحذف الطلاب والامتحانات بداخلها)."
 msgstr "To permanently delete the group (Warning: This will delete all students and exams within it)."
 
 #: .\templates\core\guide.html:65
-#, fuzzy
-#| msgid "استيراد محتوى"
 msgid "استيراد محتوى:"
-msgstr "Import Content"
+msgstr "Import Content:"
 
 #: .\templates\core\guide.html:65
 msgid "لنسخ المحاضرات والامتحانات من مجموعة قديمة لمجموعة جديدة بضغطة واحدة."
 msgstr "To copy lectures and exams from an old group to a new one with a single click."
 
 #: .\templates\core\guide.html:74
-#, fuzzy
-#| msgid "إدارة الفيديوهات"
 msgid "إدارة المحتوى (فيديو / PDF / امتحان)"
-msgstr "Manage Videos"
+msgstr "Manage Content (Video / PDF / Exam)"
 
 #: .\templates\core\guide.html:80
-#, fuzzy
-#| msgid "إضافة محاضرة جديدة"
 msgid "إضافة محاضرة:"
-msgstr "Add New Lecture"
+msgstr "Add Lecture:"
 
 #: .\templates\core\guide.html:80
 msgid "ضع رابط الفيديو (يوتيوب) وسيتم حمايته تلقائياً."
 msgstr "Paste the video link (YouTube) and it will be automatically protected."
 
 #: .\templates\core\guide.html:81
-#, fuzzy
-#| msgid "إدارة الطلاب"
 msgid "إدارة الأكواد:"
-msgstr "Manage Students"
+msgstr "Manage Codes:"
 
 #: .\templates\core\guide.html:81
 msgid "لتوليد أكواد المشاهدة (عدد لا نهائي) وطباعتها للبيع."
 msgstr "To generate viewing codes (unlimited) and print them for sale."
 
 #: .\templates\core\guide.html:82
-#, fuzzy
-#| msgid "إخفاء"
 msgid "إخفاء/إظهار:"
-msgstr "Hide"
+msgstr "Hide/Show:"
 
 #: .\templates\core\guide.html:82
 msgid "لإخفاء المحاضرة مؤقتاً عن الطلاب دون حذفها."
 msgstr "To temporarily hide the lecture from students without deleting it."
 
 #: .\templates\core\guide.html:83
-#, fuzzy
-#| msgid "إضافة ملف"
 msgid "إضافة ملف:"
-msgstr "Add File"
+msgstr "Add File:"
 
 #: .\templates\core\guide.html:83
 msgid "لرفع مذكرات PDF أو واجبات."
 msgstr "To upload PDF notes or assignments."
 
 #: .\templates\core\guide.html:84
-#, fuzzy
-#| msgid "إنشاء امتحان جديد"
 msgid "إنشاء امتحان:"
-msgstr "Create New Exam"
+msgstr "Create Exam:"
 
 #: .\templates\core\guide.html:84
 msgid "لعمل اختبار إلكتروني وتحديد وقته (Timer)."
 msgstr "To create an online exam and set its duration (Timer)."
 
 #: .\templates\core\guide.html:93
-#, fuzzy
-#| msgid "الطلاب والغياب"
 msgid "الطلاب والتقييم"
-msgstr "Students & Attendance"
+msgstr "Students & Evaluation"
 
 #: .\templates\core\guide.html:99
-#, fuzzy
-#| msgid "الطلبات"
 msgid "الطلبات:"
-msgstr "Requests"
+msgstr "Requests:"
 
 #: .\templates\core\guide.html:99
 msgid "للموافقة على انضمام الطلاب الجدد أو رفضهم."
 msgstr "To approve or reject join requests from new students."
 
 #: .\templates\core\guide.html:100
-#, fuzzy
-#| msgid "رصد جماعي"
 msgid "الرصد الجماعي:"
-msgstr "Bulk Log"
+msgstr "Bulk Log:"
 
 #: .\templates\core\guide.html:100
 msgid "صفحة إكسيل لتسجيل درجات وغياب كل الطلاب مرة واحدة."
 msgstr "An Excel-style page to record grades and attendance for all students at once."
 
 #: .\templates\core\guide.html:101
-#, fuzzy
-#| msgid "غياب"
 msgid "غياب:"
-msgstr "Absent"
+msgstr "Absent:"
 
 #: .\templates\core\guide.html:101
 msgid "عند تحديد غياب، يتم تصفير درجات الطالب في تلك الحصة تلقائياً."
 msgstr "When marking attendance as 'Absent', the student's grades for that session are automatically set to zero."
 
 #: .\templates\core\guide.html:102
-#, fuzzy
-#| msgid "السجل الكامل"
 msgid "السجل الكامل:"
-msgstr "Full Log"
+msgstr "Full Log:"
 
 #: .\templates\core\guide.html:102
 msgid "لعرض تاريخ طالب معين وتعديل أي درجة سابقة."
 msgstr "To view a specific student's history and edit any previous grade."
 
 #: .\templates\core\guide.html:111
-#, fuzzy
-#| msgid "حزمي التعليمية (Online)"
 msgid "الحزم والمالية (Online)"
-msgstr "My Online Packages"
+msgstr "Packages & Finance (Online)"
 
 #: .\templates\core\guide.html:117
-#, fuzzy
-#| msgid "إنشاء حساب"
 msgid "إنشاء حزمة:"
-msgstr "Create Account"
+msgstr "Create Package:"
 
 #: .\templates\core\guide.html:117
-#, fuzzy
-#| msgid "الفيديوهات والمحاضرات والامتحانات."
 msgid "لتجميع فيديوهات وامتحانات وبيعها كـ كورس بسعر محدد."
-msgstr "Videos and Exams."
+msgstr "To bundle videos and exams and sell them as a course at a set price."
 
 #: .\templates\core\guide.html:118
-#, fuzzy
-#| msgid "المحفظة"
 msgid "المحفظة:"
-msgstr "Wallet"
+msgstr "Wallet:"
 
 #: .\templates\core\guide.html:118
 msgid "لمتابعة أرباحك من بيع الحزم وطلب سحب الرصيد (فودافون كاش)."
 msgstr "To track your earnings from package sales and request a balance withdrawal (Vodafone Cash)."
 
 #: .\templates\core\guide.html:119
-#, fuzzy
-#| msgid "الاشتراك"
 msgid "الاشتراك:"
-msgstr "Subscription"
+msgstr "Subscription:"
 
 #: .\templates\core\guide.html:119
-#, fuzzy
-#| msgid "تم تجديد اشتراكك لمدة 30 يوم."
 msgid "لتجديد اشتراكك في المنصة ودفع الرسوم شهرياً."
-msgstr "Subscription renewed for 30 days."
+msgstr "To renew your platform subscription and pay monthly fees."
 
 #: .\templates\core\guide.html:128
 msgid "كيف تدرس بذكاء؟"
 msgstr "How to study smart?"
 
 #: .\templates\core\guide.html:134
-#, fuzzy
-#| msgid "طلبات الانضمام"
 msgid "البحث والانضمام"
-msgstr "Join Requests"
+msgstr "Search & Join"
 
 #: .\templates\core\guide.html:136
-#, fuzzy
-#| msgid "المستخدم"
 msgid "استخدم زر"
-msgstr "User"
+msgstr "Use the button"
 
 #: .\templates\core\guide.html:136
-#, fuzzy
-#| msgid "إدارة الصفوف والمجموعات والطلاب"
 msgid "اختر الصف والمادة، واضغط"
-msgstr "Manage Groups & Students"
+msgstr "Select the grade and subject, and press"
 
 #: .\templates\core\guide.html:136
-#, fuzzy
-#| msgid "طلب انضمام"
 msgid "انضمام"
-msgstr "Join Request"
+msgstr "Join"
 
 #: .\templates\core\guide.html:136
-#, fuzzy
-#| msgid "مجموعات مستر"
 msgid "لمجموعة السنتر، أو"
-msgstr "Mr. Groups"
+msgstr "for a center group, or"
 
 #: .\templates\core\guide.html:136
-#, fuzzy
-#| msgid "شراء:"
 msgid "شراء"
-msgstr "Buy:"
+msgstr "Buy"
 
 #: .\templates\core\guide.html:136
-#, fuzzy
-#| msgid "حزم أونلاين"
 msgid "لحزم الأونلاين."
-msgstr "Online Packages"
+msgstr "for online packages."
 
 #: .\templates\core\guide.html:144
-#, fuzzy
-#| msgid "المادة الدراسية"
 msgid "مشاهدة الدروس"
-msgstr "Subject"
+msgstr "Watch Lessons"
 
 #: .\templates\core\guide.html:146
 msgid ""
@@ -1133,18 +1059,14 @@ msgstr ""
 "permanently (or according to the set limit)."
 
 #: .\templates\core\guide.html:154
-#, fuzzy
-#| msgid "بدأ الامتحان"
 msgid "أداء الامتحان"
-msgstr "Start Exam"
+msgstr "Take Exam"
 
 #: .\templates\core\guide.html:156
 msgid "اضغط"
-msgstr "press"
+msgstr "Press"
 
 #: .\templates\core\guide.html:156
-#, fuzzy
-#| msgid "بدأ الامتحان"
 msgid "بدء الامتحان"
 msgstr "Start Exam"
 
@@ -1161,16 +1083,12 @@ msgid "لتعرف نتيجتك فوراً."
 msgstr "to see your result instantly."
 
 #: .\templates\core\guide.html:164
-#, fuzzy
-#| msgid "متابعة دقيقة"
 msgid "متابعة مستواك"
-msgstr "Accurate Tracking"
+msgstr "Track Your Progress"
 
 #: .\templates\core\guide.html:166
-#, fuzzy
-#| msgid "صور"
 msgid "زر"
-msgstr "Images"
+msgstr "Button"
 
 #: .\templates\core\guide.html:166
 #: .\templates\students\includes\student_group_navbar.html:34
@@ -1195,10 +1113,8 @@ msgid "يخبرك بمركزك وسط زملائك."
 msgstr "tells you your rank among your peers."
 
 #: .\templates\core\guide.html:175
-#, fuzzy
-#| msgid "لوحة المساعد"
 msgid "لوحة تحكم المساعد"
-msgstr "Assistant Dashboard"
+msgstr "Assistant Control Panel"
 
 #: .\templates\core\guide.html:179
 msgid "صلاحياتك يحددها المعلم (قد ترى بعض الأزرار ولا ترى الأخرى)."
@@ -1207,58 +1123,44 @@ msgstr ""
 "not others)."
 
 #: .\templates\core\guide.html:184
-#, fuzzy
-#| msgid "البحث عن عمل"
 msgid "البحث عن عمل:"
-msgstr "Find Job"
+msgstr "Find Job:"
 
 #: .\templates\core\guide.html:184
-#, fuzzy
-#| msgid "ابحث عن معلم للعمل معه"
 msgid "ابحث عن كود المعلم وأرسل له طلب توظيف."
-msgstr "Find a Teacher to Work With"
+msgstr "Search for the teacher's code and send them an employment request."
 
 #: .\templates\core\guide.html:187
-#, fuzzy
-#| msgid "عرض المجموعات"
 msgid "عرض المجموعات:"
-msgstr "View Groups"
+msgstr "View Groups:"
 
 #: .\templates\core\guide.html:187
 msgid "للدخول لصفحات الطلاب والغياب (مثل المعلم تماماً)."
 msgstr "To access student and attendance pages (just like the teacher)."
 
 #: .\templates\core\guide.html:190
-#, fuzzy
-#| msgid "عرض الحزم"
 msgid "عرض الحزم:"
-msgstr "View Packages"
+msgstr "View Packages:"
 
 #: .\templates\core\guide.html:190
 msgid "لإدارة المحتوى الأونلاين (رفع فيديوهات، امتحانات) إذا كان لديك صلاحية."
 msgstr "To manage online content (upload videos, exams) if you have the required permission."
 
 #: .\templates\core\guide.html:193
-#, fuzzy
-#| msgid "إنشاء"
 msgid "إنشاء:"
-msgstr "Create"
+msgstr "Create:"
 
 #: .\templates\core\guide.html:193
-#, fuzzy
-#| msgid "يمكنك الحصول على الكود من السنتر أو المعلم."
 msgid "يمكنك إنشاء مجموعات وحزم نيابة عن المعلم."
-msgstr "Get code from the center or teacher."
+msgstr "You can create groups and packages on behalf of the teacher."
 
 #: .\templates\core\guide.html:201
 msgid "أمانك أولويتنا"
 msgstr "Your security is our priority"
 
 #: .\templates\core\guide.html:208
-#, fuzzy
-#| msgid "تعديل البيانات"
 msgid "تشفير البيانات"
-msgstr "Edit Data"
+msgstr "Data Encryption"
 
 #: .\templates\core\guide.html:213
 msgid ""
@@ -1270,10 +1172,8 @@ msgstr ""
 "unauthorized parties"
 
 #: .\templates\core\guide.html:220
-#, fuzzy
-#| msgid "إدارة المحتوى"
 msgid "حماية المحتوى"
-msgstr "Manage Content"
+msgstr "Content Protection"
 
 #: .\templates\core\guide.html:225
 msgid ""
@@ -1284,10 +1184,8 @@ msgstr ""
 "and illegal sharing."
 
 #: .\templates\core\guide.html:232
-#, fuzzy
-#| msgid "بحث بالبيانات"
 msgid "حفظ البيانات"
-msgstr "Search by Data"
+msgstr "Data Retention"
 
 #: .\templates\core\guide.html:237
 msgid ""
@@ -1357,10 +1255,8 @@ msgid "السماح بصور الأسئلة"
 msgstr "Allow Question Images"
 
 #: .\templates\core\manage_plans.html:63 .\templates\core\manage_plans.html:178
-#, fuzzy
-#| msgid "هل استهلك الشهر المجاني؟"
 msgid "تعيين كباقة افتراضية (للشهر المجاني)"
-msgstr "Free Trial Used?"
+msgstr "Set as default plan (for free trial)"
 
 #: .\templates\core\manage_plans.html:69
 msgid "إضافة الباقة"
@@ -1785,8 +1681,6 @@ msgstr "Save Question"
 
 #: .\templates\exams\edit_question.html:3
 #: .\templates\exams\edit_question.html:11
-#, fuzzy
-#| msgid "تعديل سؤال"
 msgid "تعديل السؤال"
 msgstr "Edit Question"
 
@@ -1854,8 +1748,6 @@ msgid "درجة إجمالية"
 msgstr "Total Marks"
 
 #: .\templates\exams\manage.html:38
-#, fuzzy
-#| msgid "مفعّل (مفتوح للطلاب)"
 msgid "مفعّل (مفتوح)"
 msgstr "Active (Open)"
 
@@ -2741,36 +2633,26 @@ msgid "نعم، احذف المجموعة"
 msgstr "Yes, Delete Group"
 
 #: .\templates\teachers\create_package.html:32
-#, fuzzy
-#| msgid "صورة الغلاف"
 msgid "الغلاف"
 msgstr "Cover Image"
 
 #: .\templates\teachers\create_package.html:36
-#, fuzzy
-#| msgid "حد المشاهدات"
 msgid "حد المشاهدة"
 msgstr "View Limit"
 
 #: .\templates\teachers\create_package.html:48
 #: .\templates\teachers\edit_package.html:62
-#, fuzzy
-#| msgid "تعديل المجموعة"
 msgid "تصفية حسب المجموعة:"
-msgstr "Edit Group"
+msgstr "Filter by Group:"
 
 #: .\templates\teachers\create_package.html:50
 #: .\templates\teachers\edit_package.html:64
-#, fuzzy
-#| msgid "عرض الحزم"
 msgid "عرض الكل"
-msgstr "View Packages"
+msgstr "View All"
 
 #: .\templates\teachers\create_package.html:106
-#, fuzzy
-#| msgid "لوحة شرف الحزمة"
 msgid "حفظ ونشر الحزمة"
-msgstr "Package Honor Board"
+msgstr "Save & Publish Package"
 
 #: .\templates\teachers\dashboard.html:4
 msgid "لوحة المعلم | مجموعاتي"
@@ -2921,10 +2803,8 @@ msgid "إظهار"
 msgstr "Show"
 
 #: .\templates\teachers\group_detail.html:92
-#, fuzzy
-#| msgid "لا توجد محاضرات في هذه المجموعة بعد."
 msgid "لا توجد محاضرات في هذه المجموعة."
-msgstr "No lectures yet."
+msgstr "No lectures in this group."
 
 #: .\templates\teachers\group_detail.html:103
 msgid "نشر محاضرة جديدة"
@@ -3595,10 +3475,8 @@ msgid "إدارة الاشتراك"
 msgstr "Manage Subscription"
 
 #: .\templates\teachers\subscription.html:13
-#, fuzzy
-#| msgid "إدارة الاشتراك"
 msgid "حالة الاشتراك"
-msgstr "Manage Subscription"
+msgstr "Subscription Status"
 
 #: .\templates\teachers\subscription.html:20
 msgid "اشتراكك ساري"
@@ -3643,10 +3521,8 @@ msgid "حزم أونلاين"
 msgstr "Online Packages"
 
 #: .\templates\teachers\subscription.html:74
-#, fuzzy
-#| msgid "بيانات المعلم والاشتراك"
 msgid "لا يمكن التغيير والاشتراك ساري"
-msgstr "Teacher Data & Sub"
+msgstr "Cannot change while subscription is active"
 
 #: .\templates\teachers\subscription.html:78
 msgid "فيزا"
@@ -3729,14 +3605,461 @@ msgstr "Pending Review"
 msgid "لا توجد عمليات سحب سابقة."
 msgstr "No previous withdrawals."
 
-#~ msgid "هل أنت متأكد من حذف هذه المحاضرة؟"
-#~ msgstr "Delete this lecture?"
+# ==========================================================
+# ترجمات إضافية شاملة (الفوتر، التسجيل، الخطط، المشغل، الفورمز)
+# ==========================================================
 
-#~ msgid "يمكنك إضافة محاضرة جديدة أو استيراد محتوى من مجموعاتك الأخرى."
-#~ msgstr "You can add a lecture or import content."
+msgid "منصة تعلّم | أقوى منصة تعليمية في مصر"
+msgstr "Ta3alm Platform | Leading Educational Platform in Egypt"
 
-#~ msgid "ابدأ بنشر أول محاضرة للطلاب."
-#~ msgstr "Start publishing content."
+msgid "منصة تعلّم هي وجهتك الأولى للثانوية العامة. دروس أونلاين، امتحانات إلكترونية، ومتابعة مع أفضل المدرسين في مصر."
+msgstr "Ta3alm is your premier destination for education. Online lessons, electronic exams, and tracking with the best teachers in Egypt."
 
-#~ msgid "حالة الاشتراك الحالي"
-#~ msgstr "Current Subscription Status"
+msgid "منصة تعلّم التعليمية"
+msgstr "Ta3alm Educational Platform"
+
+msgid "سجل الآن وابدأ رحلة التفوق."
+msgstr "Register now and start your journey to excellence."
+
+msgid "تعلّم"
+msgstr "Ta3alm"
+
+msgid "المنصة التعليمية الرائدة لربط نخبة المعلمين بالطلاب وأولياء الأمور في مصر والوطن العربي. نقدم بيئة تعليمية ذكية وتفاعلية تواكب متطلبات التفوق الدراسي وبناء المستقبل."
+msgstr "The leading educational platform connecting elite teachers with students and parents in Egypt and the Arab world. We provide a smart, interactive learning environment for academic excellence."
+
+msgid "جميع الخدمات تعمل بكفاءة"
+msgstr "All services are operational"
+
+msgid "روابط سريعة"
+msgstr "Quick Links"
+
+msgid "الصفحة الرئيسية"
+msgstr "Home Page"
+
+msgid "خطط وأسعار المعلمين"
+msgstr "Teacher Plans & Pricing"
+
+msgid "تصفح الحزم والكورسات"
+msgstr "Browse Packages & Courses"
+
+msgid "انضم للمنصة"
+msgstr "Join the Platform"
+
+msgid "لوحة التحكم الخاصة بي"
+msgstr "My Dashboard"
+
+msgid "انضم كطالب"
+msgstr "Join as Student"
+
+msgid "انضم كمعلم"
+msgstr "Join as Teacher"
+
+msgid "انضم كمساعد"
+msgstr "Join as Assistant"
+
+msgid "تسجيل الدخول لحسابك"
+msgstr "Login to Your Account"
+
+msgid "الدعم الفني واللغات"
+msgstr "Technical Support & Languages"
+
+msgid "فريق الدعم جاهز لمساعدتك على مدار الساعة"
+msgstr "Our support team is ready to help you 24/7"
+
+msgid "تواصل عبر واتساب"
+msgstr "Contact via WhatsApp"
+
+msgid "تبديل إلى English"
+msgstr "Switch to English"
+
+msgid "تبديل إلى العربية"
+msgstr "Switch to Arabic"
+
+msgid "جميع الحقوق محفوظة لمنصة تعلّم التعليمية."
+msgstr "All rights reserved to Ta3alm Educational Platform."
+
+msgid "تطوير وإدارة:"
+msgstr "Developed & Managed by:"
+
+msgid "أهلاً بعودتك! سجل دخولك للمتابعة"
+msgstr "Welcome back! Sign in to continue"
+
+msgid "البريد الإلكتروني أو رقم الهاتف أو الكود"
+msgstr "Email, Phone Number, or Code"
+
+msgid "البريد / الهاتف / الكود"
+msgstr "Email / Phone / Code"
+
+msgid "أو عبر"
+msgstr "OR VIA"
+
+msgid "الدخول السريع بحساب Google"
+msgstr "Quick Sign in with Google"
+
+msgid "املأ البيانات التالية لإنشاء حسابك فوراً"
+msgstr "Fill in the following details to create your account immediately"
+
+msgid "الاسم بالكامل"
+msgstr "Full Name"
+
+msgid "أدخل اسمك ثلاثي أو رباعي"
+msgstr "Enter your full name"
+
+msgid "البريد الإلكتروني"
+msgstr "Email Address"
+
+msgid "رقم الهاتف"
+msgstr "Phone Number"
+
+msgid "كلمة المرور"
+msgstr "Password"
+
+msgid "أدخل كلمة مرور قوية"
+msgstr "Enter a strong password"
+
+msgid "تأكيد كلمة المرور"
+msgstr "Confirm Password"
+
+msgid "أعد إدخال كلمة المرور"
+msgstr "Re-enter password"
+
+msgid "إنشاء الحساب والمتابعة"
+msgstr "Create Account & Continue"
+
+msgid "أو التسجيل السريع عبر"
+msgstr "OR QUICK SIGN UP VIA"
+
+msgid "المتابعة باستخدام حساب Google"
+msgstr "Continue with Google"
+
+msgid "لديك حساب بالفعل؟"
+msgstr "Already have an account?"
+
+msgid "خطط اشتراك المعلمين"
+msgstr "Teacher Subscription Plans"
+
+msgid "باقات مرنة تناسب طموحك التعليمي"
+msgstr "Flexible Plans Matching Your Educational Ambition"
+
+msgid "اختر الباقة المناسبة لعدد طلابك ومجموعاتك، وابدأ في إدارة منظومتك التعليمية باحترافية كاملة."
+msgstr "Choose the right plan for your students and groups, and start managing your educational system professionally."
+
+msgid "الأكثر طلباً"
+msgstr "Most Popular"
+
+msgid "الباقة الافتراضية"
+msgstr "Default Plan"
+
+msgid "ج.م"
+msgstr "EGP"
+
+msgid "شهرياً"
+msgstr "Monthly"
+
+msgid "حتى"
+msgstr "Up to"
+
+msgid "طالب مسجل"
+msgstr "Registered Students"
+
+msgid "مجموعات دراسية"
+msgstr "Study Groups"
+
+msgid "دعم الحزم والكورسات الأونلاين"
+msgstr "Online Packages & Courses Support"
+
+msgid "بدون حزم أونلاين"
+msgstr "No Online Packages"
+
+msgid "إرفاق صور في أسئلة الامتحانات"
+msgstr "Attach Images in Exam Questions"
+
+msgid "أسئلة نصية فقط"
+msgstr "Text Questions Only"
+
+msgid "إدارة الاشتراك والترقية"
+msgstr "Manage Subscription & Upgrade"
+
+msgid "متاح للمعلمين فقط"
+msgstr "Available for Teachers Only"
+
+msgid "ابدأ كمعلم الآن"
+msgstr "Start as a Teacher Now"
+
+msgid "سيتم تفعيل الباقة الافتراضية مجاناً لمدة 30 يوماً فور التسجيل"
+msgstr "The default plan will be activated for free for 30 days upon registration"
+
+msgid "لا توجد باقات متاحة حالياً."
+msgstr "No plans available at the moment."
+
+msgid "هل تحتاج إلى باقة مخصصة لسنتر تعليمي كبير؟"
+msgstr "Need a custom plan for a large educational center?"
+
+msgid "تواصل معنا مباشرة لتصميم باقة تناسب احتياجاتك الخاصة وأعداد طلابك الكبيرة."
+msgstr "Contact us directly to design a custom plan tailored to your needs and large student numbers."
+
+msgid "تواصل مع المبيعات"
+msgstr "Contact Sales"
+
+msgid "إتمام الدفع"
+msgstr "Complete Payment"
+
+msgid "إتمام عملية الدفع"
+msgstr "Complete Payment Process"
+
+msgid "الرجاء تحويل المبلغ المطلوب إلى أحد الأرقام التالية:"
+msgstr "Please transfer the required amount to one of the following numbers:"
+
+msgid "محافظ إلكترونية (باسم عبدالرحمن طارق):"
+msgstr "E-Wallets (Abdelrahman Tarek):"
+
+msgid "إنستا باي - InstaPay (باسم عبدالرحمن طارق):"
+msgstr "InstaPay (Abdelrahman Tarek):"
+
+msgid "المبلغ المطلوب:"
+msgstr "Required Amount:"
+
+msgid "رقم الهاتف / الحساب المحول منه"
+msgstr "Sender Phone Number / Account"
+
+msgid "يرجى كتابة الرقم الذي قمت بإرسال الأموال منه لمطابقته."
+msgstr "Please enter the number or account you sent the money from for verification."
+
+msgid "صورة الإيصال (Screenshot)"
+msgstr "Receipt Screenshot"
+
+msgid "يرجى إرفاق صورة واضحة لشاشة نجاح التحويل."
+msgstr "Please attach a clear screenshot of the successful transfer."
+
+msgid "تأكيد وإرسال الطلب"
+msgstr "Confirm & Submit Request"
+
+msgid "رجوع"
+msgstr "Back"
+
+msgid "إنشاء حزمة"
+msgstr "Create Package"
+
+msgid "تشغيل / إيقاف"
+msgstr "Play / Pause"
+
+msgid "كتم الصوت"
+msgstr "Mute / Unmute"
+
+msgid "سرعة التشغيل"
+msgstr "Playback Speed"
+
+msgid "1x (عادي)"
+msgstr "1x (Normal)"
+
+msgid "ملء الشاشة"
+msgstr "Fullscreen"
+
+msgid "سنعود للعمل خلال وقت قصير جداً."
+msgstr "We will be back online very shortly."
+
+msgid "لوحة التحكم الخاصة بك قيد التطوير."
+msgstr "Your dashboard is currently under development."
+
+msgid "بيانات الدفع غير مكتملة."
+msgstr "Payment details are incomplete."
+
+msgid "تم إرسال طلب الدفع بنجاح. يرجى الانتظار حتى تتم مراجعته من قبل الإدارة."
+msgstr "Payment request submitted successfully. Please wait for admin review."
+
+msgid "دورك غير محدد. تواصل مع الدعم."
+msgstr "Your role is not specified. Please contact support."
+
+#, python-format
+msgid "تم التسجيل بنجاح! أهلاً بك يا %(name)s 🎉"
+msgstr "Registered successfully! Welcome, %(name)s 🎉"
+
+msgid "كلمتا المرور غير متطابقتين."
+msgstr "Passwords do not match."
+
+msgid "هذا البريد الإلكتروني مستخدم بالفعل."
+msgstr "This email address is already in use."
+
+msgid "رقم الهاتف هذا مستخدم بالفعل."
+msgstr "This phone number is already in use."
+
+msgid "رقم المحفظة أو الحساب الذي تم التحويل منه"
+msgstr "Wallet number or account transferred from"
+
+msgid "رقم الهاتف يجب أن يحتوي على أرقام فقط."
+msgstr "Phone number must contain digits only."
+
+msgid "رقم الهاتف يجب ألا يقل عن 11 رقماً."
+msgstr "Phone number must be at least 11 digits."
+
+msgid "الاسم رباعي (باللغة العربية)"
+msgstr "Full Name (4 parts)"
+
+msgid "اكتب اسمك رباعياً هنا"
+msgstr "Enter your full name here"
+
+msgid "الرقم القومي"
+msgstr "National ID"
+
+msgid "14 رقم"
+msgstr "14 digits"
+
+msgid "رقم هاتفك الشخصي"
+msgstr "Personal Phone Number"
+
+msgid "رقم ولي الأمر"
+msgstr "Parent's Phone Number"
+
+msgid "كلمة المرور (اختياري إذا كان لديك واحدة بالفعل)"
+msgstr "Password (optional if you already have one)"
+
+msgid "الرقم القومي يجب أن يكون 14 رقماً صحيحاً."
+msgstr "National ID must be a valid 14-digit number."
+
+msgid "الاسم ثلاثي أو رباعي"
+msgstr "Full Name (3 or 4 parts)"
+
+msgid "الاسم الذي سيظهر للطلاب"
+msgstr "Name displayed to students"
+
+msgid "اكتب نبذة مختصرة..."
+msgstr "Write a short bio..."
+
+msgid "نبذة مختصرة عنك"
+msgstr "Short Bio About You"
+
+msgid "المادة التي تدرسها"
+msgstr "Subject You Teach"
+
+msgid "-- اختر المادة --"
+msgstr "-- Select Subject --"
+
+msgid "اسمك بالكامل"
+msgstr "Your Full Name"
+
+msgid "اسم الملف"
+msgstr "File Name"
+
+msgid "رابط التحميل"
+msgstr "Download Link"
+
+msgid "اسم المجموعة (مثال: سبت وثلاثاء 2 ظهراً)"
+msgstr "Group Name (e.g., Sat & Tue 2 PM)"
+
+msgid "اكتب اسماً مميزاً للمجموعة"
+msgstr "Enter a distinctive group name"
+
+msgid "عنوان المحاضرة"
+msgstr "Lecture Title"
+
+msgid "رابط الفيديو (Youtube)"
+msgstr "Video Link (YouTube)"
+
+msgid "وصف أو ملاحظات"
+msgstr "Description or Notes"
+
+msgid "مثال: شرح الدرس الأول - النحو"
+msgstr "e.g., Lesson 1 - Grammar"
+
+msgid "الاسم الأول"
+msgstr "First Name"
+
+msgid "الاسم الأخير"
+msgstr "Last Name"
+
+msgid "نبذة عنك"
+msgstr "Bio"
+
+msgid "صورة البروفايل"
+msgstr "Profile Picture"
+
+msgid "عنوان الامتحان"
+msgstr "Exam Title"
+
+msgid "تعليمات للطالب"
+msgstr "Instructions for Student"
+
+msgid "المدة (دقائق)"
+msgstr "Duration (Minutes)"
+
+msgid "نشر الامتحان فوراً؟"
+msgstr "Publish Exam Immediately?"
+
+msgid "نص السؤال"
+msgstr "Question Text"
+
+msgid "صورة توضيحية (اختياري)"
+msgstr "Illustrative Image (Optional)"
+
+msgid "الإجابة الصحيحة"
+msgstr "Correct Answer"
+
+msgid "الإجابة A"
+msgstr "Option A"
+
+msgid "الإجابة B"
+msgstr "Option B"
+
+msgid "الإجابة C"
+msgstr "Option C"
+
+msgid "الإجابة D"
+msgstr "Option D"
+
+msgid "ملاحظات..."
+msgstr "Notes..."
+
+msgid "أولى ابتدائي"
+msgstr "Grade 1 Primary"
+
+msgid "ثانية ابتدائي"
+msgstr "Grade 2 Primary"
+
+msgid "ثالثة ابتدائي"
+msgstr "Grade 3 Primary"
+
+msgid "رابعة ابتدائي"
+msgstr "Grade 4 Primary"
+
+msgid "خامسة ابتدائي"
+msgstr "Grade 5 Primary"
+
+msgid "سادسة ابتدائي"
+msgstr "Grade 6 Primary"
+
+msgid "أولى إعدادي"
+msgstr "Grade 1 Prep"
+
+msgid "ثانية إعدادي"
+msgstr "Grade 2 Prep"
+
+msgid "ثالثة إعدادي"
+msgstr "Grade 3 Prep"
+
+msgid "أولى ثانوي"
+msgstr "Grade 1 Secondary"
+
+msgid "ثانية ثانوي"
+msgstr "Grade 2 Secondary"
+
+msgid "ثالثة ثانوي"
+msgstr "Grade 3 Secondary"
+
+msgid "الترم الأول"
+msgstr "First Term"
+
+msgid "الترم الثاني"
+msgstr "Second Term"
+
+msgid "مقبول"
+msgstr "Approved"
+
+msgid "مرفوض"
+msgstr "Rejected"
+
+msgid "اشتراك معلم"
+msgstr "Teacher Subscription"
+
+msgid "شراء حزمة طالب"
+msgstr "Student Package Purchase"
+

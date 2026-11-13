@@ -5,6 +5,7 @@ from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.utils import timezone
+from django.utils.translation import gettext as _
 from datetime import timedelta
 import random
 import string
@@ -45,7 +46,7 @@ def complete_profile(request):
     FormClass = form_map.get(user.role)
     if not FormClass:
         # دور غير معروف — يُعاد للـ home بعد تسجيل تحذير
-        messages.error(request, "دورك غير محدد. تواصل مع الدعم.")
+        messages.error(request, _("دورك غير محدد. تواصل مع الدعم."))
         return redirect('home')
 
     # 3. معالجة الحفظ
@@ -109,7 +110,7 @@ def complete_profile(request):
                         defaults={'phone': phone_val},
                     )
 
-            messages.success(request, f"تم التسجيل بنجاح! أهلاً بك يا {saved_user.first_name} 🎉")
+            messages.success(request, _("تم التسجيل بنجاح! أهلاً بك يا %(name)s 🎉") % {'name': saved_user.first_name})
             return redirect('custom_login_redirect')
     else:
         initial = {'full_name': f'{user.first_name} {user.last_name}'.strip(), 'phone': user.phone}
@@ -132,15 +133,15 @@ def manual_signup(request):
         role = request.POST.get('role', request.session.get('selected_role', 'student'))
 
         if password != confirm_password:
-            messages.error(request, "كلمتا المرور غير متطابقتين.")
+            messages.error(request, _("كلمتا المرور غير متطابقتين."))
             return redirect('signup_redirect', role=role)
 
         if User.objects.filter(email=email).exists():
-            messages.error(request, "هذا البريد الإلكتروني مستخدم بالفعل.")
+            messages.error(request, _("هذا البريد الإلكتروني مستخدم بالفعل."))
             return redirect('signup_redirect', role=role)
 
         if User.objects.filter(phone=phone).exists():
-            messages.error(request, "رقم الهاتف هذا مستخدم بالفعل.")
+            messages.error(request, _("رقم الهاتف هذا مستخدم بالفعل."))
             return redirect('signup_redirect', role=role)
 
         # إنشاء الحساب (استخدام البريد كاسم مستخدم)

@@ -35,10 +35,10 @@ class Notification(models.Model):
     
 # قائمة الصفوف (للاستخدام في الفلترة)
 GRADE_CHOICES = (
-    ('1_primary', 'أولى ابتدائي'), ('2_primary', 'ثانية ابتدائي'), ('3_primary', 'ثالثة ابتدائي'),
-    ('4_primary', 'رابعة ابتدائي'), ('5_primary', 'خامسة ابتدائي'), ('6_primary', 'سادسة ابتدائي'),
-    ('1_prep', 'أولى إعدادي'), ('2_prep', 'ثانية إعدادي'), ('3_prep', 'ثالثة إعدادي'),
-    ('1_sec', 'أولى ثانوي'), ('2_sec', 'ثانية ثانوي'), ('3_sec', 'ثالثة ثانوي'),
+    ('1_primary', _('أولى ابتدائي')), ('2_primary', _('ثانية ابتدائي')), ('3_primary', _('ثالثة ابتدائي')),
+    ('4_primary', _('رابعة ابتدائي')), ('5_primary', _('خامسة ابتدائي')), ('6_primary', _('سادسة ابتدائي')),
+    ('1_prep', _('أولى إعدادي')), ('2_prep', _('ثانية إعدادي')), ('3_prep', _('ثالثة إعدادي')),
+    ('1_sec', _('أولى ثانوي')), ('2_sec', _('ثانية ثانوي')), ('3_sec', _('ثالثة ثانوي')),
 )
 
 class Subject(models.Model):
@@ -57,13 +57,13 @@ class Subject(models.Model):
 
 class ManualPayment(models.Model):
     STATUS_CHOICES = (
-        ('pending', 'قيد المراجعة'),
-        ('approved', 'مقبول'),
-        ('rejected', 'مرفوض'),
+        ('pending', _('قيد المراجعة')),
+        ('approved', _('مقبول')),
+        ('rejected', _('مرفوض')),
     )
     TYPE_CHOICES = (
-        ('teacher_subscription', 'اشتراك معلم'),
-        ('student_package', 'شراء حزمة طالب'),
+        ('teacher_subscription', _('اشتراك معلم')),
+        ('student_package', _('شراء حزمة طالب')),
     )
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, verbose_name="المستخدم")
     amount = models.PositiveIntegerField(verbose_name="المبلغ")
@@ -121,8 +121,8 @@ class ManualPayment(models.Model):
             print(f"Error activating student package: {e}")
 
 TERM_CHOICES = (
-    ('1', 'الترم الأول'),
-    ('2', 'الترم الثاني'),
+    ('1', _('الترم الأول')),
+    ('2', _('الترم الثاني')),
 )
 
 class CurriculumUnit(models.Model):

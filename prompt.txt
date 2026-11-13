@@ -1,0 +1,467 @@
+[
+{
+"grade": "prep_1",
+"term": "term_1",
+"subject": "اللغة العربية",
+"units": [
+{
+"title": "تعرف حقوقك",
+"order": 1,
+"lessons": [
+{"title": "الحرية (قراءة)", "order": 1},
+{"title": "عشقناك يا مصر (نصوص)", "order": 2},
+{"title": "من مكارم الأخلاق (نصوص)", "order": 3},
+{"title": "نحو: همزة القطع وألف الوصل", "order": 4}
+]
+},
+{
+"title": "العمل شرف",
+"order": 2,
+"lessons": [
+{"title": "صيانة المال العام (قراءة)", "order": 1},
+{"title": "فضل العلم والعمل (نصوص)", "order": 2},
+{"title": "العمل حياة (نصوص)", "order": 3},
+{"title": "نحو: أنواع الخبر", "order": 4}
+]
+},
+{
+"title": "قصص وطرائف",
+"order": 3,
+"lessons": [
+{"title": "غرائب المخلوقات (قراءة)", "order": 1},
+{"title": "سليمان والحمامة (نصوص)", "order": 2},
+{"title": "الحب عطاء (نصوص)", "order": 3},
+{"title": "نحو: الضمائر البارزة والمستترة", "order": 4},
+{"title": "نحو: الأفعال الصحيحة والمعتلة", "order": 5}
+]
+}
+]
+},
+{
+"grade": "prep_1",
+"term": "term_2",
+"subject": "اللغة العربية",
+"units": [
+{
+"title": "قيم وسلوكيات",
+"order": 1,
+"lessons": [
+{"title": "هيا نشجع بأخلاق كريمة (قراءة)", "order": 1},
+{"title": "تواضع سيدنا عمر (نصوص)", "order": 2},
+{"title": "من أعمال الخير (نصوص)", "order": 3},
+{"title": "نحو: أسلوب الشرط", "order": 4}
+]
+},
+{
+"title": "عالم بلا حدود",
+"order": 2,
+"lessons": [
+{"title": "نور والجغرافيا (قراءة)", "order": 1},
+{"title": "من قصص القرآن الكريم (قراءة)", "order": 2},
+{"title": "التعاون (نصوص)", "order": 3},
+{"title": "كن بلسما (نصوص)", "order": 4},
+{"title": "نحو: الفعل اللازم والفعل المتعدي", "order": 5},
+{"title": "نحو: الفعل المبني للمعلوم والفعل المبني للمجهول ونائب الفاعل", "order": 6}
+]
+},
+{
+"title": "من روائع الفكر",
+"order": 3,
+"lessons": [
+{"title": "رحلات تاريخية (قراءة)", "order": 1},
+{"title": "حق الآخر (نصوص)", "order": 2},
+{"title": "نصائح (نصوص)", "order": 3},
+{"title": "نحو: ظن وأخواتها (الأفعال التي تنصب مفعولين أصلهما المبتدأ والخبر)", "order": 4},
+{"title": "نحو: الأفعال التي تنصب مفعولين ليس أصلهما المبتدأ والخبر", "order": 5}
+]
+}
+]
+},
+{
+"grade": "prep_1",
+"term": "term_1",
+"subject": "العلوم",
+"units": [
+{
+"title": "المادة وتركيبها",
+"order": 1,
+"lessons": [
+{"title": "المادة وخواصها", "order": 1},
+{"title": "تركيب المادة", "order": 2},
+{"title": "التركيب الذري للمادة", "order": 3}
+]
+},
+{
+"title": "الطاقة",
+"order": 2,
+"lessons": [
+{"title": "الطاقة مصادرها وصورها", "order": 1},
+{"title": "تحولات الطاقة", "order": 2},
+{"title": "الطاقة الحرارية", "order": 3}
+]
+},
+{
+"title": "التنوع والتكيف في الكائنات الحية",
+"order": 3,
+"lessons": [
+{"title": "تنوع الكائنات الحية ومبادئ تصنيفها", "order": 1},
+{"title": "التكيف وتنوع الكائنات الحية", "order": 2}
+]
+}
+]
+},
+{
+"grade": "prep_1",
+"term": "term_2",
+"subject": "العلوم",
+"units": [
+{
+"title": "التفاعلات الكيميائية",
+"order": 1,
+"lessons": [
+{"title": "الاتحاد الكيميائي", "order": 1},
+{"title": "المركبات الكيميائية", "order": 2},
+{"title": "المعادلة الكيميائية والتفاعل الكيميائي", "order": 3}
+]
+},
+{
+"title": "القوى والحركة",
+"order": 2,
+"lessons": [
+{"title": "القوى الأساسية في الطبيعة", "order": 1},
+{"title": "القوى المصاحبة للحركة", "order": 2},
+{"title": "الحركة", "order": 3}
+]
+},
+{
+"title": "الأرض والكون",
+"order": 3,
+"lessons": [
+{"title": "الأجرام السماوية", "order": 1},
+{"title": "كوكب الأرض", "order": 2},
+{"title": "الصخور والمعادن", "order": 3}
+]
+}
+]
+},
+{
+"grade": "prep_1",
+"term": "term_1",
+"subject": "الرياضيات",
+"units": [
+{
+"title": "الأعداد النسبية",
+"order": 1,
+"lessons": [
+{"title": "مجموعة الأعداد النسبية", "order": 1},
+{"title": "مقارنة وترتيب الأعداد النسبية", "order": 2},
+{"title": "جمع الأعداد النسبية", "order": 3},
+{"title": "خواص عملية الجمع في ن", "order": 4},
+{"title": "طرح الأعداد النسبية", "order": 5},
+{"title": "ضرب الأعداد النسبية", "order": 6},
+{"title": "قسمة الأعداد النسبية", "order": 7}
+]
+},
+{
+"title": "الحدود والمقادير الجبرية",
+"order": 2,
+"lessons": [
+{"title": "الحدود والمقادير الجبرية", "order": 1},
+{"title": "الحدود الجبرية المتشابهة", "order": 2},
+{"title": "ضرب الحدود الجبرية وقسمتها", "order": 3},
+{"title": "جمع المقادير الجبرية وطرحها", "order": 4},
+{"title": "ضرب حد جبري في مقدار جبري", "order": 5},
+{"title": "ضرب مقدار جبري ذي حدين في مقدار جبري آخر", "order": 6},
+{"title": "قسمة مقدار جبري على حد جبري", "order": 7}
+]
+},
+{
+"title": "الإحصاء",
+"order": 3,
+"lessons": [
+{"title": "الوسط الحسابي", "order": 1},
+{"title": "الوسيط", "order": 2},
+{"title": "المنوال", "order": 3}
+]
+},
+{
+"title": "الهندسة والقياس",
+"order": 4,
+"lessons": [
+{"title": "مفاهيم هندسية", "order": 1},
+{"title": "التطابق", "order": 2},
+{"title": "تطابق المثلثات", "order": 3},
+{"title": "التوازي", "order": 4},
+{"title": "إنشاءات هندسية", "order": 5}
+]
+}
+]
+},
+{
+"grade": "prep_1",
+"term": "term_2",
+"subject": "الرياضيات",
+"units": [
+{
+"title": "الجبر",
+"order": 1,
+"lessons": [
+{"title": "الضرب المتكرر في ن", "order": 1},
+{"title": "القوى الصحيحة غير السالبة", "order": 2},
+{"title": "القوى الصحيحة السالبة", "order": 3},
+{"title": "الصورة القياسية للعدد النسبي", "order": 4},
+{"title": "ترتيب إجراء العمليات الرياضية", "order": 5},
+{"title": "الجذر التربيعي لعدد نسبي مربع كامل", "order": 6},
+{"title": "حل المعادلات في ن", "order": 7},
+{"title": "حل المتباينات في ن", "order": 8}
+]
+},
+{
+"title": "الإحصاء والاحتمال",
+"order": 2,
+"lessons": [
+{"title": "العينات", "order": 1},
+{"title": "الاحتمال", "order": 2}
+]
+},
+{
+"title": "الهندسة والقياس",
+"order": 3,
+"lessons": [
+{"title": "البرهان الاستدلالي", "order": 1},
+{"title": "المضلع", "order": 2},
+{"title": "متوازي الأضلاع وحالاته الخاصة", "order": 3},
+{"title": "المثلث", "order": 4},
+{"title": "نظرية فيثاغورث", "order": 5},
+{"title": "التحويلات الهندسية (الانعكاس، الانتقال، الدوران)", "order": 6}
+]
+}
+]
+},
+{
+"grade": "prep_1",
+"term": "term_1",
+"subject": "الدراسات الاجتماعية",
+"units": [
+{
+"title": "رحلة عبر الفضاء (جغرافيا)",
+"order": 1,
+"lessons": [
+{"title": "ظواهر كونية", "order": 1},
+{"title": "مجموعتنا الشمسية", "order": 2}
+]
+},
+{
+"title": "رحلة على كوكب الأرض (جغرافيا)",
+"order": 2,
+"lessons": [
+{"title": "شكل الأرض وأبعادها", "order": 1},
+{"title": "الليل والنهار", "order": 2},
+{"title": "فصول السنة", "order": 3}
+]
+},
+{
+"title": "اليابس والماء (جغرافيا)",
+"order": 3,
+"lessons": [
+{"title": "نشأة اليابس والماء", "order": 1},
+{"title": "مظاهر سطح الأرض وعوامل تشكيلها", "order": 2}
+]
+},
+{
+"title": "تاريخ مصر عبر العصور القديمة (تاريخ)",
+"order": 4,
+"lessons": [
+{"title": "وحدة شعب", "order": 1},
+{"title": "عصر بناة الأهرامات (الدولة القديمة)", "order": 2},
+{"title": "عصر الرخاء الاقتصادي (الدولة الوسطى)", "order": 3},
+{"title": "عصر المجد الحربي (الدولة الحديثة)", "order": 4}
+]
+},
+{
+"title": "مصر الحضارة (تاريخ)",
+"order": 5,
+"lessons": [
+{"title": "الحياة السياسية", "order": 1},
+{"title": "الحياة الدينية", "order": 2},
+{"title": "الحياة الاقتصادية", "order": 3}
+]
+}
+]
+},
+{
+"grade": "prep_1",
+"term": "term_2",
+"subject": "الدراسات الاجتماعية",
+"units": [
+{
+"title": "المناخ والنبات الطبيعي (جغرافيا)",
+"order": 1,
+"lessons": [
+{"title": "عناصر المناخ", "order": 1},
+{"title": "الأقاليم المناخية", "order": 2},
+{"title": "النبات الطبيعي والحيوان البري", "order": 3}
+]
+},
+{
+"title": "الأخطار الطبيعية والبيئية (جغرافيا)",
+"order": 2,
+"lessons": [
+{"title": "أخطار من باطن الأرض (الزلازل والبراكين)", "order": 1},
+{"title": "أخطار المياه والرياح", "order": 2},
+{"title": "الأخطار البيئية", "order": 3}
+]
+},
+{
+"title": "من روائع حضارتنا (تاريخ)",
+"order": 3,
+"lessons": [
+{"title": "الحياة الاجتماعية", "order": 1},
+{"title": "إبداعات مصرية (الكتابة والأدب)", "order": 2},
+{"title": "الحياة الثقافية والفكرية (العلم والعمارة والفن)", "order": 3}
+]
+},
+{
+"title": "مصر بين حكم البطالمة والرومان (تاريخ)",
+"order": 4,
+"lessons": [
+{"title": "الإسكندر في مصر", "order": 1},
+{"title": "مصر تحت حكم البطالمة", "order": 2},
+{"title": "مصر تحت حكم الرومان", "order": 3},
+{"title": "مصر والمسيحية", "order": 4}
+]
+},
+{
+"title": "المواطنة الصالحة (تاريخ)",
+"order": 5,
+"lessons": [
+{"title": "كيف تكون مواطناً صالحاً", "order": 1},
+{"title": "المواطن وحقوقه وواجباته", "order": 2},
+{"title": "أنت والقانون", "order": 3}
+]
+}
+]
+},
+{
+"grade": "prep_1",
+"term": "term_1",
+"subject": "اللغة الإنجليزية",
+"units": [
+{
+"title": "Unit 1: My family and me",
+"order": 1,
+"lessons": [
+{"title": "Lessons 1 & 2", "order": 1},
+{"title": "Lessons 3 & 4", "order": 2},
+{"title": "Lessons 5 & 6", "order": 3}
+]
+},
+{
+"title": "Unit 2: It's my favourite subject",
+"order": 2,
+"lessons": [
+{"title": "Lessons 1 & 2", "order": 1},
+{"title": "Lessons 3 & 4", "order": 2},
+{"title": "Lessons 5 & 6", "order": 3}
+]
+},
+{
+"title": "Unit 3: Different people",
+"order": 3,
+"lessons": [
+{"title": "Lessons 1 & 2", "order": 1},
+{"title": "Lessons 3 & 4", "order": 2},
+{"title": "Lessons 5 & 6", "order": 3}
+]
+},
+{
+"title": "Unit 4: We're using technology",
+"order": 4,
+"lessons": [
+{"title": "Lessons 1 & 2", "order": 1},
+{"title": "Lessons 3 & 4", "order": 2},
+{"title": "Lessons 5 & 6", "order": 3}
+]
+},
+{
+"title": "Unit 5: Holidays",
+"order": 5,
+"lessons": [
+{"title": "Lessons 1 & 2", "order": 1},
+{"title": "Lessons 3 & 4", "order": 2},
+{"title": "Lessons 5 & 6", "order": 3}
+]
+},
+{
+"title": "Unit 6: Let's eat!",
+"order": 6,
+"lessons": [
+{"title": "Lessons 1 & 2", "order": 1},
+{"title": "Lessons 3 & 4", "order": 2},
+{"title": "Lessons 5 & 6", "order": 3}
+]
+}
+]
+},
+{
+"grade": "prep_1",
+"term": "term_2",
+"subject": "اللغة الإنجليزية",
+"units": [
+{
+"title": "Unit 7: How was your weekend?",
+"order": 1,
+"lessons": [
+{"title": "Lessons 1 & 2", "order": 1},
+{"title": "Lessons 3 & 4", "order": 2},
+{"title": "Lessons 5 & 6", "order": 3}
+]
+},
+{
+"title": "Unit 8: The amazing world around us",
+"order": 2,
+"lessons": [
+{"title": "Lessons 1 & 2", "order": 1},
+{"title": "Lessons 3 & 4", "order": 2},
+{"title": "Lessons 5 & 6", "order": 3}
+]
+},
+{
+"title": "Unit 9: Adventure",
+"order": 3,
+"lessons": [
+{"title": "Lessons 1 & 2", "order": 1},
+{"title": "Lessons 3 & 4", "order": 2},
+{"title": "Lessons 5 & 6", "order": 3}
+]
+},
+{
+"title": "Unit 10: Welcome to my home",
+"order": 4,
+"lessons": [
+{"title": "Lessons 1 & 2", "order": 1},
+{"title": "Lessons 3 & 4", "order": 2},
+{"title": "Lessons 5 & 6", "order": 3}
+]
+},
+{
+"title": "Unit 11: On land and sea",
+"order": 5,
+"lessons": [
+{"title": "Lessons 1 & 2", "order": 1},
+{"title": "Lessons 3 & 4", "order": 2},
+{"title": "Lessons 5 & 6", "order": 3}
+]
+},
+{
+"title": "Unit 12: My future",
+"order": 6,
+"lessons": [
+{"title": "Lessons 1 & 2", "order": 1},
+{"title": "Lessons 3 & 4", "order": 2},
+{"title": "Lessons 5 & 6", "order": 3}
+]
+}
+]
+}
+]

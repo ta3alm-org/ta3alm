@@ -21,6 +21,7 @@ __all__ = [
 ]
 
 from django import forms
+from django.utils.translation import gettext_lazy as _
 from .models import ManualPayment
 
 class ManualPaymentForm(forms.ModelForm):
@@ -28,6 +29,6 @@ class ManualPaymentForm(forms.ModelForm):
         model = ManualPayment
         fields = ['phone_number', 'receipt_image']
         widgets = {
-            'phone_number': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'رقم المحفظة أو الحساب الذي تم التحويل منه'}),
+            'phone_number': forms.TextInput(attrs={'class': 'form-control', 'placeholder': _('رقم المحفظة أو الحساب الذي تم التحويل منه')}),
             'receipt_image': forms.FileInput(attrs={'class': 'form-control', 'accept': 'image/*'}),
         }

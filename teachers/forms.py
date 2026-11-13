@@ -1,19 +1,15 @@
 from django import forms
-# from .models import Group
-from .models import Group, Lecture # <--- تأكد من استيراد Lecture
-from django import forms
-from .models import Group, Lecture, CoursePackage, TeacherProfile # <--- تأكد من وجود Lecture
-from exams.models import Exam # <--- هذا هو السطر الناقص
-from .models import TeacherProfile
+from django.utils.translation import gettext_lazy as _
+from .models import Group, Lecture, CoursePackage, TeacherProfile, PDFFile
+from exams.models import Exam
 from accounts.models import User
 from core.models import Subject
-from .models import PDFFile
 
 class PDFForm(forms.ModelForm):
     class Meta:
         model = PDFFile
         fields = ['title', 'link']
-        labels = {'title': 'اسم الملف', 'link': 'رابط التحميل'}
+        labels = {'title': _('اسم الملف'), 'link': _('رابط التحميل')}
         widgets = {
             'title': forms.TextInput(attrs={'class': 'form-control'}),
             'link': forms.URLInput(attrs={'class': 'form-control', 'placeholder': 'Google Drive / MediaFire'}),
@@ -24,11 +20,11 @@ class GroupForm(forms.ModelForm):
         model = Group
         fields = ['name', 'grade']
         labels = {
-            'name': 'اسم المجموعة (مثال: سبت وثلاثاء 2 ظهراً)',
-            'grade': 'الصف الدراسي',
+            'name': _('اسم المجموعة (مثال: سبت وثلاثاء 2 ظهراً)'),
+            'grade': _('الصف الدراسي'),
         }
         widgets = {
-            'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'اكتب اسماً مميزاً للمجموعة'}),
+            'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': _('اكتب اسماً مميزاً للمجموعة')}),
             'grade': forms.Select(attrs={'class': 'form-select'}),
         }
 
@@ -43,12 +39,12 @@ class LectureForm(forms.ModelForm):
         model = Lecture
         fields = ['title', 'video_link', 'description']
         labels = {
-            'title': 'عنوان المحاضرة',
-            'video_link': 'رابط الفيديو (Youtube)',
-            'description': 'وصف أو ملاحظات',
+            'title': _('عنوان المحاضرة'),
+            'video_link': _('رابط الفيديو (Youtube)'),
+            'description': _('وصف أو ملاحظات'),
         }
         widgets = {
-            'title': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'مثال: شرح الدرس الأول - النحو'}),
+            'title': forms.TextInput(attrs={'class': 'form-control', 'placeholder': _('مثال: شرح الدرس الأول - النحو')}),
             'video_link': forms.URLInput(attrs={'class': 'form-control', 'placeholder': 'https://youtube.com/...'}),
             'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             
@@ -58,15 +54,15 @@ class LectureForm(forms.ModelForm):
 
 class TeacherSettingsForm(forms.ModelForm):
     # حقول من جدول User
-    first_name = forms.CharField(label='الاسم الأول', widget=forms.TextInput(attrs={'class': 'form-control'}))
-    last_name = forms.CharField(label='الاسم الأخير', widget=forms.TextInput(attrs={'class': 'form-control'}))
+    first_name = forms.CharField(label=_('الاسم الأول'), widget=forms.TextInput(attrs={'class': 'form-control'}))
+    last_name = forms.CharField(label=_('الاسم الأخير'), widget=forms.TextInput(attrs={'class': 'form-control'}))
     
     # حقول من جدول TeacherProfile
-    bio = forms.CharField(label='نبذة عنك', widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 3}), required=False)
+    bio = forms.CharField(label=_('نبذة عنك'), widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 3}), required=False)
     # +++++ تعريف الحقل صراحة +++++
     subject = forms.ModelChoiceField(
         queryset=Subject.objects.all(),
-        label='المادة الدراسية',
+        label=_('المادة الدراسية'),
         widget=forms.Select(attrs={'class': 'form-select'})
     )
     # +++++++++++++++++++++++++++++
@@ -77,9 +73,9 @@ class TeacherSettingsForm(forms.ModelForm):
         fields = ['image', 'bio', 'subject'] 
         
         labels = {
-            'image': 'صورة البروفايل',
-            'bio': 'نبذة عنك',
-            'subject': 'المادة الدراسية'
+            'image': _('صورة البروفايل'),
+            'bio': _('نبذة عنك'),
+            'subject': _('المادة الدراسية')
         }
         
         widgets = {
