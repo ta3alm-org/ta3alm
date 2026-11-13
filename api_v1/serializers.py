@@ -125,6 +125,7 @@ class UserDetailSerializer(serializers.ModelSerializer):
                 'subject_id': tp.subject_id,
                 'subject_name': tp.subject.name if tp.subject else '',
                 'image': img_url,
+                'image_url': img_url,
                 'has_active_subscription': tp.has_active_subscription(),
                 'days_remaining': tp.days_remaining(),
                 'subscription_end_date': tp.subscription_end_date,
@@ -226,17 +227,40 @@ class GroupSerializer(serializers.ModelSerializer):
 class LectureSerializer(serializers.ModelSerializer):
     youtube_video_id = serializers.SerializerMethodField()
     group_name = serializers.CharField(source='group.name', default='', read_only=True)
+    has_native_asset = serializers.SerializerMethodField()
+    source_type = serializers.SerializerMethodField()
 
     class Meta:
         model = Lecture
         fields = [
             'id', 'group', 'group_name', 'title', 'video_link',
-            'youtube_video_id', 'description', 'is_active', 'created_at',
+            'youtube_video_id', 'has_native_asset', 'source_type',
+            'description', 'is_active', 'created_at',
         ]
         read_only_fields = ['id', 'group', 'created_at']
 
     def get_youtube_video_id(self, obj):
         return obj.get_video_id()
+
+    def get_has_native_asset(self, obj):
+        asset = getattr(obj, 'video_asset', None)
+        return bool(asset and asset.is_native_protected)
+
+    def get_source_type(self, obj):
+        asset = getattr(obj, 'video_asset', None)
+        if asset and asset.is_native_protected:
+            return asset.source_type
+        return 'youtube_legacy' if obj.get_video_id() else 'external_legacy'
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        asset = getattr(instance, 'video_asset', None)
+        # عدم تسريب رابط الفيديو الأصلي للطلاب نهائياً
+        if self.context.get('hide_raw_url_for_student') or self.context.get('for_student', False) or (
+            asset and asset.is_native_protected and self.context.get('for_student', False)
+        ):
+            data['video_link'] = ''
+        return data
 
 
 class LectureStudentListSerializer(serializers.ModelSerializer):

@@ -3,13 +3,18 @@ api_v1/views_auth.py
 نقاط النهاية الخاصة بالمصادقة، التسجيل، استكمال الملف الشخصي، وتحديث التوكنات.
 """
 from datetime import timedelta
+import json
 import random
 import re
 import string
+import urllib.parse
+import urllib.request
+import uuid
 
 from django.contrib.auth import authenticate, get_user_model
 from django.db import transaction
 from django.db.models import Q
+from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.authtoken.models import Token
@@ -17,7 +22,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounts.models import StudentProfile
+from accounts.models import StudentProfile, OneTimeLoginLink
 from assistants.models import AssistantProfile
 from core.models import Subject
 from teachers.models import TeacherProfile, SubscriptionPlan
@@ -275,6 +280,9 @@ class MeProfileAPIView(APIView):
     def get(self, request):
         return Response(UserDetailSerializer(request.user, context={'request': request}).data)
 
+    def post(self, request):
+        return self.patch(request)
+
     @transaction.atomic
     def patch(self, request):
         user = request.user
@@ -297,8 +305,11 @@ class MeProfileAPIView(APIView):
                 sid = request.data.get('subject_id') or request.data.get('subject')
                 if sid:
                     tp.subject = Subject.objects.filter(id=sid).first() or tp.subject
-            if 'image' in request.FILES:
-                tp.image = request.FILES['image']
+            uploaded_img = request.FILES.get('image') or request.FILES.get('avatar')
+            if uploaded_img is not None:
+                tp.image = uploaded_img
+            elif str(request.data.get('remove_image', '')).lower() in ('1', 'true', 'yes'):
+                tp.image = None
             tp.save()
         elif user.role == 'student' and hasattr(user, 'student_profile'):
             sp = user.student_profile
@@ -364,4 +375,240 @@ class ResetPasswordByNationalIdAPIView(APIView):
         user.set_password(new_password)
         user.save(update_fields=['password'])
         return Response({'message': 'تمت إعادة تعيين كلمة المرور بنجاح. يمكنك تسجيل الدخول الآن.'})
+
+
+def _verify_google_tokens(id_token: str = '', access_token: str = '') -> dict | None:
+    """
+    يتحقق من صحة id_token أو access_token مع خوادم Google الرسمية
+    ويعيد بيانات الحساب (email, given_name, family_name, sub).
+    """
+    if id_token:
+        try:
+            url = f"https://oauth2.googleapis.com/tokeninfo?id_token={urllib.parse.quote(id_token)}"
+            req = urllib.request.Request(url, headers={'Accept': 'application/json'})
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                data = json.loads(resp.read().decode('utf-8'))
+                if data.get('email') and data.get('email_verified') in (True, 'true', '1'):
+                    return {
+                        'email': str(data['email']).strip().lower(),
+                        'first_name': str(data.get('given_name') or data.get('name', '').split(' ')[0]).strip(),
+                        'last_name': str(data.get('family_name') or '').strip(),
+                        'sub': str(data.get('sub') or ''),
+                    }
+        except Exception:
+            pass
+
+    if access_token:
+        try:
+            url = "https://www.googleapis.com/oauth2/v3/userinfo"
+            req = urllib.request.Request(
+                url,
+                headers={
+                    'Authorization': f'Bearer {access_token}',
+                    'Accept': 'application/json',
+                },
+            )
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                data = json.loads(resp.read().decode('utf-8'))
+                if data.get('email'):
+                    return {
+                        'email': str(data['email']).strip().lower(),
+                        'first_name': str(data.get('given_name') or data.get('name', '').split(' ')[0]).strip(),
+                        'last_name': str(data.get('family_name') or '').strip(),
+                        'sub': str(data.get('sub') or ''),
+                    }
+        except Exception:
+            pass
+
+    return None
+
+
+class GoogleLoginAPIView(APIView):
+    """
+    تسجيل الدخول أو إنشاء حساب عبر Google (Native Flutter google_sign_in).
+    يستقبل id_token أو access_token + role الاختياري (student | teacher | assistant).
+    """
+    permission_classes = [AllowAny]
+
+    @transaction.atomic
+    def post(self, request):
+        id_token = str(request.data.get('id_token', '')).strip()
+        access_token = str(request.data.get('access_token', '')).strip()
+        role = str(request.data.get('role', 'student')).strip().lower()
+        if role not in ('student', 'teacher', 'assistant'):
+            role = 'student'
+
+        if not id_token and not access_token:
+            return Response(
+                {'error': 'يرجى تمرير رمز مصادقة جوجل (id_token أو access_token).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        google_info = _verify_google_tokens(id_token=id_token, access_token=access_token)
+        if not google_info or not google_info.get('email'):
+            return Response(
+                {'error': 'تعذر التحقق من حساب جوجل أو انتهت صلاحية الرمز.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        email = google_info['email']
+        user = User.objects.filter(email__iexact=email).order_by('id').first()
+        is_new_user = False
+
+        if not user:
+            is_new_user = True
+            base_username = email
+            if User.objects.filter(username__iexact=base_username).exists():
+                base_username = f"{email.split('@')[0]}_{random.randint(1000, 9999)}"
+            user = User.objects.create(
+                username=base_username,
+                email=email,
+                first_name=google_info.get('first_name') or email.split('@')[0],
+                last_name=google_info.get('last_name') or '',
+                role=role,
+                is_active=True,
+            )
+            user.set_unusable_password()
+            user.save()
+
+            # ربط الحساب بـ django-allauth SocialAccount إن وجد
+            try:
+                from allauth.socialaccount.models import SocialAccount
+                if google_info.get('sub'):
+                    SocialAccount.objects.get_or_create(
+                        user=user,
+                        provider='google',
+                        uid=google_info['sub'],
+                        defaults={'extra_data': google_info},
+                    )
+            except Exception:
+                pass
+
+        if user.is_banned:
+            return Response(
+                {
+                    'error': 'حسابك محظور من قِبل إدارة المنصة.',
+                    'is_banned': True,
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        tokens = generate_jwt_pair(user)
+        user_data = UserDetailSerializer(user, context={'request': request}).data
+        return Response({
+            'message': 'تم تسجيل الدخول عبر جوجل بنجاح!',
+            'is_new_user': is_new_user,
+            **tokens,
+            'user': user_data,
+        }, status=status.HTTP_200_OK)
+
+
+class OneTimeLoginAPIView(APIView):
+    """
+    تسجيل الدخول المباشر باستخدام رابط/كود الدخول المؤقت لمرة واحدة (OneTimeLoginLink)
+    الذي ينشئه الأدمن أو جسر مصادقة الويب.
+    """
+    permission_classes = [AllowAny]
+
+    @transaction.atomic
+    def post(self, request):
+        raw_input = str(request.data.get('token', '')).strip()
+        if not raw_input:
+            return Response(
+                {'error': 'يرجى إدخال رابط أو كود الدخول المباشر.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # استخراج UUID إذا قام المستخدم بلصق الرابط الكامل https://.../login/auto/<uuid>/
+        uuid_match = re.search(
+            r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}',
+            raw_input,
+        )
+        token_str = uuid_match.group(0) if uuid_match else raw_input
+
+        try:
+            token_uuid = uuid.UUID(token_str)
+        except ValueError:
+            return Response(
+                {'error': 'صيغة كود أو رابط الدخول غير صحيحة.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        link = OneTimeLoginLink.objects.select_for_update().select_related('user').filter(token=token_uuid).first()
+        if not link or not link.is_valid():
+            return Response(
+                {'error': 'رابط الدخول غير صالح أو منتهي الصلاحية أو تم استخدامه مسبقاً.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        user = link.user
+        if user.is_banned:
+            return Response(
+                {'error': 'هذا الحساب محظور.', 'is_banned': True},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        link.is_used = True
+        link.save(update_fields=['is_used'])
+
+        tokens = generate_jwt_pair(user)
+        user_data = UserDetailSerializer(user, context={'request': request}).data
+        return Response({
+            'message': f'تم تسجيل الدخول بنجاح! مرحباً {user.first_name or user.username}',
+            **tokens,
+            'user': user_data,
+        }, status=status.HTTP_200_OK)
+
+
+class GoogleMobileCallbackView(APIView):
+    """
+    جسر OAuth مساند: عند إتمام تسجيل الدخول عبر جوجل في المتصفح (/accounts/google/login/)،
+    يُصدِر كود دخول فوري لمرة واحدة يمكن للتطبيق استلامه أو نسخه بضغطة زر.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        if not request.user.is_authenticated:
+            role = request.GET.get('role', 'student')
+            if role in ('student', 'teacher', 'assistant'):
+                request.session['selected_role'] = role
+            next_url = urllib.parse.quote('/api/v1/auth/google/callback/')
+            return HttpResponse(
+                f'<html><head><meta http-equiv="refresh" content="0;url=/accounts/google/login/?next={next_url}"></head></html>'
+            )
+
+        user = request.user
+        role_in_session = request.session.pop('selected_role', None)
+        if role_in_session in ('student', 'teacher', 'assistant') and not user.custom_id:
+            user.role = role_in_session
+            user.save(update_fields=['role'])
+
+        expires = timezone.now() + timedelta(minutes=15)
+        link = OneTimeLoginLink.objects.create(user=user, expires_at=expires)
+        token_str = str(link.token)
+
+        html = f"""<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تم تسجيل الدخول بنجاح | منصة تعلّم</title>
+    <style>
+        body {{ font-family: 'Segoe UI', Tahoma, sans-serif; background: #4a0000; color: #fff; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 16px; }}
+        .card {{ background: #fff; color: #222; border-radius: 20px; max-width: 440px; width: 100%; padding: 28px; text-align: center; box-shadow: 0 12px 32px rgba(0,0,0,0.35); }}
+        .code-box {{ background: #f8f9fa; border: 2px dashed #800000; border-radius: 12px; padding: 14px; font-family: monospace; font-size: 15px; font-weight: bold; color: #800000; word-break: break-all; margin: 16px 0; }}
+        .btn {{ display: block; width: 100%; background: #800000; color: #FFD700; border: none; padding: 14px; border-radius: 12px; font-size: 16px; font-weight: bold; cursor: pointer; text-decoration: none; margin-top: 10px; }}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2 style="color:#800000; margin-top:0;">تم التحقق من حساب Google بنجاح!</h2>
+        <p>انسخ كود التفعيل الفوري التالي والصقه في شاشة تسجيل الدخول داخل تطبيق تعلّم:</p>
+        <div class="code-box" id="tokenBox">{token_str}</div>
+        <button class="btn" onclick="navigator.clipboard.writeText('{token_str}'); this.innerText='تم نسخ الكود بنجاح ✓';">نسخ كود الدخول للتطبيق</button>
+    </div>
+</body>
+</html>"""
+        return HttpResponse(html)
+
 

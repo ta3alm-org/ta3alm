@@ -235,7 +235,7 @@ class StudentWatchGroupLectureAPIView(APIView):
 
         return Response({
             'is_unlocked': True,
-            'lecture': LectureSerializer(lecture).data,
+            'lecture': LectureSerializer(lecture, context={'for_student': True}).data,
             'code_info': {
                 'code': active_code.code,
                 'current_views': active_code.current_views,
@@ -276,7 +276,7 @@ class StudentWatchGroupLectureAPIView(APIView):
         return Response({
             'message': 'تم تفعيل الكود بنجاح!',
             'is_unlocked': True,
-            'lecture': LectureSerializer(lecture).data,
+            'lecture': LectureSerializer(lecture, context={'for_student': True}).data,
             'code_info': {
                 'code': new_code.code,
                 'current_views': new_code.current_views,
@@ -519,6 +519,9 @@ class StudentWatchPackageLectureAPIView(APIView):
         package = get_object_or_404(CoursePackage, id=package_id)
         lecture = get_object_or_404(Lecture, id=lecture_id)
 
+        if not package.lectures.filter(id=lecture.id).exists():
+            return Response({'error': 'هذه المحاضرة غير مدرجة ضمن الحزمة.'}, status=status.HTTP_404_NOT_FOUND)
+
         if not PackageEnrollment.objects.filter(student=student, package=package, is_paid=True).exists():
             return Response({'error': 'يجب شراء الحزمة أولاً.'}, status=status.HTTP_403_FORBIDDEN)
 
@@ -544,7 +547,7 @@ class StudentWatchPackageLectureAPIView(APIView):
         return Response({
             'message': 'تم احتساب 10 درجات مشاهدة!' if points_just_awarded else 'مشاهدة ممتعة!',
             'points_just_awarded': points_just_awarded,
-            'lecture': LectureSerializer(lecture).data,
+            'lecture': LectureSerializer(lecture, context={'for_student': True}).data,
             'tracker': VideoViewTrackingSerializer(tracker).data,
             'view_limit': package.view_limit,
             'remaining_views': max(package.view_limit - tracker.views_count, 0),

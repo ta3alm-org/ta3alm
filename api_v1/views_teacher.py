@@ -125,6 +125,23 @@ class TeacherGroupDetailAPIView(APIView):
         pdfs = group.pdfs.all().order_by('-created_at')
         pending_count = group.enrollments.filter(is_active=False).count()
 
+        other_groups_qs = (
+            group.teacher.groups
+            .filter(grade=group.grade)
+            .exclude(id=group.id)
+            .prefetch_related('lectures', 'exams')
+        )
+        other_groups = [
+            {
+                'id': og.id,
+                'name': og.name,
+                'grade_display': og.get_grade_display(),
+                'lectures': LectureSerializer(og.lectures.all(), many=True).data,
+                'exams': ExamSerializer(og.exams.all(), many=True).data,
+            }
+            for og in other_groups_qs
+        ]
+
         return Response({
             'group': GroupSerializer(group, context={'request': request}).data,
             'is_owner': is_owner,
@@ -132,6 +149,7 @@ class TeacherGroupDetailAPIView(APIView):
             'lectures': LectureSerializer(lectures, many=True).data,
             'exams': ExamSerializer(exams, many=True).data,
             'pdfs': PDFFileSerializer(pdfs, many=True).data,
+            'other_groups': other_groups,
         })
 
     def patch(self, request, group_id):
@@ -174,6 +192,7 @@ class TeacherGroupLecturesAPIView(APIView):
         title = str(request.data.get('title', '')).strip()
         video_link = str(request.data.get('video_link', '')).strip()
         description = str(request.data.get('description', '')).strip()
+        lesson_id = request.data.get('lesson_id') or None
 
         if not title or not video_link:
             return Response({'error': 'عنوان المحاضرة ورابط الفيديو مطلوبان.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -183,6 +202,7 @@ class TeacherGroupLecturesAPIView(APIView):
             title=title,
             video_link=video_link,
             description=description,
+            lesson_id=lesson_id if str(lesson_id).isdigit() else None,
         )
         for enroll in group.enrollments.filter(is_active=True).select_related('student__user'):
             send_notification(
@@ -390,12 +410,25 @@ class TeacherExamDetailAPIView(APIView):
 
         allow_images = bool(teacher and teacher.current_plan and teacher.current_plan.allow_question_images)
         questions = exam.questions.all()
+        q_search = request.query_params.get('q', '').strip()
 
         if exam.group:
             results = exam.results.select_related('student__user').order_by('-score')
+            if q_search:
+                results = results.filter(
+                    Q(student__user__first_name__icontains=q_search)
+                    | Q(student__user__last_name__icontains=q_search)
+                    | Q(student__user__phone__icontains=q_search)
+                )
             results_data = ExamResultSerializer(results, many=True).data
         else:
             results = PackageExamResult.objects.filter(exam=exam).select_related('student__user').order_by('-score')
+            if q_search:
+                results = results.filter(
+                    Q(student__user__first_name__icontains=q_search)
+                    | Q(student__user__last_name__icontains=q_search)
+                    | Q(student__user__phone__icontains=q_search)
+                )
             results_data = PackageExamResultSerializer(results, many=True).data
 
         return Response({
@@ -403,6 +436,27 @@ class TeacherExamDetailAPIView(APIView):
             'allow_images': allow_images,
             'questions': QuestionTeacherSerializer(questions, many=True, context={'request': request}).data,
             'results': results_data,
+        })
+
+    def patch(self, request, exam_id):
+        """تعديل بيانات الامتحان (العنوان، الوصف، المدة، الحالة)."""
+        exam = get_object_or_404(Exam, id=exam_id)
+        allowed, _ = _check_exam_permission(request, exam)
+        if not allowed:
+            return Response({'error': 'صلاحية غير كافية.'}, status=status.HTTP_403_FORBIDDEN)
+
+        if 'title' in request.data:
+            exam.title = str(request.data['title']).strip()
+        if 'description' in request.data:
+            exam.description = str(request.data['description']).strip()
+        if 'duration_minutes' in request.data:
+            exam.duration_minutes = int(request.data['duration_minutes'])
+        if 'is_active' in request.data:
+            exam.is_active = bool(request.data['is_active'])
+        exam.save()
+        return Response({
+            'message': 'تم تحديث بيانات الامتحان بنجاح.',
+            'exam': ExamSerializer(exam).data,
         })
 
     def post(self, request, exam_id):
@@ -818,6 +872,16 @@ class TeacherPackageDetailAPIView(APIView):
 
         enrollments = package.enrollments.filter(is_paid=True).select_related('student__user')
         raw_board = calculate_package_leaderboard(package)
+        avail_groups = package.teacher.groups.filter(grade=package.grade).prefetch_related('lectures', 'exams')
+        available_groups = [
+            {
+                'id': g.id,
+                'name': g.name,
+                'lectures': LectureSerializer(g.lectures.all(), many=True).data,
+                'exams': ExamSerializer(g.exams.all(), many=True).data,
+            }
+            for g in avail_groups
+        ]
 
         return Response({
             'package': CoursePackageSerializer(package, context={'request': request}).data,
@@ -827,6 +891,7 @@ class TeacherPackageDetailAPIView(APIView):
             'pdfs': PDFFileSerializer(package.pdfs.all(), many=True).data,
             'students': PackageEnrollmentSerializer(enrollments, many=True, context={'request': request}).data,
             'total_revenue': enrollments.count() * package.price,
+            'available_groups': available_groups,
             'leaderboard': [
                 {
                     'rank': item['rank'],

@@ -15,6 +15,9 @@ from .views_auth import (
     MeProfileAPIView,
     ChangePasswordAPIView,
     ResetPasswordByNationalIdAPIView,
+    GoogleLoginAPIView,
+    OneTimeLoginAPIView,
+    GoogleMobileCallbackView,
 )
 from .views_public import (
     PublicHomeAPIView,
@@ -70,6 +73,18 @@ from .views_admin import (
     AdminManageUsersAPIView,
     AdminFinanceAPIView,
     AdminPlansAndStaffAPIView,
+    AdminSupportInboxAPIView,
+)
+from .views_video import (
+    VideoAuthorizeAPIView,
+    VideoHeartbeatAPIView,
+    VideoProgressAPIView,
+    ContinueWatchingAPIView,
+    VideoBookmarksAPIView,
+    VideoSessionRevokeAPIView,
+    ProtectedVideoStreamProxyAPIView,
+    PlayIntegrityChallengeAPIView,
+    PlayIntegrityVerifyAPIView,
 )
 
 urlpatterns = [
@@ -90,6 +105,9 @@ urlpatterns = [
     path('auth/me/', MeProfileAPIView.as_view(), name='api_v1_me'),
     path('auth/change-password/', ChangePasswordAPIView.as_view(), name='api_v1_change_password'),
     path('auth/reset-password-nid/', ResetPasswordByNationalIdAPIView.as_view(), name='api_v1_reset_password_nid'),
+    path('auth/google/', GoogleLoginAPIView.as_view(), name='api_v1_google_login'),
+    path('auth/google/callback/', GoogleMobileCallbackView.as_view(), name='api_v1_google_mobile_callback'),
+    path('auth/one-time-login/', OneTimeLoginAPIView.as_view(), name='api_v1_one_time_login'),
 
     # 2. Public & General
     path('public/home/', PublicHomeAPIView.as_view(), name='api_v1_public_home'),
@@ -150,5 +168,18 @@ urlpatterns = [
     path('admin/users/', AdminManageUsersAPIView.as_view(), name='api_v1_admin_users'),
     path('admin/finance/', AdminFinanceAPIView.as_view(), name='api_v1_admin_finance'),
     path('admin/plans-staff/', AdminPlansAndStaffAPIView.as_view(), name='api_v1_admin_plans_staff'),
+    path('admin/support/', AdminSupportInboxAPIView.as_view(), name='api_v1_admin_support'),
+
+    # 6. Secure Video Playback & Progress & App Integrity
+    path('videos/continue-watching/', ContinueWatchingAPIView.as_view(), name='api_v1_video_continue_watching'),
+    path('videos/<int:lecture_id>/authorize/', VideoAuthorizeAPIView.as_view(), name='api_v1_video_authorize'),
+    path('videos/<int:lecture_id>/heartbeat/', VideoHeartbeatAPIView.as_view(), name='api_v1_video_heartbeat'),
+    path('videos/<int:lecture_id>/progress/', VideoProgressAPIView.as_view(), name='api_v1_video_progress'),
+    path('videos/<int:lecture_id>/bookmarks/', VideoBookmarksAPIView.as_view(), name='api_v1_video_bookmarks'),
+    path('videos/bookmarks/<int:bookmark_id>/', VideoBookmarksAPIView.as_view(), name='api_v1_video_bookmark_delete'),
+    path('videos/sessions/<uuid:session_id>/revoke/', VideoSessionRevokeAPIView.as_view(), name='api_v1_video_session_revoke'),
+    path('videos/stream/<str:playback_token>/', ProtectedVideoStreamProxyAPIView.as_view(), name='api_v1_video_stream_proxy'),
+    path('security/integrity/challenge/', PlayIntegrityChallengeAPIView.as_view(), name='api_v1_integrity_challenge'),
+    path('security/integrity/verify/', PlayIntegrityVerifyAPIView.as_view(), name='api_v1_integrity_verify'),
 ]
 

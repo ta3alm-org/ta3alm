@@ -2,6 +2,7 @@
 api_v1/views_public.py
 نقاط النهاية العامة (الصفحة الرئيسية، الباقات، الدليل، المناهج، الإشعارات، الدفع اليدوي).
 """
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -36,12 +37,7 @@ class PublicHomeAPIView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        teachers = (
-            TeacherProfile.objects
-            .select_related('user', 'subject', 'current_plan')
-            .filter(user__is_banned=False)
-            .order_by('-id')
-        )
+        teachers = TeacherProfile.ordered_for_home()
         q_grade = request.query_params.get('grade', '').strip()
         q_subject = request.query_params.get('subject', '').strip()
         q_search = request.query_params.get('q', '').strip()
@@ -52,8 +48,8 @@ class PublicHomeAPIView(APIView):
             teachers = teachers.filter(groups__grade=q_grade).distinct()
         if q_search:
             teachers = teachers.filter(
-                user__first_name__icontains=q_search
-            ) | teachers.filter(user__last_name__icontains=q_search)
+                Q(user__first_name__icontains=q_search) | Q(user__last_name__icontains=q_search)
+            )
 
         subjects = Subject.objects.all()
         featured_packages = (
@@ -85,10 +81,9 @@ class PublicMetadataAPIView(APIView):
             'terms': [{'code': code, 'name': str(label)} for code, label in TERM_CHOICES],
             'roles': [{'code': code, 'name': str(label)} for code, label in ROLE_CHOICES],
             'payment_wallets': [
-                {'type': 'Vodafone / E-Wallet', 'holder': 'عبدالرحمن طارق', 'number': '01275192105'},
                 {'type': 'Vodafone / E-Wallet', 'holder': 'عبدالرحمن طارق', 'number': '01094724932'},
-                {'type': 'InstaPay', 'holder': 'عبدالرحمن طارق', 'number': '01275192105'},
             ],
+            'instapay_link': 'https://ipn.eg/S/theboda/instapay/1lnFUL',
             'support_whatsapp': '+201507200894',
             'support_email': 'support@ta3alm.online',
         })

@@ -1,4 +1,4 @@
-﻿from django.db import models, transaction
+from django.db import models, transaction
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
@@ -77,6 +77,24 @@ class TeacherProfile(models.Model):
     # ┘ç┘ä ╪º┘ä╪¡╪▓┘à ┘à╪│┘à┘ê╪¡╪⌐ ┘ü┘è ╪º┘ä╪¿╪º┘é╪⌐ ╪º┘ä╪¡╪º┘ä┘è╪⌐╪ƒ
     def are_packages_allowed(self):
         return self.current_plan.allow_online_packages if self.current_plan else False
+
+    @classmethod
+    def ordered_for_home(cls):
+        """ترتيب المعلمين للعرض في الرئيسية: أصحاب الصور الشخصية أولاً ثم الأعلى أقدمية."""
+        from django.db.models import Case, When, Value, IntegerField, Q
+        return (
+            cls.objects
+            .select_related('user', 'subject', 'current_plan')
+            .filter(user__is_banned=False)
+            .annotate(
+                has_photo=Case(
+                    When(~Q(image='') & Q(image__isnull=False), then=Value(0)),
+                    default=Value(1),
+                    output_field=IntegerField(),
+                )
+            )
+            .order_by('has_photo', 'user__date_joined', 'id')
+        )
 
     def __str__(self):
         return self.user.username

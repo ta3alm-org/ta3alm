@@ -15,12 +15,7 @@ from core.models import Subject, Notification
 # 1. الصفحة الرئيسية
 # ==========================================================
 def home(request):
-    teachers = (
-        TeacherProfile.objects
-        .select_related('user', 'subject')
-        .filter(user__is_banned=False)
-        .order_by('-id')
-    )
+    teachers = TeacherProfile.ordered_for_home()
     subjects = Subject.objects.all()
 
     q_grade   = request.GET.get('grade', '')

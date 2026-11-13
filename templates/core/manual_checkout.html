@@ -17,14 +17,17 @@
                     <div class="alert alert-info text-center" role="alert">
                         <h5 class="alert-heading fw-bold">{% trans "الرجاء تحويل المبلغ المطلوب إلى أحد الأرقام التالية:" %}</h5>
                         <p class="mb-0 fs-5 mt-3">
-                            <strong>{% trans "محافظ إلكترونية (باسم عبدالرحمن طارق):" %}</strong> <br>
-                            <span class="badge bg-dark text-white fs-5 mt-2" dir="ltr">01275192105</span><br>
-                            <span class="badge bg-dark text-white fs-5 mt-1" dir="ltr">01094724932</span>
+                            <strong>{% trans "محفظة إلكترونية (باسم عبدالرحمن طارق):" %}</strong> <br>
+                            <span class="badge bg-dark text-white fs-5 mt-2" dir="ltr">01094724932</span>
                         </p>
-                        <p class="mb-0 fs-5 mt-3">
-                            <strong>{% trans "إنستا باي - InstaPay (باسم عبدالرحمن طارق):" %}</strong> <br>
-                            <span class="badge bg-dark text-white fs-5 mt-2" dir="ltr">01275192105</span>
-                        </p>
+                        <div class="mt-4 p-3 rounded-3 border border-primary bg-white">
+                            <div class="fw-bold text-primary mb-2">
+                                <i class="fa-solid fa-bolt me-1"></i> {% trans "الدفع المباشر عبر إنستا باي (InstaPay)" %}
+                            </div>
+                            <a href="https://ipn.eg/S/theboda/instapay/1lnFUL" target="_blank" rel="noopener noreferrer" class="btn btn-primary fw-bold rounded-3 px-4 w-100">
+                                <i class="fa-solid fa-arrow-up-right-from-square me-2"></i> {% trans "فتح رابط الدفع إنستا باي (InstaPay)" %}
+                            </a>
+                        </div>
                         <hr>
                         <p class="mb-0 fs-5 text-danger fw-bold">{% trans "المبلغ المطلوب:" %} {{ amount }} {% trans "ج.م" %}</p>
                     </div>
