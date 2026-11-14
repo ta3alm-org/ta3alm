@@ -34,6 +34,7 @@ urlpatterns = [
     path('privacy/', core_views.privacy_policy, name='privacy_policy_direct'),
     path('privacy-policy/', core_views.privacy_policy, name='privacy_policy_direct_alias'),
     path('terms/', core_views.terms_of_service, name='terms_of_service_direct'),
+    path('verify-email/<uuid:token>/', account_views.verify_email_link, name='verify_email_link_direct'),
     path(
         'sitemap.xml',
         sitemap,
@@ -64,6 +65,9 @@ urlpatterns += i18n_patterns(
     path('accounts/',       include('allauth.urls')),
     path('complete-profile/', account_views.complete_profile, name='complete_profile'),
     path('manual-signup/',  account_views.manual_signup, name='manual_signup'),
+    path('verify-email/',   account_views.verify_email_page, name='verify_email_page'),
+    path('verify-email/resend/', account_views.resend_verification_email, name='resend_verification_email'),
+    path('verify-email/<uuid:token>/', account_views.verify_email_link, name='verify_email_link'),
 
 
     # ✅ لوحة الإدارة المستقلة — تحت /admin-panel/

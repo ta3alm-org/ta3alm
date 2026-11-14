@@ -3,6 +3,7 @@ accounts/models.py — نموذج المستخدم المخصص
 """
 from django.db import models
 from django.contrib.auth.models import AbstractUser
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from core.constants import ROLE_CHOICES
 import random
@@ -68,6 +69,18 @@ class User(AbstractUser):
         """هل هذا المستخدم له صلاحيات إدارية على المنصة؟"""
         return self.is_superuser or self.role == 'admin'
 
+    def requires_email_verification(self) -> bool:
+        """
+        يُعيد True فقط إذا كان للمستخدم سجل تحقق من البريد لم يُفعَّل بعد.
+        (لا يؤثر على المستخدمين القدامى أو الأدمن).
+        """
+        if self.is_superuser or self.role == 'admin':
+            return False
+        verification = getattr(self, 'email_verification', None)
+        if verification is None:
+            return False
+        return not verification.is_verified
+
 
 class StudentProfile(models.Model):
     user = models.OneToOneField(
@@ -115,3 +128,50 @@ class OneTimeLoginLink(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {'مستخدم' if self.is_used else 'صالح'}"
+
+
+class EmailVerification(models.Model):
+    """سجل تفعيل البريد الإلكتروني عبر الرابط المباشر أو كود التحقق (6 أرقام)."""
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='email_verification',
+        verbose_name=_('المستخدم'),
+    )
+    token = models.UUIDField(
+        default=uuid.uuid4,
+        unique=True,
+        editable=False,
+        verbose_name=_('رمز التفعيل المباشر'),
+    )
+    code = models.CharField(
+        max_length=6,
+        verbose_name=_('كود التفعيل'),
+    )
+    is_verified = models.BooleanField(
+        default=False,
+        verbose_name=_('مُفعّل'),
+    )
+    expires_at = models.DateTimeField(
+        verbose_name=_('تاريخ انتهاء الصلاحية'),
+    )
+    last_sent_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_('آخر وقت إرسال'),
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name=_('تاريخ الإنشاء'),
+    )
+
+    class Meta:
+        verbose_name = _('تفعيل البريد الإلكتروني')
+        verbose_name_plural = _('طلبات تفعيل البريد الإلكتروني')
+
+    def is_expired(self) -> bool:
+        return timezone.now() > self.expires_at
+
+    def __str__(self):
+        state = 'مفعل' if self.is_verified else 'بانتظار التفعيل'
+        return f"{self.user.email} - {state}"

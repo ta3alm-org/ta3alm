@@ -5,14 +5,16 @@ api_v1/tests_video_security.py
 """
 from datetime import timedelta
 import json
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core import mail
 from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from accounts.models import StudentProfile
+from accounts.models import EmailVerification, StudentProfile
 from core.models import Subject
 from students.models import Enrollment, PackageEnrollment
 from teachers.models import CoursePackage, Group, Lecture, SubscriptionPlan, TeacherProfile, VideoCode
@@ -344,3 +346,68 @@ class VideoSecurityAndIntegrityTests(APITestCase):
         for url in ('/privacy/', '/privacy-policy/', '/terms/', '/ar/privacy/', '/en/terms/'):
             resp = self.client.get(url)
             self.assertEqual(resp.status_code, 200, f'Expected 200 OK for {url}')
+
+    def test_manual_signup_email_verification_via_otp_code(self):
+        mail.outbox.clear()
+        with patch('services.zoho_mail_service.ZohoMailService.is_connected', return_value=False):
+            signup_resp = self.client.post(
+                '/ar/manual-signup/',
+                {
+                    'full_name': 'طالب تجريبي',
+                    'email': 'verify_otp@ta3alm.test',
+                    'phone': '01012345001',
+                    'password': 'StrongPassword123!',
+                    'confirm_password': 'StrongPassword123!',
+                    'role': 'student',
+                },
+            )
+        self.assertRedirects(signup_resp, '/ar/verify-email/', fetch_redirect_response=False)
+
+        user = User.objects.get(email='verify_otp@ta3alm.test')
+        verification = EmailVerification.objects.get(user=user)
+        self.assertFalse(verification.is_verified)
+        self.assertEqual(len(verification.code), 6)
+        self.assertTrue(len(mail.outbox) >= 1)
+        self.assertIn(verification.code, mail.outbox[-1].body)
+
+        # قبل التفعيل يجب أن يتم حجبه عن complete_profile وتوجيهه لصفحة التفعيل
+        blocked_resp = self.client.get('/ar/complete-profile/')
+        self.assertRedirects(blocked_resp, '/ar/verify-email/', fetch_redirect_response=False)
+
+        # إدخال كود خطأ لا يفعّل الحساب
+        wrong_resp = self.client.post('/ar/verify-email/', {'code': '000000'})
+        self.assertEqual(wrong_resp.status_code, 200)
+        verification.refresh_from_db()
+        self.assertFalse(verification.is_verified)
+
+        # إدخال الكود الصحيح يفعّل الحساب ويوجه لاستكمال الملف الشخصي
+        ok_resp = self.client.post('/ar/verify-email/', {'code': verification.code})
+        self.assertRedirects(ok_resp, '/ar/complete-profile/', fetch_redirect_response=False)
+        verification.refresh_from_db()
+        self.assertTrue(verification.is_verified)
+
+    def test_manual_signup_email_verification_via_direct_link(self):
+        mail.outbox.clear()
+        with patch('services.zoho_mail_service.ZohoMailService.is_connected', return_value=False):
+            self.client.post(
+                '/ar/manual-signup/',
+                {
+                    'full_name': 'طالب رابط',
+                    'email': 'verify_link@ta3alm.test',
+                    'phone': '01012345002',
+                    'password': 'StrongPassword123!',
+                    'confirm_password': 'StrongPassword123!',
+                    'role': 'student',
+                },
+            )
+        user = User.objects.get(email='verify_link@ta3alm.test')
+        verification = EmailVerification.objects.get(user=user)
+
+        # تسجيل الخروج ثم فتح الرابط المباشر كما يحدث عند فتحه من الإيميل
+        self.client.logout()
+        link_resp = self.client.get(f'/verify-email/{verification.token}/')
+        self.assertRedirects(link_resp, '/ar/complete-profile/', fetch_redirect_response=False)
+
+        verification.refresh_from_db()
+        self.assertTrue(verification.is_verified)
+        self.assertEqual(self.client.session.get('_auth_user_id'), str(user.pk))

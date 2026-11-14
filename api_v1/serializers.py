@@ -260,6 +260,7 @@ class LectureSerializer(serializers.ModelSerializer):
             asset and asset.is_native_protected and self.context.get('for_student', False)
         ):
             data['video_link'] = ''
+            data['youtube_video_id'] = None
         return data
 
 

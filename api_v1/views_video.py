@@ -23,6 +23,7 @@ from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
 from students.models import (
+    Enrollment,
     PackageEnrollment,
     VideoViewTracking,
 )
@@ -101,6 +102,12 @@ def _user_can_access_lecture_metadata(user, lecture: Lecture) -> bool:
     if PlaybackSession.objects.filter(user=user, lecture=lecture).exists():
         return True
     if VideoCode.objects.filter(lecture=lecture, used_by=student).exists():
+        return True
+    if lecture.group_id and Enrollment.objects.filter(
+        student=student,
+        group_id=lecture.group_id,
+        is_active=True,
+    ).exists():
         return True
     return PackageEnrollment.objects.filter(
         student=student,
@@ -466,7 +473,7 @@ class VideoAuthorizeAPIView(APIView):
 
         lecture_data = LectureSerializer(
             lecture,
-            context={'hide_raw_url_for_student': source_payload['is_native_protected']},
+            context={'hide_raw_url_for_student': True},
         ).data
 
         return Response({

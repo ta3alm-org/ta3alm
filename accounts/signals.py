@@ -44,6 +44,15 @@ def check_role_on_login(request, user, **kwargs):
         request.session.pop('selected_role', None)
         return
 
+    if user.requires_email_verification():
+        try:
+            if user.socialaccount_set.exists():
+                verification = user.email_verification
+                verification.is_verified = True
+                verification.save(update_fields=['is_verified'])
+        except Exception:
+            pass
+
     selected_role = request.session.get('selected_role', '')
     if selected_role and user.role and user.role != selected_role:
         messages.warning(

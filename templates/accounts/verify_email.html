@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}
+{% if LANGUAGE_CODE == 'en' %}Verify Your Email — Ta3alm{% else %}تفعيل البريد الإلكتروني — منصة تعلّم{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-7 col-lg-5">
+            <div class="card border-0 shadow-lg rounded-4 overflow-hidden">
+                <div class="p-4 text-center text-white" style="background: linear-gradient(135deg, #520000 0%, #800000 100%);">
+                    <div class="d-inline-flex align-items-center justify-content-center rounded-circle bg-warning bg-opacity-25 text-warning mb-3" style="width: 68px; height: 68px;">
+                        <i class="bi bi-envelope-check-fill fs-2"></i>
+                    </div>
+                    <h1 class="h4 fw-bold mb-1">
+                        {% if LANGUAGE_CODE == 'en' %}Verify Your Email Address{% else %}تفعيل حسابك عبر البريد الإلكتروني{% endif %}
+                    </h1>
+                    <p class="small text-white-50 mb-0">
+                        {% if LANGUAGE_CODE == 'en' %}
+                        We sent a direct activation link and a 6-digit verification code to:
+                        {% else %}
+                        أرسلنا رسالة تحتوي على رابط التفعيل المباشر وكود مكون من 6 أرقام إلى:
+                        {% endif %}
+                    </p>
+                    <div class="badge bg-warning text-dark mt-2 px-3 py-2 rounded-pill fs-6" dir="ltr">
+                        {{ target_email }}
+                    </div>
+                </div>
+
+                <div class="card-body p-4 p-md-5">
+                    {% if is_expired %}
+                    <div class="alert alert-warning small rounded-3">
+                        <i class="bi bi-clock-history me-1"></i>
+                        {% if LANGUAGE_CODE == 'en' %}
+                        The previous verification code has expired. Please request a new code below.
+                        {% else %}
+                        انتهت صلاحية الكود السابق. اضغط على «إعادة إرسال الكود والرابط» بالأسفل للحصول على كود جديد.
+                        {% endif %}
+                    </div>
+                    {% endif %}
+
+                    <p class="text-muted small mb-4 text-center">
+                        {% if LANGUAGE_CODE == 'en' %}
+                        You can click the activation link inside your inbox, or enter the 6-digit code below:
+                        {% else %}
+                        يمكنك فتح الإيميل والضغط على <strong>زر التفعيل المباشر</strong>، أو إدخال <strong>الكود المكون من 6 أرقام</strong> هنا إذا لم تضغط على الرابط:
+                        {% endif %}
+                    </p>
+
+                    <form method="post" action="{% url 'verify_email_page' %}" class="mb-4">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label for="otpCodeInput" class="form-label fw-bold">
+                                {% if LANGUAGE_CODE == 'en' %}Verification Code (6 digits){% else %}كود التفعيل (6 أرقام){% endif %}
+                            </label>
+                            <input
+                                id="otpCodeInput"
+                                type="text"
+                                name="code"
+                                inputmode="numeric"
+                                pattern="[0-9]{6}"
+                                maxlength="6"
+                                autocomplete="one-time-code"
+                                class="form-control form-control-lg text-center fw-bold border-2"
+                                style="letter-spacing: 10px; font-size: 1.6rem; direction: ltr;"
+                                placeholder="000000"
+                                required
+                                autofocus
+                            >
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-lg w-100 fw-bold rounded-3">
+                            <i class="bi bi-check-circle-fill me-1"></i>
+                            {% if LANGUAGE_CODE == 'en' %}Verify &amp; Activate Account{% else %}تأكيد الكود وتفعيل الحساب{% endif %}
+                        </button>
+                    </form>
+
+                    <hr class="my-4">
+
+                    <div class="text-center">
+                        <p class="small text-muted mb-2">
+                            {% if LANGUAGE_CODE == 'en' %}
+                            Didn't receive the email? Check Spam/Promotions or resend:
+                            {% else %}
+                            لم تصلك الرسالة؟ تحقق من مجلد الرسائل غير المرغوب فيها (Spam) أو أعد الإرسال:
+                            {% endif %}
+                        </p>
+                        <form method="post" action="{% url 'resend_verification_email' %}">
+                            {% csrf_token %}
+                            <button
+                                type="submit"
+                                id="resendVerifyBtn"
+                                class="btn btn-outline-secondary btn-sm rounded-pill px-4 fw-bold"
+                                {% if cooldown_remaining > 0 %}disabled{% endif %}
+                            >
+                                <i class="bi bi-arrow-clockwise me-1"></i>
+                                {% if cooldown_remaining > 0 %}
+                                    {% if LANGUAGE_CODE == 'en' %}
+                                    Resend available in <span id="resendCountdown">{{ cooldown_remaining }}</span>s
+                                    {% else %}
+                                    إعادة الإرسال متاحة خلال <span id="resendCountdown">{{ cooldown_remaining }}</span> ث
+                                    {% endif %}
+                                {% else %}
+                                    {% if LANGUAGE_CODE == 'en' %}Resend Code &amp; Link{% else %}إعادة إرسال الكود والرابط{% endif %}
+                                {% endif %}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if cooldown_remaining > 0 %}
+<script>
+    (function () {
+        let left = {{ cooldown_remaining }};
+        const btn = document.getElementById('resendVerifyBtn');
+        const counter = document.getElementById('resendCountdown');
+        const timer = setInterval(function () {
+            left -= 1;
+            if (left <= 0) {
+                clearInterval(timer);
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i> {% if LANGUAGE_CODE == "en" %}Resend Code & Link{% else %}إعادة إرسال الكود والرابط{% endif %}';
+                }
+            } else if (counter) {
+                counter.textContent = left;
+            }
+        }, 1000);
+    })();
+</script>
+{% endif %}
+{% endblock %}
+

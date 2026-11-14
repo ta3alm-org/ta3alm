@@ -62,6 +62,10 @@ def custom_login_redirect(request):
     if user.is_superuser or user.role == 'admin':
         return redirect('admin_panel:dashboard')
 
+    if user.requires_email_verification():
+        request.session['pending_verification_user_id'] = user.id
+        return redirect('verify_email_page')
+
     # لو ما عندوش كود → يكمل بياناته
     if not user.custom_id:
         return redirect('complete_profile')
