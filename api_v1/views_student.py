@@ -2,6 +2,8 @@
 api_v1/views_student.py
 جميع نقاط النهاية الخاصة بالطالب (المجموعات، المحاضرات، أكواد الفيديو، الامتحانات، الدرجات، الترتيب، الحزم).
 """
+from datetime import timedelta
+from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404
@@ -10,6 +12,8 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from .models import PlaybackSession
 
 from core.models import Subject
 from core.utils import send_notification
@@ -178,10 +182,18 @@ class StudentGroupContentAPIView(APIView):
 
         student = request.user.student_profile
         lectures = group.lectures.filter(is_active=True).order_by('-created_at')
-        # نتحقق بدقة من عدم انتهاء صلاحية الكود
+        # نتحقق بدقة من عدم انتهاء صلاحية الكود أو وجود نافذة مشاهدة نشطة
         valid_unlocked_ids = set()
+        now = timezone.now()
+        cutoff = now - timedelta(minutes=60)
         for vc in VideoCode.objects.filter(used_by=student, lecture__group=group):
-            if vc.current_views < vc.max_views:
+            in_watch_window = bool(
+                cache.get(f"lecture_watch_window:{request.user.id}:{vc.lecture_id}")
+                or PlaybackSession.objects.filter(
+                    user=request.user, lecture_id=vc.lecture_id, created_at__gte=cutoff
+                ).exists()
+            )
+            if vc.current_views < vc.max_views or (in_watch_window and vc.current_views <= vc.max_views):
                 valid_unlocked_ids.add(vc.lecture_id)
 
         exams = group.exams.filter(is_active=True).order_by('-created_at')
@@ -197,14 +209,30 @@ class StudentGroupContentAPIView(APIView):
                 lectures, many=True, context={'unlocked_ids': valid_unlocked_ids}
             ).data,
             'exams': ExamSerializer(exams, many=True, context={'taken_map': taken_map}).data,
-            'pdfs': PDFFileSerializer(pdfs, many=True).data,
+            'pdfs': PDFFileSerializer(pdfs, many=True, context={'request': request}).data,
         })
+
+
+def _is_in_student_watch_window(user, lecture, window_minutes: int = 60) -> bool:
+    if cache.get(f"lecture_watch_window:{user.id}:{lecture.id}"):
+        return True
+    cutoff = timezone.now() - timedelta(minutes=window_minutes)
+    return PlaybackSession.objects.filter(
+        user=user,
+        lecture=lecture,
+        created_at__gte=cutoff,
+    ).exists()
+
+
+def _mark_student_watch_window(user, lecture) -> None:
+    cache.set(f"lecture_watch_window:{user.id}:{lecture.id}", True, timeout=3600)
 
 
 class StudentWatchGroupLectureAPIView(APIView):
     """مشاهدة محاضرة مجموعة أو تفعيل كود فيديو جديد."""
     permission_classes = [IsAuthenticated, IsStudentRole]
 
+    @transaction.atomic
     def get(self, request, lecture_id):
         lecture = get_object_or_404(Lecture, id=lecture_id, is_active=True)
         if not lecture.group:
@@ -215,9 +243,16 @@ class StudentWatchGroupLectureAPIView(APIView):
             return _access_error_response(access_status, group)
 
         student = request.user.student_profile
-        active_code = VideoCode.objects.filter(lecture=lecture, used_by=student).order_by('-used_at').first()
+        active_code = (
+            VideoCode.objects.select_for_update()
+            .filter(lecture=lecture, used_by=student)
+            .order_by('-used_at')
+            .first()
+        )
+        in_window = _is_in_student_watch_window(request.user, lecture)
 
-        if not active_code or active_code.current_views >= active_code.max_views:
+        can_resume = bool(active_code and in_window and active_code.current_views <= active_code.max_views)
+        if not active_code or (active_code.current_views >= active_code.max_views and not can_resume):
             return Response({
                 'is_unlocked': False,
                 'lecture': {
@@ -228,10 +263,11 @@ class StudentWatchGroupLectureAPIView(APIView):
                 'message': 'يرجى إدخال كود المشاهدة لفتح الفيديو.' if not active_code else 'لقد استهلكت عدد مرات مشاهدة هذا الكود. يرجى إدخال كود جديد.',
             })
 
-        # زيادة عداد المشاهدة عند طلب تشغيل الفيديو
-        if request.query_params.get('record_view', 'true').lower() == 'true':
+        # زيادة عداد المشاهدة مرة واحدة فقط خلال نافذة المشاهدة (60 دقيقة)
+        if request.query_params.get('record_view', 'true').lower() == 'true' and not in_window:
             active_code.current_views += 1
             active_code.save(update_fields=['current_views'])
+            _mark_student_watch_window(request.user, lecture)
 
         return Response({
             'is_unlocked': True,
@@ -505,7 +541,7 @@ class StudentMyPackageContentAPIView(APIView):
             'package': CoursePackageSerializer(package, context={'request': request}).data,
             'lectures': lectures_data,
             'exams': ExamSerializer(exams, many=True, context={'taken_map': taken_map}).data,
-            'pdfs': PDFFileSerializer(pdfs, many=True).data,
+            'pdfs': PDFFileSerializer(pdfs, many=True, context={'request': request}).data,
         })
 
 
@@ -528,21 +564,24 @@ class StudentWatchPackageLectureAPIView(APIView):
         tracker, _ = VideoViewTracking.objects.select_for_update().get_or_create(
             student=student, package=package, lecture=lecture
         )
+        in_window = _is_in_student_watch_window(request.user, lecture)
 
-        if tracker.views_count >= package.view_limit:
+        if tracker.views_count >= package.view_limit and not (in_window and tracker.views_count <= package.view_limit):
             return Response(
                 {'error': 'لقد استهلكت عدد مرات مشاهدة هذا الفيديو في الباقة.'},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
         points_just_awarded = False
-        if not tracker.is_completed:
-            tracker.is_completed = True
-            tracker.points_awarded = 10
-            points_just_awarded = True
+        if not in_window:
+            if not tracker.is_completed:
+                tracker.is_completed = True
+                tracker.points_awarded = 10
+                points_just_awarded = True
 
-        tracker.views_count += 1
-        tracker.save()
+            tracker.views_count += 1
+            tracker.save()
+            _mark_student_watch_window(request.user, lecture)
 
         return Response({
             'message': 'تم احتساب 10 درجات مشاهدة!' if points_just_awarded else 'مشاهدة ممتعة!',

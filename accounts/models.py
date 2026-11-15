@@ -71,14 +71,20 @@ class User(AbstractUser):
 
     def requires_email_verification(self) -> bool:
         """
-        يُعيد True فقط إذا كان للمستخدم سجل تحقق من البريد لم يُفعَّل بعد.
-        (لا يؤثر على المستخدمين القدامى أو الأدمن).
+        يُعيد True لجميع الحسابات غير الإدارية ما لم يتم تأكيد الحساب عبر OTP/البريد الإلكتروني.
+        (جميع الحسابات غير المؤكدة — الجديدة أو القديمة — محجوبة حتى إتمام التأكيد).
         """
         if self.is_superuser or self.role == 'admin':
             return False
-        verification = getattr(self, 'email_verification', None)
-        if verification is None:
+        admin_profile = getattr(self, 'admin_profile', None)
+        if admin_profile and getattr(admin_profile, 'is_active_admin', False):
             return False
+        try:
+            verification = self.email_verification
+        except EmailVerification.DoesNotExist:
+            verification = None
+        if verification is None:
+            return True
         return not verification.is_verified
 
 
@@ -171,6 +177,20 @@ class EmailVerification(models.Model):
 
     def is_expired(self) -> bool:
         return timezone.now() > self.expires_at
+
+    def remaining_resend_seconds(self, cooldown_seconds: int = 60) -> int:
+        if not self.last_sent_at:
+            return 0
+        elapsed = (timezone.now() - self.last_sent_at).total_seconds()
+        return max(0, int(cooldown_seconds - elapsed))
+
+    def can_resend(self, cooldown_seconds: int = 60) -> bool:
+        return self.remaining_resend_seconds(cooldown_seconds=cooldown_seconds) == 0
+
+    def mark_verified(self):
+        if not self.is_verified:
+            self.is_verified = True
+            self.save(update_fields=['is_verified'])
 
     def __str__(self):
         state = 'مفعل' if self.is_verified else 'بانتظار التفعيل'

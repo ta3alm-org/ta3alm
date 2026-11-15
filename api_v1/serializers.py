@@ -75,6 +75,8 @@ class UserDetailSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
     role_display = serializers.CharField(source='get_role_display', read_only=True)
     is_profile_complete = serializers.SerializerMethodField()
+    is_email_verified = serializers.SerializerMethodField()
+    requires_verification = serializers.SerializerMethodField()
     profile_data = serializers.SerializerMethodField()
 
     class Meta:
@@ -83,12 +85,23 @@ class UserDetailSerializer(serializers.ModelSerializer):
             'id', 'username', 'first_name', 'last_name', 'full_name',
             'email', 'phone', 'national_id', 'custom_id',
             'role', 'role_display', 'is_banned', 'is_superuser',
+            'is_email_verified', 'requires_verification',
             'is_profile_complete', 'profile_data', 'date_joined',
         ]
         read_only_fields = ['id', 'username', 'custom_id', 'role', 'is_banned', 'is_superuser', 'date_joined']
 
     def get_full_name(self, obj):
         return f"{obj.first_name} {obj.last_name}".strip() or obj.username
+
+    def get_is_email_verified(self, obj):
+        if hasattr(obj, 'requires_email_verification'):
+            return not obj.requires_email_verification()
+        return True
+
+    def get_requires_verification(self, obj):
+        if hasattr(obj, 'requires_email_verification'):
+            return obj.requires_email_verification()
+        return False
 
     def get_is_profile_complete(self, obj):
         if obj.is_superuser or obj.role == 'admin':
@@ -298,10 +311,23 @@ class VideoCodeSerializer(serializers.ModelSerializer):
 
 
 class PDFFileSerializer(serializers.ModelSerializer):
+    file_url = serializers.SerializerMethodField()
+
     class Meta:
         model = PDFFile
-        fields = ['id', 'group', 'title', 'link', 'created_at']
-        read_only_fields = ['id', 'group', 'created_at']
+        fields = ['id', 'group', 'title', 'link', 'file_url', 'created_at']
+        read_only_fields = ['id', 'group', 'file_url', 'created_at']
+
+    def get_file_url(self, obj):
+        raw_link = (getattr(obj, 'link', '') or '').strip()
+        if not raw_link:
+            return ''
+        if raw_link.startswith(('http://', 'https://')):
+            return raw_link
+        request = self.context.get('request') if self.context else None
+        if request is not None:
+            return request.build_absolute_uri(raw_link)
+        return raw_link
 
 
 class QuestionTeacherSerializer(serializers.ModelSerializer):

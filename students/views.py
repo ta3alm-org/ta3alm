@@ -9,6 +9,7 @@ from django.utils import timezone
 from teachers.models import Group, Lecture, VideoCode
 from exams.models import Exam, Question, ExamResult
 from .models import Enrollment, PerformanceLog
+import time
 import requests
 import random
 import string
@@ -247,19 +248,25 @@ def student_watch_lecture(request, lecture_id):
     is_unlocked = False
     if active_code:
         session_key = f"viewed_lec_{lecture.id}_{active_code.id}"
-        is_currently_viewing = request.session.get(session_key, False)
+        now_ts = time.time()
+        last_view_ts = request.session.get(session_key)
+        is_currently_viewing = (
+            isinstance(last_view_ts, (int, float)) and (now_ts - float(last_view_ts) < 3600)
+        )
 
         # إذا لم يكن في جلسة المشاهدة الحالية، وتجاوز الحد المسموح
-        if not is_currently_viewing and active_code.current_views >= active_code.max_views:
+        if active_code.current_views >= active_code.max_views and not (
+            is_currently_viewing and active_code.current_views <= active_code.max_views
+        ):
             messages.error(request, "لقد استهلكت عدد مرات مشاهدة هذا الفيديو. يرجى شراء كود جديد.")
             is_unlocked = False
         else:
             is_unlocked = True
-            # إذا كانت أول مرة يفتح فيها الفيديو في هذه الجلسة
+            # إذا كانت أول مرة يفتح فيها الفيديو خلال نافذة الساعة الحالية
             if request.method == 'GET' and not is_currently_viewing:
                 active_code.current_views += 1
                 active_code.save()
-                request.session[session_key] = True
+                request.session[session_key] = now_ts
 
     # 2. معالجة إدخال كود جديد (POST)
     if request.method == 'POST':
@@ -613,8 +620,17 @@ def watch_package_lecture(request, package_id, lecture_id):
         student=student, package=package, lecture=lecture
     )
 
+    session_key = f"viewed_pkg_lec_{package.id}_{lecture.id}"
+    now_ts = time.time()
+    last_view_ts = request.session.get(session_key)
+    is_currently_viewing = (
+        isinstance(last_view_ts, (int, float)) and (now_ts - float(last_view_ts) < 3600)
+    )
+
     # التحقق من حد المشاهدات
-    if tracker.views_count >= package.view_limit:
+    if tracker.views_count >= package.view_limit and not (
+        is_currently_viewing and tracker.views_count <= package.view_limit
+    ):
         messages.error(request, "لقد استهلكت عدد مرات مشاهدة هذا الفيديو في الباقة.")
         return redirect('my_package_content', package_id=package.id)
 
@@ -624,14 +640,12 @@ def watch_package_lecture(request, package_id, lecture_id):
         tracker.points_awarded = 10
         tracker.save() # حفظ النقاط
         messages.success(request, "تم احتساب 10 درجات مشاهدة!")
-    
-    # زيادة العداد عند المشاهدة
-    # استخدام الجلسة لمنع زيادة العداد عند الـ Refresh
-    session_key = f"viewed_pkg_lec_{package.id}_{lecture.id}"
-    if not request.session.get(session_key):
+
+    # زيادة العداد مرة واحدة فقط خلال نافذة الساعة الحالية
+    if not is_currently_viewing:
         tracker.views_count += 1
         tracker.save()
-        request.session[session_key] = True
+        request.session[session_key] = now_ts
 
     return render(request, 'students/watch_package_lecture.html', {
         'lecture': lecture,

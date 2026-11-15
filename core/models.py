@@ -1,17 +1,177 @@
-from django.db import models
+from decimal import Decimal, ROUND_HALF_UP
+from django.core.validators import MinValueValidator, MaxValueValidator
+from django.db import models, transaction
 from django.utils.translation import gettext_lazy as _
+
 
 class SiteSetting(models.Model):
     is_maintenance_mode = models.BooleanField(default=False, verbose_name=_("وضع الصيانة"))
-    
+    platform_commission_percentage = models.PositiveIntegerField(
+        default=20,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        verbose_name=_("نسبة عمولة المنصة (%)"),
+    )
+    android_latest_version_code = models.PositiveIntegerField(
+        default=1,
+        verbose_name=_("رقم البناء الأحدث لتطبيق أندرويد (Version Code)"),
+    )
+    android_min_required_version_code = models.PositiveIntegerField(
+        default=1,
+        verbose_name=_("أقل رقم بناء مسموح بفتحه (Min Required Build)"),
+    )
+    android_latest_version_name = models.CharField(
+        max_length=32,
+        default='1.0.0',
+        verbose_name=_("رقم الإصدار الظاهر (Version Name)"),
+    )
+    android_apk_url = models.URLField(
+        max_length=500,
+        blank=True,
+        default='',
+        verbose_name=_("رابط تحميل ملف التحديث المباشر (APK URL)"),
+    )
+    android_apk_file = models.FileField(
+        upload_to='app_releases/',
+        blank=True,
+        null=True,
+        verbose_name=_("ملف تحديث التطبيق (APK)"),
+    )
+    android_update_release_notes = models.TextField(
+        blank=True,
+        default='',
+        verbose_name=_("ملاحظات التحديث الجديد"),
+    )
+    android_force_update = models.BooleanField(
+        default=True,
+        verbose_name=_("إجبار التحديث لأعلى إصدار"),
+    )
+    android_apk_sha256 = models.CharField(
+        max_length=64,
+        blank=True,
+        default='',
+        verbose_name=_("بصمة SHA-256 لملف التحديث"),
+    )
+
+    @property
+    def teacher_share_ratio(self):
+        commission = max(0, min(100, int(self.platform_commission_percentage or 0)))
+        return Decimal(100 - commission) / Decimal('100')
+
+    def get_effective_min_version_code(self) -> int:
+        latest = max(1, int(self.android_latest_version_code or 1))
+        min_req = max(1, int(self.android_min_required_version_code or 1))
+        if self.android_force_update:
+            return max(min_req, latest)
+        return min_req
+
+    def get_effective_apk_url(self, request=None) -> str:
+        external_url = (self.android_apk_url or '').strip()
+        if external_url:
+            return external_url
+        if self.android_apk_file:
+            path = '/api/v1/public/app-update/download/'
+            return request.build_absolute_uri(path) if request is not None else path
+        return ''
+
+    def build_app_update_payload(self, request=None, client_version_code=None) -> dict:
+        latest_code = max(1, int(self.android_latest_version_code or 1))
+        min_code = self.get_effective_min_version_code()
+        update_required = False
+        update_available = False
+        if client_version_code is not None:
+            try:
+                build_num = int(client_version_code)
+                update_required = build_num < min_code
+                update_available = build_num < latest_code
+            except (TypeError, ValueError):
+                pass
+        return {
+            'latest_version_code': latest_code,
+            'min_required_version_code': min_code,
+            'latest_version_name': (self.android_latest_version_name or '1.0.0').strip(),
+            'force_update': bool(self.android_force_update),
+            'update_required': update_required,
+            'update_available': update_available,
+            'apk_download_url': self.get_effective_apk_url(request=request),
+            'apk_sha256': (self.android_apk_sha256 or '').strip().lower(),
+            'release_notes': (self.android_update_release_notes or '').strip(),
+        }
+
     def save(self, *args, **kwargs):
         self.pk = 1
+        self.platform_commission_percentage = max(
+            0, min(100, int(self.platform_commission_percentage or 0))
+        )
+        self.android_latest_version_code = max(1, int(self.android_latest_version_code or 1))
+        self.android_min_required_version_code = max(
+            1, int(self.android_min_required_version_code or 1)
+        )
         super().save(*args, **kwargs)
 
     @classmethod
     def load(cls):
         obj, created = cls.objects.get_or_create(pk=1)
         return obj
+
+
+def credit_teacher_wallet_for_sale(teacher, gross_amount):
+    """إضافة صافي ربح المدرس لمحفظته بعد خصم نسبة عمولة المنصة."""
+    from teachers.models import Wallet
+
+    if teacher is None:
+        return Decimal('0.00')
+
+    gross = Decimal(str(gross_amount or 0))
+    if gross <= Decimal('0.00'):
+        return Decimal('0.00')
+
+    site_setting = SiteSetting.load()
+    net_share = (gross * site_setting.teacher_share_ratio).quantize(
+        Decimal('0.01'), rounding=ROUND_HALF_UP
+    )
+
+    with transaction.atomic():
+        wallet, _ = Wallet.objects.select_for_update().get_or_create(teacher=teacher)
+        current_balance = Decimal(str(wallet.balance or 0))
+        current_total = Decimal(str(wallet.total_earnings or 0))
+        wallet.balance = (current_balance + net_share).quantize(Decimal('0.01'))
+        wallet.total_earnings = (current_total + net_share).quantize(Decimal('0.01'))
+        wallet.save(update_fields=['balance', 'total_earnings'])
+
+    return net_share
+
+
+def reconcile_teacher_wallet(teacher):
+    """مزامنة محفظة المدرس للاشتراكات المدفوعة غير المحتسبة سابقاً."""
+    from django.db.models import Sum
+    from students.models import PackageEnrollment
+    from teachers.models import Wallet
+
+    if teacher is None:
+        return None
+
+    with transaction.atomic():
+        wallet, _ = Wallet.objects.select_for_update().get_or_create(teacher=teacher)
+        gross_total = Decimal(
+            str(
+                PackageEnrollment.objects.filter(
+                    package__teacher=teacher, is_paid=True
+                ).aggregate(total=Sum('package__price'))['total']
+                or 0
+            )
+        )
+        if gross_total > Decimal('0.00') and Decimal(str(wallet.total_earnings or 0)) == Decimal('0.00'):
+            site_setting = SiteSetting.load()
+            expected_net = (gross_total * site_setting.teacher_share_ratio).quantize(
+                Decimal('0.01'), rounding=ROUND_HALF_UP
+            )
+            withdrawn = Decimal(
+                str(wallet.withdrawals.aggregate(total=Sum('amount'))['total'] or 0)
+            ).quantize(Decimal('0.01'))
+            wallet.total_earnings = expected_net
+            wallet.balance = max(Decimal('0.00'), expected_net - withdrawn)
+            wallet.save(update_fields=['balance', 'total_earnings'])
+        return wallet
     
 
 # core/models.py
@@ -81,15 +241,20 @@ class ManualPayment(models.Model):
 
     def save(self, *args, **kwargs):
         # تنفيذ عند القبول فقط (التحويل من حالة غير مقبول إلى مقبول)
+        should_activate = False
         if self.pk:
             old_payment = ManualPayment.objects.get(pk=self.pk)
-            if old_payment.status != 'approved' and self.status == 'approved':
-                # منطق التفعيل
+            should_activate = old_payment.status != 'approved' and self.status == 'approved'
+        elif self.status == 'approved':
+            should_activate = True
+
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+            if should_activate:
                 if self.payment_type == 'teacher_subscription':
                     self.activate_teacher_subscription()
                 elif self.payment_type == 'student_package':
                     self.activate_student_package()
-        super().save(*args, **kwargs)
 
     def activate_teacher_subscription(self):
         from teachers.models import SubscriptionPlan, TeacherProfile
@@ -114,9 +279,16 @@ class ManualPayment(models.Model):
         try:
             student = self.user.student_profile
             package = CoursePackage.objects.get(id=self.target_id)
-            enrollment, created = PackageEnrollment.objects.get_or_create(student=student, package=package)
-            enrollment.is_paid = True
-            enrollment.save()
+            enrollment, _ = PackageEnrollment.objects.get_or_create(
+                student=student,
+                package=package,
+                defaults={'is_paid': False},
+            )
+            if not enrollment.is_paid:
+                enrollment.is_paid = True
+                enrollment.save(update_fields=['is_paid'])
+                gross_amount = self.amount if self.amount else package.price
+                credit_teacher_wallet_for_sale(package.teacher, gross_amount)
         except Exception as e:
             print(f"Error activating student package: {e}")
 
@@ -152,4 +324,4 @@ class CurriculumLesson(models.Model):
         verbose_name_plural = "الدروس"
 
     def __str__(self):
-        return f"{self.unit.title} - {self.title}"
+        return f"{self.unit.title} - {self.title}"

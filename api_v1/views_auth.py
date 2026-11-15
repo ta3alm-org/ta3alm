@@ -6,6 +6,7 @@ from datetime import timedelta
 import json
 import random
 import re
+import secrets
 import string
 import urllib.parse
 import urllib.request
@@ -22,16 +23,112 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounts.models import StudentProfile, OneTimeLoginLink
+from accounts.email_verification import issue_email_verification, send_verification_email
+from accounts.models import EmailVerification, StudentProfile, OneTimeLoginLink
 from assistants.models import AssistantProfile
-from core.models import Subject
+from core.models import SiteSetting, Subject
 from teachers.models import TeacherProfile, SubscriptionPlan
 
 from .authentication import generate_jwt_pair, decode_jwt_token
+from .device_security_service import (
+    extract_network_context,
+    get_active_device_block,
+    get_server_observed_ip,
+    record_device_activity,
+    record_security_event,
+    register_or_update_device,
+)
+from .models import (
+    DeviceActivity,
+    DeviceSession,
+    DeviceTrustStatus,
+    PlaybackSession,
+    RegisteredDevice,
+)
 from .permissions import IsNotBanned
 from .serializers import UserDetailSerializer
 
 User = get_user_model()
+
+
+def _extract_installation_id(request) -> str:
+    return str(
+        request.data.get('installation_id')
+        or request.data.get('device_id')
+        or request.META.get('HTTP_X_DEVICE_ID')
+        or request.META.get('HTTP_X_INSTALLATION_ID')
+        or ''
+    ).strip()
+
+
+def _ensure_verification_otp_sent(request, user, force_new: bool = False) -> tuple[bool, bool, str]:
+    """
+    يتحقق مما إذا كان المستخدم غير مؤكد، ويُصدر/يُرسل كود OTP من 6 أرقام تلقائياً إذا لزم الأمر.
+    يعيد: (requires_verification, otp_sent_now, message_or_error)
+    """
+    if not hasattr(user, 'requires_email_verification') or not user.requires_email_verification():
+        return False, False, ''
+
+    try:
+        verification = user.email_verification
+    except EmailVerification.DoesNotExist:
+        verification = None
+
+    should_issue = (
+        force_new
+        or verification is None
+        or not verification.code
+        or verification.is_expired()
+    )
+    if should_issue:
+        if verification is None or force_new or verification.can_resend(cooldown_seconds=60):
+            verification = issue_email_verification(user, update_sent_time=True)
+            if user.email:
+                sent, err = send_verification_email(request, user, verification)
+                return True, sent, err
+            return True, False, 'يرجى إضافة بريد إلكتروني صحيح لتأكيد الحساب.'
+    return True, False, ''
+
+
+def _handle_auth_device_registration(request, user, tokens: dict) -> tuple[bool, dict | None]:
+    """يسجّل/يحدّث الجهاز بعد نجاح المصادقة عند توفر installation_id دون كسر العملاء القدامى."""
+    installation_id = _extract_installation_id(request)
+    raw_info = request.data.get('device_info')
+    device_info = raw_info if isinstance(raw_info, dict) else {}
+    if not installation_id and not device_info:
+        return True, None
+
+    raw_build = str(
+        device_info.get('app_build_number')
+        or request.META.get('HTTP_X_APP_BUILD')
+        or ''
+    ).strip()
+    if raw_build.isdigit():
+        try:
+            site_settings = SiteSetting.load()
+            client_build = int(raw_build)
+            if client_build < site_settings.get_effective_min_version_code():
+                return False, {
+                    'error': 'يتوفر تحديث إجباري جديد للتطبيق. يرجى تحديث التطبيق لأحدث إصدار للمتابعة.',
+                    'code': 'APP_UPDATE_REQUIRED',
+                    'app_update': site_settings.build_app_update_payload(
+                        request=request,
+                        client_version_code=client_build,
+                    ),
+                }
+        except Exception:
+            pass
+
+    outcome = register_or_update_device(
+        request=request,
+        user=user,
+        installation_id=installation_id,
+        device_info=device_info,
+        token_jti=tokens.get('access_jti', ''),
+        refresh_jti=tokens.get('refresh_jti', ''),
+    )
+    clean_outcome = {k: v for k, v in outcome.items() if k not in ('device_obj', 'session_obj')}
+    return bool(clean_outcome.get('allowed')), clean_outcome
 
 
 class LoginAPIView(APIView):
@@ -57,6 +154,7 @@ class LoginAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        candidate = None
         user = authenticate(request, username=identifier, password=password)
         if not user:
             candidate = User.objects.filter(
@@ -69,6 +167,42 @@ class LoginAPIView(APIView):
                 user = candidate
 
         if not user:
+            inst_id = _extract_installation_id(request)
+            ip = get_server_observed_ip(request)
+            record_device_activity(
+                request=request,
+                user=candidate,
+                activity_type='login_failed',
+                metadata={'identifier': identifier, 'installation_id': inst_id},
+            )
+            recent_window = timezone.now() - timedelta(minutes=10)
+            fail_q = Q(user=candidate) if candidate else Q()
+            if ip:
+                fail_q = (fail_q | Q(ip_address=ip)) if candidate else Q(ip_address=ip)
+            fail_count = (
+                DeviceActivity.objects.filter(
+                    fail_q,
+                    activity_type='login_failed',
+                    created_at__gte=recent_window,
+                ).count()
+                if (candidate or ip)
+                else 0
+            )
+            if fail_count >= 5:
+                record_security_event(
+                    event_type='excessive_login_attempts',
+                    severity='medium',
+                    risk_score=35,
+                    user=candidate,
+                    installation_id=inst_id,
+                    request=request,
+                    action_taken='monitored',
+                    details={
+                        'identifier': identifier,
+                        'recent_failures_10m': fail_count,
+                        'title': 'محاولات تسجيل دخول فاشلة متكررة',
+                    },
+                )
             return Response(
                 {'error': 'بيانات الدخول غير صحيحة. تأكد من البريد/الهاتف وكلمة المرور.'},
                 status=status.HTTP_401_UNAUTHORIZED,
@@ -84,11 +218,24 @@ class LoginAPIView(APIView):
             )
 
         tokens = generate_jwt_pair(user)
+        dev_allowed, dev_outcome = _handle_auth_device_registration(request, user, tokens)
+        if not dev_allowed:
+            err_status = 426 if (dev_outcome or {}).get('code') == 'APP_UPDATE_REQUIRED' else status.HTTP_403_FORBIDDEN
+            return Response(dev_outcome, status=err_status)
+
+        requires_verification, otp_sent, otp_err = _ensure_verification_otp_sent(request, user)
         user_data = UserDetailSerializer(user, context={'request': request}).data
-        return Response({
+        payload = {
             **tokens,
+            'requires_verification': requires_verification,
+            'otp_sent': otp_sent,
             'user': user_data,
-        }, status=status.HTTP_200_OK)
+        }
+        if otp_err:
+            payload['otp_warning'] = otp_err
+        if dev_outcome is not None:
+            payload['device_security'] = dev_outcome
+        return Response(payload, status=status.HTTP_200_OK)
 
 
 class RegisterAPIView(APIView):
@@ -142,12 +289,29 @@ class RegisterAPIView(APIView):
         )
 
         tokens = generate_jwt_pair(user)
+        dev_allowed, dev_outcome = _handle_auth_device_registration(request, user, tokens)
+        if not dev_allowed:
+            err_status = 426 if (dev_outcome or {}).get('code') == 'APP_UPDATE_REQUIRED' else status.HTTP_403_FORBIDDEN
+            return Response(dev_outcome, status=err_status)
+
+        requires_verification, otp_sent, otp_err = _ensure_verification_otp_sent(
+            request,
+            user,
+            force_new=True,
+        )
         user_data = UserDetailSerializer(user, context={'request': request}).data
-        return Response({
-            'message': 'تم إنشاء الحساب بنجاح! يرجى استكمال بيانات الملف الشخصي.',
+        payload = {
+            'message': 'تم إنشاء الحساب بنجاح! يرجى إدخال كود التحقق (OTP) المرسل إلى بريدك الإلكتروني لتفعيل الحساب.',
             **tokens,
+            'requires_verification': requires_verification,
+            'otp_sent': otp_sent,
             'user': user_data,
-        }, status=status.HTTP_201_CREATED)
+        }
+        if otp_err:
+            payload['otp_warning'] = otp_err
+        if dev_outcome is not None:
+            payload['device_security'] = dev_outcome
+        return Response(payload, status=status.HTTP_201_CREATED)
 
 
 class CompleteProfileAPIView(APIView):
@@ -159,6 +323,15 @@ class CompleteProfileAPIView(APIView):
     @transaction.atomic
     def post(self, request):
         user = request.user
+        if hasattr(user, 'requires_email_verification') and user.requires_email_verification():
+            return Response(
+                {
+                    'error': 'يرجى تأكيد حسابك برمز التحقق (OTP) أولاً.',
+                    'code': 'EMAIL_VERIFICATION_REQUIRED',
+                    'requires_verification': True,
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
         full_name = str(request.data.get('full_name', '')).strip()
         national_id = str(request.data.get('national_id', user.national_id or '')).strip()
         phone = str(request.data.get('phone', user.phone or '')).strip()
@@ -243,7 +416,7 @@ class CompleteProfileAPIView(APIView):
 
 
 class TokenRefreshAPIView(APIView):
-    """تحديث Access Token باستخدام Refresh Token."""
+    """تحديث Access Token باستخدام Refresh Token مع التحقق من حالة الجلسة والجهاز."""
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -260,15 +433,142 @@ class TokenRefreshAPIView(APIView):
         if user.is_banned:
             return Response({'error': 'الحساب محظور.'}, status=status.HTTP_403_FORBIDDEN)
 
+        inst_id = _extract_installation_id(request)
+        refresh_jti = str(payload.get('jti') or '')
+
+        if inst_id:
+            active_block = get_active_device_block(inst_id)
+            if active_block:
+                return Response(
+                    {'error': f'تم حظر هذا الجهاز: {active_block.reason}', 'code': 'DEVICE_BLOCKED'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+        if refresh_jti and DeviceSession.objects.filter(
+            user=user,
+            refresh_jti=refresh_jti,
+            status__in=('revoked', 'logged_out'),
+        ).exists():
+            return Response(
+                {'error': 'تم إنهاء جلسة هذا الجهاز. يرجى إعادة تسجيل الدخول.', 'code': 'SESSION_REVOKED'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        reg_dev = (
+            RegisteredDevice.objects.filter(user=user, installation_id=inst_id).first()
+            if inst_id
+            else None
+        )
+        if reg_dev:
+            if reg_dev.trust_status == DeviceTrustStatus.BLOCKED:
+                return Response(
+                    {'error': 'تم حظر هذا الجهاز من قِبل إدارة المنصة.', 'code': 'DEVICE_BLOCKED'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            if not reg_dev.is_active or reg_dev.trust_status == DeviceTrustStatus.REVOKED:
+                return Response(
+                    {'error': 'تم إلغاء تفعيل هذا الجهاز. يرجى إعادة تسجيل الدخول.', 'code': 'DEVICE_REVOKED'},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+
         tokens = generate_jwt_pair(user)
+        now = timezone.now()
+        net_ctx = extract_network_context(request)
+
+        sess_q = DeviceSession.objects.filter(user=user, status='active')
+        if refresh_jti and sess_q.filter(refresh_jti=refresh_jti).exists():
+            active_sess = sess_q.filter(refresh_jti=refresh_jti).order_by('-last_seen_at').first()
+        elif inst_id:
+            active_sess = sess_q.filter(installation_id=inst_id).order_by('-last_seen_at').first()
+        else:
+            active_sess = None
+
+        if active_sess:
+            active_sess.token_jti = tokens['access_jti']
+            active_sess.refresh_jti = tokens['refresh_jti']
+            active_sess.last_seen_at = now
+            if net_ctx.get('ip_address'):
+                active_sess.ip_address = net_ctx['ip_address']
+            if net_ctx.get('country_code'):
+                active_sess.country_code = net_ctx['country_code']
+            active_sess.save(
+                update_fields=['token_jti', 'refresh_jti', 'last_seen_at', 'ip_address', 'country_code']
+            )
+            if not reg_dev:
+                reg_dev = active_sess.device
+
+        record_device_activity(
+            request=request,
+            user=user,
+            device=reg_dev,
+            session=active_sess,
+            activity_type='token_refresh',
+            net_ctx=net_ctx,
+            metadata={'installation_id': inst_id},
+        )
+        recent_refreshes = DeviceActivity.objects.filter(
+            user=user,
+            activity_type='token_refresh',
+            created_at__gte=now - timedelta(minutes=5),
+        ).count()
+        if recent_refreshes > 10:
+            record_security_event(
+                event_type='unusual_token_refresh',
+                severity='medium',
+                risk_score=35,
+                user=user,
+                device=reg_dev,
+                installation_id=inst_id,
+                request=request,
+                net_ctx=net_ctx,
+                action_taken='monitored',
+                details={'refreshes_in_5m': recent_refreshes},
+            )
+
         return Response(tokens, status=status.HTTP_200_OK)
 
 
 class LogoutAPIView(APIView):
-    """تسجيل الخروج وإلغاء DRF Token."""
+    """تسجيل الخروج وإنهاء جلسة الجهاز الحالية وإلغاء DRF Token."""
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        now = timezone.now()
+        inst_id = _extract_installation_id(request)
+        access_jti = request.auth.get('jti', '') if isinstance(request.auth, dict) else ''
+
+        sess_qs = DeviceSession.objects.filter(user=request.user, status='active')
+        matched_q = Q()
+        if access_jti:
+            matched_q |= Q(token_jti=access_jti)
+        if inst_id:
+            matched_q |= Q(installation_id=inst_id)
+        if access_jti or inst_id:
+            sess_qs.filter(matched_q).update(
+                status='logged_out',
+                ended_at=now,
+                revoked_reason='user_logout',
+            )
+
+        if inst_id:
+            PlaybackSession.objects.filter(
+                user=request.user,
+                device_id=inst_id,
+                status='active',
+            ).update(status='ended', revoked_reason='user_logout')
+
+        reg_dev = (
+            RegisteredDevice.objects.filter(user=request.user, installation_id=inst_id).first()
+            if inst_id
+            else None
+        )
+        record_device_activity(
+            request=request,
+            user=request.user,
+            device=reg_dev,
+            activity_type='logout',
+            metadata={'installation_id': inst_id},
+        )
         Token.objects.filter(user=request.user).delete()
         return Response({'message': 'تم تسجيل الخروج بنجاح.'}, status=status.HTTP_200_OK)
 
@@ -494,13 +794,26 @@ class GoogleLoginAPIView(APIView):
             )
 
         tokens = generate_jwt_pair(user)
+        dev_allowed, dev_outcome = _handle_auth_device_registration(request, user, tokens)
+        if not dev_allowed:
+            err_status = 426 if (dev_outcome or {}).get('code') == 'APP_UPDATE_REQUIRED' else status.HTTP_403_FORBIDDEN
+            return Response(dev_outcome, status=err_status)
+
+        requires_verification, otp_sent, otp_err = _ensure_verification_otp_sent(request, user)
         user_data = UserDetailSerializer(user, context={'request': request}).data
-        return Response({
+        payload = {
             'message': 'تم تسجيل الدخول عبر جوجل بنجاح!',
             'is_new_user': is_new_user,
+            'requires_verification': requires_verification,
+            'otp_sent': otp_sent,
             **tokens,
             'user': user_data,
-        }, status=status.HTTP_200_OK)
+        }
+        if otp_err:
+            payload['otp_warning'] = otp_err
+        if dev_outcome is not None:
+            payload['device_security'] = dev_outcome
+        return Response(payload, status=status.HTTP_200_OK)
 
 
 class OneTimeLoginAPIView(APIView):
@@ -552,12 +865,27 @@ class OneTimeLoginAPIView(APIView):
         link.save(update_fields=['is_used'])
 
         tokens = generate_jwt_pair(user)
+        dev_allowed, dev_outcome = _handle_auth_device_registration(request, user, tokens)
+        if not dev_allowed:
+            link.is_used = False
+            link.save(update_fields=['is_used'])
+            err_status = 426 if (dev_outcome or {}).get('code') == 'APP_UPDATE_REQUIRED' else status.HTTP_403_FORBIDDEN
+            return Response(dev_outcome, status=err_status)
+
+        requires_verification, otp_sent, otp_err = _ensure_verification_otp_sent(request, user)
         user_data = UserDetailSerializer(user, context={'request': request}).data
-        return Response({
+        payload = {
             'message': f'تم تسجيل الدخول بنجاح! مرحباً {user.first_name or user.username}',
+            'requires_verification': requires_verification,
+            'otp_sent': otp_sent,
             **tokens,
             'user': user_data,
-        }, status=status.HTTP_200_OK)
+        }
+        if otp_err:
+            payload['otp_warning'] = otp_err
+        if dev_outcome is not None:
+            payload['device_security'] = dev_outcome
+        return Response(payload, status=status.HTTP_200_OK)
 
 
 class GoogleMobileCallbackView(APIView):
@@ -610,5 +938,210 @@ class GoogleMobileCallbackView(APIView):
 </body>
 </html>"""
         return HttpResponse(html)
+
+
+class VerifyEmailOTPAPIView(APIView):
+    """
+    التحقق من حساب المستخدم عبر كود OTP المكون من 6 أرقام (يتطلب توكن الجلسة)
+    أو عبر رابط/توكن التفعيل المباشر (UUID من البريد الإلكتروني).
+    """
+    permission_classes = [AllowAny]
+
+    @transaction.atomic
+    def post(self, request):
+        raw_code = re.sub(r'\D', '', str(request.data.get('code', '') or ''))
+        raw_token = str(request.data.get('token', '') or '').strip()
+
+        if raw_token:
+            uuid_match = re.search(
+                r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}',
+                raw_token,
+            )
+            token_str = uuid_match.group(0) if uuid_match else raw_token
+            try:
+                token_uuid = uuid.UUID(token_str)
+            except ValueError:
+                return Response(
+                    {'error': 'صيغة رمز التفعيل غير صحيحة.', 'code': 'INVALID_TOKEN'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            verification = (
+                EmailVerification.objects.select_for_update()
+                .select_related('user')
+                .filter(token=token_uuid)
+                .first()
+            )
+            if not verification:
+                return Response(
+                    {'error': 'رابط التفعيل غير مطابق لهذا الحساب أو تم استبداله.', 'code': 'INVALID_TOKEN'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if request.user.is_authenticated and verification.user_id != request.user.id:
+                return Response(
+                    {'error': 'رابط التفعيل لا يخص الحساب المسجل حالياً.', 'code': 'INVALID_TOKEN'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            if not verification.is_verified and verification.is_expired():
+                return Response(
+                    {'error': 'انتهت صلاحية رابط التفعيل. يرجى طلب كود جديد.', 'code': 'OTP_EXPIRED'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            verification.mark_verified()
+            target_user = verification.user
+            target_user.refresh_from_db()
+            resp = {
+                'message': 'تم تأكيد وتفعيل حسابك بنجاح!',
+                'is_email_verified': True,
+                'requires_verification': False,
+                'email': target_user.email,
+            }
+            if request.user.is_authenticated:
+                resp['user'] = UserDetailSerializer(target_user, context={'request': request}).data
+            return Response(resp, status=status.HTTP_200_OK)
+
+        if not request.user or not request.user.is_authenticated:
+            return Response(
+                {'error': 'يرجى تسجيل الدخول أولاً قبل إدخال كود التحقق.', 'code': 'AUTH_REQUIRED'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        user = request.user
+        if not user.requires_email_verification():
+            return Response(
+                {
+                    'message': 'الحساب مفعّل بالفعل.',
+                    'is_email_verified': True,
+                    'requires_verification': False,
+                    'user': UserDetailSerializer(user, context={'request': request}).data,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        if len(raw_code) != 6:
+            return Response(
+                {'error': 'يرجى إدخال كود التحقق المكون من 6 أرقام.', 'code': 'INVALID_OTP'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        verification = (
+            EmailVerification.objects.select_for_update()
+            .filter(user=user)
+            .first()
+        )
+        if not verification or not verification.code:
+            return Response(
+                {'error': 'لم يتم إصدار كود تحقق بعد. اضغط على إعادة إرسال الكود.', 'code': 'OTP_NOT_ISSUED'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if verification.is_expired():
+            return Response(
+                {'error': 'انتهت صلاحية كود التحقق. اضغط على إعادة إرسال الكود.', 'code': 'OTP_EXPIRED'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not secrets.compare_digest(raw_code, verification.code):
+            return Response(
+                {'error': 'كود التحقق غير صحيح. يرجى التأكد من الأرقام الستة.', 'code': 'INVALID_OTP'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        verification.mark_verified()
+
+        user.refresh_from_db()
+        return Response(
+            {
+                'message': 'تم تأكيد وتفعيل حسابك بنجاح!',
+                'is_email_verified': True,
+                'requires_verification': False,
+                'user': UserDetailSerializer(user, context={'request': request}).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class ResendEmailOTPAPIView(APIView):
+    """
+    إعادة إرسال كود التحقق OTP (6 أرقام) + رابط التفعيل المباشر مع دعم تحديث البريد للحسابات غير المفعلة.
+    """
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request):
+        user = request.user
+        if not user.requires_email_verification():
+            return Response(
+                {
+                    'message': 'الحساب مفعّل بالفعل.',
+                    'is_email_verified': True,
+                    'requires_verification': False,
+                    'user': UserDetailSerializer(user, context={'request': request}).data,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        new_email = str(request.data.get('email', '') or '').strip().lower()
+        email_changed = False
+        if new_email and new_email != (user.email or '').strip().lower():
+            if '@' not in new_email or '.' not in new_email.split('@')[-1]:
+                return Response(
+                    {'error': 'يرجى إدخال بريد إلكتروني صحيح.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if User.objects.filter(email__iexact=new_email).exclude(pk=user.pk).exists():
+                return Response(
+                    {'error': 'هذا البريد الإلكتروني مستخدم بالفعل في حساب آخر.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            old_email = (user.email or '').strip().lower()
+            user.email = new_email
+            update_fields = ['email']
+            if (user.username or '').strip().lower() == old_email and not User.objects.filter(username__iexact=new_email).exclude(pk=user.pk).exists():
+                user.username = new_email
+                update_fields.append('username')
+            user.save(update_fields=update_fields)
+            email_changed = True
+
+        if not user.email:
+            return Response(
+                {'error': 'يرجى إدخال بريد إلكتروني صحيح لتتمكن من استلام كود التفعيل.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            verification = user.email_verification
+        except EmailVerification.DoesNotExist:
+            verification = None
+
+        if verification is not None and not email_changed:
+            retry_after = verification.remaining_resend_seconds(cooldown_seconds=60)
+            if retry_after > 0:
+                return Response(
+                    {
+                        'error': f'يرجى الانتظار {retry_after} ثانية قبل إعادة إرسال الكود.',
+                        'code': 'RESEND_COOLDOWN',
+                        'retry_after': retry_after,
+                    },
+                    status=status.HTTP_429_TOO_MANY_REQUESTS,
+                )
+
+        verification = issue_email_verification(user, update_sent_time=True)
+        sent, err_msg = send_verification_email(request, user, verification)
+        if not sent:
+            return Response(
+                {
+                    'error': err_msg or 'تعذر إرسال كود التحقق حالياً.',
+                    'code': 'EMAIL_SEND_FAILED',
+                    'retry_after': 60,
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        return Response(
+            {
+                'message': f'تم إرسال كود التحقق (6 أرقام) إلى {user.email}.',
+                'email': user.email,
+                'retry_after': 60,
+                'user': UserDetailSerializer(user, context={'request': request}).data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
 
 

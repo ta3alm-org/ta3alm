@@ -24,7 +24,7 @@ class SubscriptionPlan(models.Model):
 
     # --- ╪╡┘ä╪º╪¡┘è╪º╪¬ (┘å╪╣┘à/┘ä╪º) ---
     allow_online_packages = models.BooleanField(default=False, verbose_name=_("┘à╪│┘à┘ê╪¡ ╪¿╪º┘ä╪¡╪▓┘à ╪º┘ä╪ú┘ê┘å┘ä╪º┘è┘å"))
-    allow_question_images = models.BooleanField(default=False, verbose_name=_("┘à╪│┘à┘ê╪¡ ╪¿╪╡┘ê╪▒ ╪º┘ä╪ú╪│╪ª┘ä╪⌐"))
+    allow_question_images = models.BooleanField(default=True, verbose_name=_("┘à╪│┘à┘ê╪¡ ╪¿╪╡┘ê╪▒ ╪º┘ä╪ú╪│╪ª┘ä╪⌐"))
     is_default = models.BooleanField(default=False, verbose_name=_("╪¿╪º┘é╪⌐ ╪º┘ü╪¬╪▒╪º╪╢┘è╪⌐ (┘à╪¼╪º┘å┘è╪⌐)"))
 
     def save(self, *args, **kwargs):

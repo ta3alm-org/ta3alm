@@ -22,19 +22,21 @@ JWT_ALGORITHM = 'HS256'
 def generate_jwt_pair(user) -> dict:
     """توليد زوج من Access Token و Refresh Token للمستخدم بالإضافة لـ DRF Token."""
     now = datetime.now(dt_timezone.utc)
+    access_jti = uuid.uuid4().hex
+    refresh_jti = uuid.uuid4().hex
     access_payload = {
         'token_type': 'access',
         'user_id': user.id,
         'role': user.role,
         'is_superuser': user.is_superuser,
-        'jti': uuid.uuid4().hex,
+        'jti': access_jti,
         'iat': int(now.timestamp()),
         'exp': int((now + ACCESS_TOKEN_LIFETIME).timestamp()),
     }
     refresh_payload = {
         'token_type': 'refresh',
         'user_id': user.id,
-        'jti': uuid.uuid4().hex,
+        'jti': refresh_jti,
         'iat': int(now.timestamp()),
         'exp': int((now + REFRESH_TOKEN_LIFETIME).timestamp()),
     }
@@ -46,6 +48,8 @@ def generate_jwt_pair(user) -> dict:
         'refresh': refresh_token,
         'token': drf_token.key,
         'expires_in': int(ACCESS_TOKEN_LIFETIME.total_seconds()),
+        'access_jti': access_jti,
+        'refresh_jti': refresh_jti,
     }
 
 
@@ -93,14 +97,64 @@ class JWTAndTokenAuthentication(authentication.BaseAuthentication):
                     raise exceptions.AuthenticationFailed('المستخدم غير موجود أو غير مفعل.')
                 if user.is_banned:
                     raise exceptions.PermissionDenied('تم حظر حسابك من قِبل إدارة المنصة.')
+                self._enforce_device_and_session(request, user, payload)
                 return (user, payload)
             else:
-                return self._authenticate_drf_token(raw_token)
+                user, token = self._authenticate_drf_token(raw_token)
+                self._enforce_device_and_session(request, user, None)
+                return (user, token)
 
         if scheme == 'token':
-            return self._authenticate_drf_token(raw_token)
+            user, token = self._authenticate_drf_token(raw_token)
+            self._enforce_device_and_session(request, user, None)
+            return (user, token)
 
         return None
+
+    def _enforce_device_and_session(self, request, user, payload: dict | None):
+        """التحقق من عدم حظر الجهاز أو إنهاء الجلسة أو إلغاء تفويض الجهاز."""
+        from .device_security_service import get_active_device_block
+        from .models import DeviceSession, DeviceTrustStatus, RegisteredDevice
+
+        inst_id = (
+            request.META.get('HTTP_X_DEVICE_ID')
+            or request.META.get('HTTP_X_INSTALLATION_ID')
+            or ''
+        ).strip()
+
+        if inst_id:
+            active_block = get_active_device_block(inst_id)
+            if active_block:
+                raise exceptions.PermissionDenied({
+                    'error': f'تم حظر هذا الجهاز من قِبل إدارة المنصة: {active_block.reason}',
+                    'code': 'DEVICE_BLOCKED',
+                })
+
+            reg_dev = RegisteredDevice.objects.filter(user=user, installation_id=inst_id).first()
+            if reg_dev:
+                if reg_dev.trust_status == DeviceTrustStatus.BLOCKED:
+                    raise exceptions.PermissionDenied({
+                        'error': 'تم حظر هذا الجهاز من قِبل إدارة المنصة.',
+                        'code': 'DEVICE_BLOCKED',
+                    })
+                if not reg_dev.is_active and reg_dev.trust_status == DeviceTrustStatus.REVOKED:
+                    raise exceptions.AuthenticationFailed({
+                        'error': 'تم إلغاء تفعيل هذا الجهاز من حسابك. يرجى إعادة تسجيل الدخول.',
+                        'code': 'DEVICE_REVOKED',
+                    })
+
+        if payload and payload.get('jti'):
+            jti = str(payload.get('jti'))
+            revoked_session = DeviceSession.objects.filter(
+                user=user,
+                token_jti=jti,
+                status__in=('revoked', 'logged_out'),
+            ).exists()
+            if revoked_session:
+                raise exceptions.AuthenticationFailed({
+                    'error': 'تم إنهاء جلسة هذا الجهاز. يرجى إعادة تسجيل الدخول.',
+                    'code': 'SESSION_REVOKED',
+                })
 
     def _authenticate_drf_token(self, key: str):
         try:

@@ -12,6 +12,7 @@ from pathlib import Path
 
 import jwt
 from django.conf import settings
+from django.core.cache import cache
 from django.db import transaction
 from django.http import FileResponse, HttpResponse
 from django.shortcuts import get_object_or_404
@@ -30,6 +31,12 @@ from students.models import (
 from students.views import check_student_access
 from teachers.models import CoursePackage, Lecture, PDFFile, VideoCode
 
+from .device_security_service import (
+    check_device_allowed,
+    detect_account_sharing,
+    record_device_activity,
+    record_security_event,
+)
 from .integrity_service import (
     get_integrity_policy_mode,
     issue_integrity_challenge,
@@ -37,7 +44,9 @@ from .integrity_service import (
 )
 from .models import (
     DeviceIntegrityRecord,
+    DeviceTrustStatus,
     PlaybackSession,
+    RegisteredDevice,
     VideoAsset,
     VideoBookmark,
     VideoProgress,
@@ -71,6 +80,25 @@ class IntegrityCheckThrottle(UserRateThrottle):
 
 class VideoProgressThrottle(UserRateThrottle):
     rate = '60/min'
+
+
+def _watch_window_cache_key(user_id: int, lecture_id: int) -> str:
+    return f"lecture_watch_window:{user_id}:{lecture_id}"
+
+
+def _has_recent_playback_session(user, lecture, window_minutes: int = 60) -> bool:
+    if cache.get(_watch_window_cache_key(user.id, lecture.id)):
+        return True
+    cutoff = timezone.now() - timedelta(minutes=window_minutes)
+    return PlaybackSession.objects.filter(
+        user=user,
+        lecture=lecture,
+        created_at__gte=cutoff,
+    ).exists()
+
+
+def _mark_watch_window(user, lecture, window_seconds: int = 3600) -> None:
+    cache.set(_watch_window_cache_key(user.id, lecture.id), True, timeout=window_seconds)
 
 
 def _user_can_access_lecture_metadata(user, lecture: Lecture) -> bool:
@@ -170,6 +198,7 @@ def _check_user_lecture_entitlement(
         }
 
     student = user.student_profile
+    already_in_watch_window = _has_recent_playback_session(user, lecture, window_minutes=60)
 
     # 1. مسار الحزم الأونلاين المدفوعة
     if package_id is not None:
@@ -190,19 +219,22 @@ def _check_user_lecture_entitlement(
                 package=package,
                 lecture=lecture,
             )
-            if consume_view and tracker.views_count >= package.view_limit:
+            limit_reached = tracker.views_count >= package.view_limit
+            can_resume = already_in_watch_window and tracker.views_count <= package.view_limit
+            if consume_view and limit_reached and not can_resume:
                 return False, {
                     'status_code': status.HTTP_403_FORBIDDEN,
                     'payload': {'error': 'لقد استهلكت عدد مرات مشاهدة هذا الفيديو في الحزمة.'},
                 }
             points_just_awarded = False
-            if consume_view:
+            if consume_view and not already_in_watch_window:
                 if not tracker.is_completed:
                     tracker.is_completed = True
                     tracker.points_awarded = 10
                     points_just_awarded = True
                 tracker.views_count += 1
                 tracker.save()
+                _mark_watch_window(user, lecture)
         return True, {
             'package': package,
             'points_just_awarded': points_just_awarded,
@@ -251,7 +283,10 @@ def _check_user_lecture_entitlement(
                 .first()
             )
 
-        if not active_code or active_code.current_views >= active_code.max_views:
+        can_resume_code = bool(
+            active_code and already_in_watch_window and active_code.current_views <= active_code.max_views
+        )
+        if not active_code or (active_code.current_views >= active_code.max_views and not can_resume_code):
             return False, {
                 'status_code': status.HTTP_403_FORBIDDEN,
                 'payload': {
@@ -269,9 +304,11 @@ def _check_user_lecture_entitlement(
                 },
             }
 
-        if consume_view:
+        should_consume = consume_view and (bool(submitted_code) or not already_in_watch_window)
+        if should_consume:
             active_code.current_views += 1
             active_code.save(update_fields=['current_views'])
+            _mark_watch_window(user, lecture)
 
         return True, {
             'package': None,
@@ -337,6 +374,18 @@ class VideoAuthorizeAPIView(APIView):
         return self._handle(request, lecture_id)
 
     def _handle(self, request, lecture_id):
+        if (
+            hasattr(request.user, 'requires_email_verification')
+            and request.user.requires_email_verification()
+        ):
+            return Response(
+                {
+                    'error': 'يرجى تأكيد حسابك برمز التحقق (OTP) أولاً.',
+                    'code': 'EMAIL_VERIFICATION_REQUIRED',
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         lecture = get_object_or_404(Lecture, id=lecture_id, is_active=True)
 
         raw_pkg = request.data.get('package_id') or request.query_params.get('package_id')
@@ -360,6 +409,48 @@ class VideoAuthorizeAPIView(APIView):
                 {'error': 'تم رصد طلبات تشغيل متكررة بشكل غير طبيعي. يرجى الانتظار قليلاً.'},
                 status=status.HTTP_429_TOO_MANY_REQUESTS,
             )
+
+        dev_allowed, dev_err_code, dev_err_msg = check_device_allowed(request.user, device_id)
+        if not dev_allowed:
+            record_security_event(
+                event_type=(dev_err_code or 'device_access_denied').lower(),
+                severity='high',
+                risk_score=70,
+                user=request.user,
+                installation_id=device_id,
+                request=request,
+                action_taken='denied_video_authorize',
+                details={'lecture_id': lecture.id, 'code': dev_err_code, 'reason': dev_err_msg},
+            )
+            return Response(
+                {'error': dev_err_msg, 'code': dev_err_code},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        sharing_result = detect_account_sharing(
+            request,
+            request.user,
+            lecture=lecture,
+            installation_id=device_id,
+        )
+        if sharing_result.get('suspected') and len(sharing_result.get('signals', [])) >= 2:
+            return Response(
+                {
+                    'error': 'تم تقييد التشغيل مؤقتاً للاشتباه في مشاركة الحساب من عدة أجهزة ومواقع متزامنة.',
+                    'code': 'ACCOUNT_SHARING_RESTRICTED',
+                    'sharing': sharing_result,
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        reg_device = RegisteredDevice.objects.filter(user=request.user, installation_id=device_id).first()
+        record_device_activity(
+            request=request,
+            user=request.user,
+            device=reg_device,
+            activity_type='lecture_access',
+            metadata={'lecture_id': lecture.id, 'installation_id': device_id},
+        )
 
         integrity_ok, integrity_verdict, integrity_err = _check_required_integrity(request, request.user, device_id)
         if not integrity_ok:
@@ -497,7 +588,7 @@ class VideoAuthorizeAPIView(APIView):
                 'preferred_speed': progress.preferred_speed,
             },
             'bookmarks': bookmarks,
-            'attachments': PDFFileSerializer(pdfs, many=True).data,
+            'attachments': PDFFileSerializer(pdfs, many=True, context={'request': request}).data,
             'previous_lecture': prev_lec,
             'next_lecture': next_lec,
             'code_info': ctx.get('code_info'),
@@ -515,7 +606,7 @@ class VideoHeartbeatAPIView(APIView):
     def post(self, request, lecture_id):
         raw_token = str(request.data.get('playback_token') or '').strip()
         session_id = str(request.data.get('session_id') or '').strip()
-        device_id = str(request.data.get('device_id') or '').strip()
+        device_id = str(request.data.get('device_id') or request.META.get('HTTP_X_DEVICE_ID') or '').strip()
         refresh_requested = bool(request.data.get('refresh_token', False))
 
         if not raw_token or not session_id:
@@ -549,6 +640,17 @@ class VideoHeartbeatAPIView(APIView):
 
         if device_id and session.device_id and session.device_id != device_id:
             return Response({'error': 'عدم تطابق الجهاز المرتبط بالجلسة.', 'code': 'DEVICE_MISMATCH'}, status=status.HTTP_403_FORBIDDEN)
+
+        effective_device_id = device_id or session.device_id
+        dev_allowed, dev_err_code, dev_err_msg = check_device_allowed(request.user, effective_device_id)
+        if not dev_allowed:
+            session.status = 'revoked'
+            session.revoked_reason = (dev_err_code or 'device_not_allowed').lower()
+            session.save(update_fields=['status', 'revoked_reason'])
+            return Response(
+                {'error': dev_err_msg, 'code': dev_err_code},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         session.last_heartbeat_at = timezone.now()
         session.expires_at = timezone.now() + timedelta(seconds=max(PLAYBACK_TOKEN_TTL_SECONDS * 2, 300))
@@ -877,6 +979,38 @@ class PlayIntegrityVerifyAPIView(APIView):
             return Response(
                 {'error': f'فشل التحقق من Play Integrity على الخادم: {exc}', 'code': str(exc)},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        if verdict.get('policy_decision') == 'block' or verdict.get('risk_level') in ('high', 'critical'):
+            sev = 'critical' if verdict.get('risk_level') == 'critical' else 'high'
+            verdict_score = int(verdict.get('risk_score') or 75)
+            reg_devices = RegisteredDevice.objects.filter(installation_id=device_id)
+            for reg_dev in reg_devices:
+                if reg_dev.trust_status != DeviceTrustStatus.BLOCKED:
+                    reg_dev.trust_status = (
+                        DeviceTrustStatus.RESTRICTED
+                        if verdict.get('policy_decision') == 'block'
+                        else DeviceTrustStatus.SUSPICIOUS
+                    )
+                    reg_dev.requires_reauth = True
+                    reg_dev.risk_score = max(reg_dev.risk_score, min(verdict_score, 100))
+                    reg_dev.risk_level = sev
+                    reg_dev.save(update_fields=['trust_status', 'requires_reauth', 'risk_score', 'risk_level'])
+
+            record_security_event(
+                event_type='integrity_verification_failed',
+                severity=sev,
+                risk_score=verdict_score,
+                user=request.user if request.user.is_authenticated else None,
+                installation_id=device_id,
+                request=request,
+                action_taken=verdict.get('policy_decision', 'block'),
+                details={
+                    'verdict': verdict.get('app_recognition_verdict'),
+                    'risk_signals': tamper_signals,
+                    'risk_score': verdict_score,
+                    'title': 'فشل التحقق من سلامة التطبيق أو البيئة',
+                },
             )
 
         return Response({

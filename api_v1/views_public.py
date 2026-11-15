@@ -4,7 +4,7 @@ api_v1/views_public.py
 """
 import os
 from django.db.models import Q
-from django.http import JsonResponse
+from django.http import FileResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views import View
 from rest_framework import status
@@ -91,6 +91,14 @@ class PublicMetadataAPIView(APIView):
             except Exception:
                 pass
 
+        site_settings = SiteSetting.load()
+        raw_build = (
+            request.query_params.get('version_code')
+            or request.META.get('HTTP_X_APP_BUILD')
+            or ''
+        ).strip()
+        client_build = int(raw_build) if raw_build.isdigit() else None
+
         return Response({
             'subjects': SubjectSerializer(subjects, many=True).data,
             'grades': [{'code': code, 'name': str(label)} for code, label in GRADE_CHOICES],
@@ -103,7 +111,68 @@ class PublicMetadataAPIView(APIView):
             'support_whatsapp': '+201507200894',
             'support_email': 'support@ta3alm.online',
             'google_web_client_id': google_web_client_id,
+            'app_update': site_settings.build_app_update_payload(
+                request=request,
+                client_version_code=client_build,
+            ),
         })
+
+
+class AppUpdateCheckAPIView(APIView):
+    """فحص إصدار تطبيق أندرويد وإرجاع معلومات التحديث الإجباري ورابط ملف التحديث APK."""
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        site_settings = SiteSetting.load()
+        raw_build = str(
+            request.query_params.get('version_code')
+            or request.query_params.get('build')
+            or request.META.get('HTTP_X_APP_BUILD')
+            or ''
+        ).strip()
+        client_build = int(raw_build) if raw_build.isdigit() else None
+        payload = site_settings.build_app_update_payload(
+            request=request,
+            client_version_code=client_build,
+        )
+        return Response(payload, status=status.HTTP_200_OK)
+
+
+class AppUpdateDownloadAPIView(APIView):
+    """تنزيل ملف التحديث APK مباشرة من الخادم أو تحويل العميل لرابط التحميل المباشر."""
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        site_settings = SiteSetting.load()
+        if site_settings.android_apk_file:
+            file_field = site_settings.android_apk_file
+            try:
+                file_handle = file_field.open('rb')
+                version_tag = site_settings.android_latest_version_code or 1
+                filename = f"ta3alm-v{version_tag}.apk"
+                response = FileResponse(
+                    file_handle,
+                    as_attachment=True,
+                    filename=filename,
+                    content_type='application/vnd.android.package-archive',
+                )
+                return response
+            except Exception:
+                try:
+                    url = file_field.url
+                    if url:
+                        return HttpResponseRedirect(url)
+                except Exception:
+                    pass
+
+        external_url = (site_settings.android_apk_url or '').strip()
+        if external_url:
+            return HttpResponseRedirect(external_url)
+
+        return Response(
+            {'error': 'ملف التحديث غير مرفوع حالياً على الخادم.', 'code': 'APK_NOT_AVAILABLE'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
 
 
 class PublicPlansAPIView(APIView):
@@ -272,15 +341,20 @@ class AndroidAssetLinksView(View):
             if formatted and formatted not in fingerprints:
                 fingerprints.append(formatted)
 
+        packages = [package_name]
+        if not package_name.endswith('.debug'):
+            packages.append(f'{package_name}.debug')
+
         payload = [
             {
                 'relation': ['delegate_permission/common.handle_all_urls'],
                 'target': {
                     'namespace': 'android_app',
-                    'package_name': package_name,
+                    'package_name': pkg,
                     'sha256_cert_fingerprints': fingerprints,
                 },
             }
+            for pkg in packages
         ]
         response = JsonResponse(payload, safe=False)
         response['Access-Control-Allow-Origin'] = '*'

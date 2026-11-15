@@ -106,6 +106,31 @@
                                 {% endif %}
                             </button>
                         </form>
+
+                        <div class="mt-3">
+                            <button type="button" class="btn btn-link btn-sm text-decoration-none" data-bs-toggle="collapse" data-bs-target="#changeVerifyEmailBox">
+                                {% if LANGUAGE_CODE == 'en' %}Change email address{% else %}تغيير البريد الإلكتروني{% endif %}
+                            </button>
+                            <div class="collapse mt-2" id="changeVerifyEmailBox">
+                                <form method="post" action="{% url 'verify_email_page' %}" class="d-flex gap-2">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="update_email">
+                                    <input type="email" name="email" value="{{ target_email }}" class="form-control form-control-sm" dir="ltr" required>
+                                    <button type="submit" class="btn btn-sm btn-primary text-nowrap">
+                                        {% if LANGUAGE_CODE == 'en' %}Update &amp; Send{% else %}حفظ وإرسال{% endif %}
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                        {% if request.user.is_authenticated %}
+                        <div class="mt-3 pt-2 border-top">
+                            <a href="{% url 'account_logout' %}" class="btn btn-sm btn-outline-danger rounded-pill px-3">
+                                <i class="bi bi-box-arrow-right me-1"></i>
+                                {% if LANGUAGE_CODE == 'en' %}Sign out &amp; switch account{% else %}تسجيل الخروج واستخدام حساب آخر{% endif %}
+                            </a>
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
             </div>

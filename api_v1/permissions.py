@@ -2,6 +2,7 @@
 api_v1/permissions.py
 صلاحيات مبنية على الأدوار والملكية وحالة الحظر/الاشتراك.
 """
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import BasePermission
 
 
@@ -11,7 +12,21 @@ class IsNotBanned(BasePermission):
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
-        return not getattr(request.user, 'is_banned', False)
+        if getattr(request.user, 'is_banned', False):
+            return False
+        if (
+            hasattr(request.user, 'requires_email_verification')
+            and request.user.requires_email_verification()
+        ):
+            raise PermissionDenied(
+                detail={
+                    'error': 'يرجى تأكيد حسابك برمز التحقق (OTP) أولاً قبل استخدام المنصة.',
+                    'detail': 'يرجى تأكيد حسابك برمز التحقق (OTP) أولاً قبل استخدام المنصة.',
+                    'code': 'EMAIL_VERIFICATION_REQUIRED',
+                    'requires_verification': True,
+                }
+            )
+        return True
 
 
 class IsStudentRole(IsNotBanned):

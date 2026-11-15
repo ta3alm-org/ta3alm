@@ -52,7 +52,7 @@
                     <h5 class="modal-title">{% trans "إضافة ملف جديد" %}</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
-                <form action="{% url 'add_pdf_to_package' package.id %}" method="POST">
+                <form action="{% url 'add_pdf_to_package' package.id %}" method="POST" enctype="multipart/form-data">
                     {% csrf_token %}
                     <div class="modal-body">
                         <div class="mb-3">
@@ -60,8 +60,12 @@
                             <input type="text" name="title" class="form-control" required>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label fw-bold">{% trans "رابط الملف" %}</label>
-                            <input type="url" name="link" class="form-control" required>
+                            <label class="form-label fw-bold">{% trans "رفع ملف PDF من الجهاز" %}</label>
+                            <input type="file" name="file" class="form-control" accept=".pdf,application/pdf">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">{% trans "أو رابط الملف" %}</label>
+                            <input type="url" name="link" class="form-control" placeholder="https://...">
                         </div>
                     </div>
                     <div class="modal-footer">

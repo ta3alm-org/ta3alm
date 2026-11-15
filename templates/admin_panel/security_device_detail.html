@@ -1,0 +1,139 @@
+{% extends 'admin_panel/base_admin.html' %}
+{% load i18n %}
+
+{% block page_title %}تفاصيل الجهاز: {{ device.device_name|default:device.model }}{% endblock %}
+{% block nav_security %}active{% endblock %}
+{% block breadcrumb %}
+<span class="sep">/</span><a href="{% url 'admin_panel:security_dashboard' %}">مركز الأمان</a>
+<span class="sep">/</span><span class="current">تفاصيل الجهاز #{{ device.id }}</span>
+{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+    <div>
+        <h1><i class="bi bi-phone-fill me-2 text-primary"></i>{{ device.device_name|default:device.model }}</h1>
+        <p>المستخدم: <strong>{{ device.user.get_full_name|default:device.user.username }}</strong> ({{ device.user.email }}) · معرّف التثبيت: <code>{{ device.installation_id }}</code></p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'admin_panel:security_dashboard' %}" class="btn btn-sm btn-light fw-bold">عودة لمركز الأمان</a>
+        <form method="POST" action="{% url 'admin_panel:security_admin_action' %}">
+            {% csrf_token %}
+            <input type="hidden" name="device_id" value="{{ device.id }}">
+            <input type="hidden" name="next" value="{% url 'admin_panel:security_device_detail' device.id %}">
+            {% if device.trust_status == 'blocked' %}
+            <input type="hidden" name="action" value="unblock_device">
+            <button class="btn btn-sm btn-success fw-bold">فك حظر الجهاز</button>
+            {% else %}
+            <input type="hidden" name="action" value="block_device">
+            <input type="hidden" name="block_type" value="permanent">
+            <input type="hidden" name="reason" value="حظر يدوي من صفحة تفاصيل الجهاز">
+            <button class="btn btn-sm btn-danger fw-bold">حظر الجهاز دائماً</button>
+            {% endif %}
+        </form>
+        <form method="POST" action="{% url 'admin_panel:security_admin_action' %}">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="force_reauth">
+            <input type="hidden" name="device_id" value="{{ device.id }}">
+            <input type="hidden" name="next" value="{% url 'admin_panel:security_device_detail' device.id %}">
+            <button class="btn btn-sm btn-warning fw-bold">فرض إعادة التحقق</button>
+        </form>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="admin-card h-100 p-4">
+            <h6 class="fw-bold mb-3"><i class="bi bi-cpu me-2"></i>خصائص الجهاز وبصمة التطبيق</h6>
+            <table class="table table-sm mb-0">
+                <tr><th>الشركة والموديل</th><td>{{ device.manufacturer }} {{ device.model }}</td></tr>
+                <tr><th>نظام التشغيل</th><td>{{ device.os_name }} {{ device.android_version }} (API {{ device.api_level }})</td></tr>
+                <tr><th>معمارية CPU</th><td>{{ device.cpu_arch }} — {{ device.cpu_info|truncatechars:60 }}</td></tr>
+                <tr><th>بطاقة GPU</th><td>{{ device.gpu_vendor }} / {{ device.gpu_renderer }}</td></tr>
+                <tr><th>الدقة</th><td>{{ device.screen_resolution }}</td></tr>
+                <tr><th>الحزمة والإصدار</th><td>{{ device.package_name }} (v{{ device.app_version }} / {{ device.app_build_number }})</td></tr>
+                <tr><th>مصدر التثبيت</th><td>{{ device.installer_source|default:"غير محدد" }}</td></tr>
+                <tr><th>البصمة الحالية ({{ device.fingerprint_version }})</th><td><code class="small">{{ device.current_fingerprint|truncatechars:42 }}</code></td></tr>
+            </table>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="admin-card h-100 p-4">
+            <h6 class="fw-bold mb-3"><i class="bi bi-shield-check me-2"></i>تقييم الثقة والشبكة</h6>
+            <table class="table table-sm mb-3">
+                <tr><th>حالة الثقة</th><td><strong>{{ device.get_trust_status_display }}</strong> (نشط: {{ device.is_active }})</td></tr>
+                <tr><th>مستوى المخاطر</th><td>{{ device.risk_score }}/100 ({{ device.risk_level }})</td></tr>
+                <tr><th>تحقق شهادة التوقيع</th><td>{{ device.signing_cert_verified }}</td></tr>
+                <tr><th>آخر IP مرصود</th><td>{{ device.last_ip|default:"-" }} ({{ device.last_country }} {{ device.last_region }})</td></tr>
+                <tr><th>أول تسجيل</th><td>{{ device.first_registered_at|date:"Y-m-d H:i" }}</td></tr>
+                <tr><th>آخر نشاط</th><td>{{ device.last_active_at|date:"Y-m-d H:i" }}</td></tr>
+            </table>
+            <h6 class="fw-bold small">سجل عناوين IP (الأحدث أولاً)</h6>
+            <ul class="small text-muted mb-0">
+                {% for entry in device.ip_history %}
+                <li>{{ entry.ip }} ({{ entry.country|default:"-" }}) — {{ entry.seen_at }}</li>
+                {% empty %}
+                <li>لا يوجد سجل IP بعد.</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- Fingerprint History -->
+<div class="admin-card mb-4">
+    <div class="admin-card-header"><span class="admin-card-title">تاريخ البصمات والانحراف (Fingerprint History)</span></div>
+    <div class="table-responsive">
+        <table class="admin-table">
+            <thead><tr><th>الإصدار</th><th>Fingerprint Hash</th><th>درجة الانحراف</th><th>الحقول المتغيرة</th><th>التاريخ</th></tr></thead>
+            <tbody>
+                {% for fp in fingerprints %}
+                <tr>
+                    <td>{{ fp.algorithm_version }}</td>
+                    <td><code class="small">{{ fp.fingerprint_hash|truncatechars:44 }}</code></td>
+                    <td>{{ fp.drift_score }}</td>
+                    <td>{{ fp.changed_fields|join:", "|default:"-" }}</td>
+                    <td><small>{{ fp.created_at|date:"Y-m-d H:i" }}</small></td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="text-center text-muted py-3">لا يوجد سجل بصمات.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Events & Activities -->
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="admin-card">
+            <div class="admin-card-header"><span class="admin-card-title">الأحداث الأمنية للجهاز</span></div>
+            <div class="p-3">
+                {% for ev in events %}
+                <div class="border-bottom pb-2 mb-2">
+                    <div class="fw-bold small">{{ ev.event_type }} <span class="badge bg-secondary">{{ ev.severity }}</span></div>
+                    <div class="small text-muted">{{ ev.action_taken }} · IP: {{ ev.ip_address|default:"-" }} · {{ ev.created_at|date:"Y-m-d H:i" }}</div>
+                </div>
+                {% empty %}
+                <div class="text-muted small text-center">لا توجد أحداث أمنية.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="admin-card">
+            <div class="admin-card-header"><span class="admin-card-title">آخر الأنشطة</span></div>
+            <div class="p-3">
+                {% for act in activities %}
+                <div class="border-bottom pb-2 mb-2">
+                    <div class="fw-bold small">{{ act.activity_type }}</div>
+                    <div class="small text-muted">IP: {{ act.ip_address|default:"-" }} · {{ act.created_at|date:"Y-m-d H:i" }}</div>
+                </div>
+                {% empty %}
+                <div class="text-muted small text-center">لا يوجد نشاط مسجّل.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

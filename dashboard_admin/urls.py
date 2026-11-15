@@ -11,6 +11,8 @@ urlpatterns = [
     # الرئيسية
     path('',                    views.dashboard,          name='dashboard'),
     path('maintenance/toggle/', views.toggle_maintenance, name='toggle_maintenance'),
+    path('commission/update/',  views.update_platform_commission, name='update_platform_commission'),
+    path('app-release/update/', views.update_app_release_settings, name='update_app_release_settings'),
 
     # إدارة المستخدمين
     path('users/',              views.manage_users,       name='manage_users'),
@@ -46,4 +48,9 @@ urlpatterns = [
     path('support-inbox/settings/',        views.support_settings,       name='support_settings'),
     path('support-inbox/oauth-connect/',   views.support_oauth_connect,  name='support_oauth_connect'),
     path('support-inbox/oauth2callback/',  views.support_oauth_callback, name='support_oauth_callback'),
+
+    # مركز أمان الأجهزة ومكافحة مشاركة الحسابات
+    path('security/',                         views.security_dashboard,     name='security_dashboard'),
+    path('security/devices/<int:device_id>/', views.security_device_detail, name='security_device_detail'),
+    path('security/action/',                  views.security_admin_action,  name='security_admin_action'),
 ]

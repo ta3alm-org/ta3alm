@@ -14,7 +14,13 @@
         <p>مرحباً {{ request.user.get_full_name|default:request.user.email }} 👋</p>
     </div>
     {% if is_owner %}
-    <div class="d-flex gap-2 flex-wrap">
+    <div class="d-flex gap-2 flex-wrap align-items-center">
+        <form method="POST" action="{% url 'admin_panel:update_platform_commission' %}" class="d-flex align-items-center gap-2 bg-white border rounded px-2 py-1">
+            {% csrf_token %}
+            <label for="commissionInput" class="small fw-bold mb-0 text-muted">عمولة المنصة (%)</label>
+            <input id="commissionInput" type="number" name="platform_commission_percentage" min="0" max="100" value="{{ site_settings.platform_commission_percentage }}" class="form-control form-control-sm" style="width:72px;" required>
+            <button type="submit" class="btn btn-sm btn-primary fw-bold">حفظ</button>
+        </form>
         <form method="POST" action="{% url 'admin_panel:toggle_maintenance' %}">
             {% csrf_token %}
             <button type="submit" class="btn btn-sm fw-bold px-4
@@ -23,7 +29,6 @@
                 {% if site_settings.is_maintenance_mode %}إيقاف الصيانة{% else %}تفعيل الصيانة{% endif %}
             </button>
         </form>
-
     </div>
     {% endif %}
 
@@ -158,6 +163,64 @@
             </div>
         </div>
     </div>
+
+    {% if is_owner %}
+    <div class="col-12">
+        <div class="admin-card">
+            <div class="admin-card-header">
+                <span class="admin-card-title"><i class="bi bi-phone-fill me-2" style="color:var(--admin-accent);"></i>إدارة التحديثات الداخلية لتطبيق الأندرويد (In-App OTA Update)</span>
+                <span class="badge bg-secondary">أحدث بناء: {{ site_settings.android_latest_version_code }} ({{ site_settings.android_latest_version_name }})</span>
+            </div>
+            <form method="POST" action="{% url 'admin_panel:update_app_release_settings' %}" enctype="multipart/form-data" class="p-3">
+                {% csrf_token %}
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold">رقم البناء الأحدث (Version Code)</label>
+                        <input type="number" name="android_latest_version_code" min="1" value="{{ site_settings.android_latest_version_code }}" class="form-control" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold">أقل رقم بناء مسموح (Min Build)</label>
+                        <input type="number" name="android_min_required_version_code" min="1" value="{{ site_settings.android_min_required_version_code }}" class="form-control" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold">اسم الإصدار (Version Name)</label>
+                        <input type="text" name="android_latest_version_name" value="{{ site_settings.android_latest_version_name }}" class="form-control" dir="ltr" required>
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="forceUpdateSwitch" name="android_force_update" value="1" {% if site_settings.android_force_update %}checked{% endif %}>
+                            <label class="form-check-label fw-bold small" for="forceUpdateSwitch">إجبار الفتح على أعلى إصدار فقط</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">رابط تحميل ملف APK المباشر (اختياري إذا رُفع الملف)</label>
+                        <input type="url" name="android_apk_url" value="{{ site_settings.android_apk_url }}" class="form-control" dir="ltr" placeholder="https://...">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">رفع ملف التحديث (APK) مباشرة على المنصة</label>
+                        <input type="file" name="android_apk_file" accept=".apk,application/vnd.android.package-archive" class="form-control">
+                        {% if site_settings.android_apk_file %}
+                        <small class="text-success d-block mt-1">مرفوع حالياً: {{ site_settings.android_apk_file.name }}</small>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">بصمة SHA-256 لملف APK (تُحسب تلقائياً عند الرفع)</label>
+                        <input type="text" name="android_apk_sha256" value="{{ site_settings.android_apk_sha256 }}" class="form-control font-monospace" dir="ltr" maxlength="64">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">ملاحظات التحديث</label>
+                        <input type="text" name="android_update_release_notes" value="{{ site_settings.android_update_release_notes }}" class="form-control" placeholder="تحسينات أمنية وتحديثات جديدة...">
+                    </div>
+                    <div class="col-12 d-flex justify-content-end">
+                        <button type="submit" class="btn btn-primary fw-bold px-4">
+                            <i class="bi bi-cloud-arrow-up-fill me-1"></i> حفظ ونشر إعدادات التحديث
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endif %}
 
 </div>
 {% endblock %}

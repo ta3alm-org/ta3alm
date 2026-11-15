@@ -2,7 +2,10 @@
 api_v1/views_teacher.py
 جميع نقاط النهاية الخاصة بالمعلم والمساعد (إدارة المجموعات، المحاضرات، الأكواد، الملفات، الامتحانات، الطلاب، الرصد الجماعي، الحزم، المحفظة، الاشتراك، والمساعدين).
 """
+import os
+import uuid
 from decimal import Decimal
+from django.core.files.storage import default_storage
 from django.db import transaction
 from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404
@@ -13,6 +16,7 @@ from rest_framework.views import APIView
 
 from accounts.models import StudentProfile
 from assistants.models import AssistantProfile, AssistantJob
+from core.models import SiteSetting, reconcile_teacher_wallet
 from core.utils import send_notification
 from exams.models import Exam, Question, ExamResult
 from students.models import Enrollment, PerformanceLog, PackageEnrollment, VideoViewTracking, PackageExamResult
@@ -71,7 +75,8 @@ class TeacherDashboardAPIView(APIView):
             groups = groups.filter(name__icontains=query)
 
         allowed_ids = list(teacher.get_allowed_group_ids())
-        wallet, _ = Wallet.objects.get_or_create(teacher=teacher)
+        wallet = reconcile_teacher_wallet(teacher) or Wallet.objects.get_or_create(teacher=teacher)[0]
+        site_setting = SiteSetting.load()
 
         return Response({
             'teacher': TeacherCardSerializer(teacher, context={'request': request}).data,
@@ -86,6 +91,7 @@ class TeacherDashboardAPIView(APIView):
                 'group_limit': teacher.current_plan.group_limit if teacher.current_plan else 5,
             },
             'wallet': WalletSerializer(wallet).data,
+            'platform_commission_percentage': site_setting.platform_commission_percentage,
             'allowed_group_ids': allowed_ids,
             'groups': GroupSerializer(groups, many=True, context={'request': request}).data,
         })
@@ -148,7 +154,7 @@ class TeacherGroupDetailAPIView(APIView):
             'pending_count': pending_count,
             'lectures': LectureSerializer(lectures, many=True).data,
             'exams': ExamSerializer(exams, many=True).data,
-            'pdfs': PDFFileSerializer(pdfs, many=True).data,
+            'pdfs': PDFFileSerializer(pdfs, many=True, context={'request': request}).data,
             'other_groups': other_groups,
         })
 
@@ -308,27 +314,51 @@ class TeacherPDFsAPIView(APIView):
 
     def post(self, request, group_id=None, package_id=None):
         title = str(request.data.get('title', '')).strip()
+        uploaded_file = request.FILES.get('file')
         link = str(request.data.get('link', '')).strip()
-        if not title or not link:
-            return Response({'error': 'عنوان الملف والرابط مطلوبان.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        if not title:
+            return Response({'error': 'عنوان الملف مطلوب.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        group = None
+        package = None
         if group_id:
             group, _ = get_group_permission(request, group_id, permission_type='videos')
             if not group:
                 return Response({'error': 'صلاحية غير كافية.'}, status=status.HTTP_403_FORBIDDEN)
-            pdf = PDFFile.objects.create(group=group, title=title, link=link)
         elif package_id:
             package, _ = get_package_permission(request, package_id, permission_type='videos')
             if not package:
                 return Response({'error': 'صلاحية غير كافية.'}, status=status.HTTP_403_FORBIDDEN)
-            pdf = PDFFile.objects.create(group=None, title=title, link=link)
-            package.pdfs.add(pdf)
         else:
             return Response({'error': 'يرجى تحديد المجموعة أو الحزمة.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        if uploaded_file:
+            ext = os.path.splitext(uploaded_file.name)[1].lower() or '.pdf'
+            if ext not in ('.pdf', '.doc', '.docx', '.ppt', '.pptx'):
+                return Response(
+                    {'error': 'نوع الملف غير مدعوم. يُسمح بملفات PDF والمستندات فقط.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            saved_path = default_storage.save(f"pdfs/{uuid.uuid4().hex[:16]}{ext}", uploaded_file)
+            resolved_link = default_storage.url(saved_path)
+        elif link:
+            resolved_link = link
+        else:
+            return Response(
+                {'error': 'يرجى رفع ملف PDF أو إدخال رابط الملف.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if group is not None:
+            pdf = PDFFile.objects.create(group=group, title=title, link=resolved_link)
+        else:
+            pdf = PDFFile.objects.create(group=None, title=title, link=resolved_link)
+            package.pdfs.add(pdf)
+
         return Response({
             'message': 'تم إضافة الملف بنجاح.',
-            'pdf': PDFFileSerializer(pdf).data,
+            'pdf': PDFFileSerializer(pdf, context={'request': request}).data,
         }, status=status.HTTP_201_CREATED)
 
     def delete(self, request, pdf_id):
@@ -408,7 +438,7 @@ class TeacherExamDetailAPIView(APIView):
         if not allowed:
             return Response({'error': 'صلاحية غير كافية.'}, status=status.HTTP_403_FORBIDDEN)
 
-        allow_images = bool(teacher and teacher.current_plan and teacher.current_plan.allow_question_images)
+        allow_images = True
         questions = exam.questions.all()
         q_search = request.query_params.get('q', '').strip()
 
@@ -474,7 +504,7 @@ class TeacherExamDetailAPIView(APIView):
                 'is_active': exam.is_active,
             })
 
-        allow_images = bool(teacher and teacher.current_plan and teacher.current_plan.allow_question_images)
+        allow_images = True
         text = str(request.data.get('text', '')).strip()
         option_a = str(request.data.get('option_a', '')).strip()
         option_b = str(request.data.get('option_b', '')).strip()
@@ -524,13 +554,13 @@ class TeacherQuestionDetailAPIView(APIView):
         if not allowed:
             return Response({'error': 'صلاحية غير كافية.'}, status=status.HTTP_403_FORBIDDEN)
 
-        allow_images = bool(teacher and teacher.current_plan and teacher.current_plan.allow_question_images)
+        allow_images = True
         for field in ('text', 'option_a', 'option_b', 'option_c', 'option_d', 'correct_answer'):
             if field in request.data:
                 setattr(question, field, str(request.data[field]).strip())
         if 'marks' in request.data:
             question.marks = int(request.data['marks'])
-        if request.data.get('clear_image') in (True, 'true', 'on'):
+        if request.data.get('clear_image') in (True, 'true', 'True', '1', 'on') or request.data.get('remove_image') in (True, 'true', 'True', '1', 'on'):
             question.image = None
         if 'image' in request.FILES and allow_images:
             question.image = request.FILES['image']
@@ -883,14 +913,21 @@ class TeacherPackageDetailAPIView(APIView):
             for g in avail_groups
         ]
 
+        site_setting = SiteSetting.load()
+        gross_revenue = enrollments.count() * package.price
+        net_revenue = float((Decimal(str(gross_revenue)) * site_setting.teacher_share_ratio).quantize(Decimal('0.01')))
+
         return Response({
             'package': CoursePackageSerializer(package, context={'request': request}).data,
             'is_owner': is_owner,
             'lectures': LectureSerializer(package.lectures.all(), many=True).data,
             'exams': ExamSerializer(package.exams.all(), many=True).data,
-            'pdfs': PDFFileSerializer(package.pdfs.all(), many=True).data,
+            'pdfs': PDFFileSerializer(package.pdfs.all(), many=True, context={'request': request}).data,
             'students': PackageEnrollmentSerializer(enrollments, many=True, context={'request': request}).data,
-            'total_revenue': enrollments.count() * package.price,
+            'total_revenue': gross_revenue,
+            'gross_revenue': gross_revenue,
+            'net_revenue': net_revenue,
+            'platform_commission_percentage': site_setting.platform_commission_percentage,
             'available_groups': available_groups,
             'leaderboard': [
                 {
@@ -995,10 +1032,12 @@ class TeacherWalletAPIView(APIView):
 
     def get(self, request):
         teacher = request.user.teacher_profile
-        wallet, _ = Wallet.objects.get_or_create(teacher=teacher)
+        wallet = reconcile_teacher_wallet(teacher) or Wallet.objects.get_or_create(teacher=teacher)[0]
+        site_setting = SiteSetting.load()
         withdraws = wallet.withdrawals.all().order_by('-created_at')
         return Response({
             'wallet': WalletSerializer(wallet).data,
+            'platform_commission_percentage': site_setting.platform_commission_percentage,
             'withdrawals': WithdrawRequestSerializer(withdraws, many=True).data,
         })
 

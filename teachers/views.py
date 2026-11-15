@@ -1,10 +1,14 @@
-from django.db.models import Sum
-from students.models import VideoViewTracking, PackageExamResult
-from assistants.models import AssistantJob
+import os
+import uuid
 import requests
 import random
 import string
 from datetime import timedelta
+from django.core.files.storage import default_storage
+from django.db.models import Sum
+from students.models import VideoViewTracking, PackageExamResult
+from assistants.models import AssistantJob
+from core.models import SiteSetting, credit_teacher_wallet_for_sale, reconcile_teacher_wallet
 from django.utils import timezone
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
@@ -879,24 +883,14 @@ def payment_callback(request):
             enrollment, created = PackageEnrollment.objects.get_or_create(
                 student=student,
                 package=package,
-                defaults={'is_paid': True}
+                defaults={'is_paid': False}
             )
-            
-            if not created and not enrollment.is_paid:
+
+            # 2. ++++++ إضافة الرصيد لمحفظة المعلم مرة واحدة فقط ++++++
+            if not enrollment.is_paid:
                 enrollment.is_paid = True
-                enrollment.save()
-            
-            # 2. ++++++ إضافة الرصيد لمحفظة المعلم ++++++
-            wallet, _ = Wallet.objects.get_or_create(teacher=package.teacher)
-            
-            # حساب حصة المعلم (80%)
-            price = float(package.price)
-            teacher_share = price * 0.80
-            
-            # تحديث الرصيد
-            wallet.balance = float(wallet.balance) + teacher_share
-            wallet.total_earnings = float(wallet.total_earnings) + teacher_share
-            wallet.save()
+                enrollment.save(update_fields=['is_paid'])
+                credit_teacher_wallet_for_sale(package.teacher, package.price)
             
             print(f"💰 Wallet updated for {package.teacher.user.username}: +{teacher_share} EGP")
             # +++++++++++++++++++++++++++++++++++++++++++
@@ -1133,10 +1127,14 @@ def teacher_wallet(request):
     try: teacher = request.user.teacher_profile
     except: return redirect('home')
     
-    wallet, created = Wallet.objects.get_or_create(teacher=teacher)
-    
+    wallet = reconcile_teacher_wallet(teacher) or Wallet.objects.get_or_create(teacher=teacher)[0]
+    site_setting = SiteSetting.load()
+
     if request.method == 'POST':
-        amount = float(request.POST.get('amount'))
+        try:
+            amount = float(request.POST.get('amount') or 0)
+        except (TypeError, ValueError):
+            amount = 0.0
         method = request.POST.get('method')
         details = request.POST.get('details')
         
@@ -1156,7 +1154,15 @@ def teacher_wallet(request):
             return redirect('teacher_wallet')
 
     withdraws = wallet.withdrawals.all().order_by('-created_at')
-    return render(request, 'teachers/wallet.html', {'wallet': wallet, 'withdraws': withdraws})
+    return render(
+        request,
+        'teachers/wallet.html',
+        {
+            'wallet': wallet,
+            'withdraws': withdraws,
+            'commission_percentage': site_setting.platform_commission_percentage,
+        },
+    )
 
 # 1. المحتوى (الرئيسية)
 @login_required
@@ -1398,32 +1404,58 @@ def add_exam_to_package(request, package_id):
 @login_required
 def add_pdf_to_group(request, group_id):
     group, is_owner = get_group_permission(request, group_id, permission_type='videos') # نستخدم نفس صلاحية الفيديو
-    if not group: return redirect('home')
-    
+def _resolve_pdf_link_from_request(request):
+    uploaded_file = request.FILES.get('file')
+    link = (request.POST.get('link') or '').strip()
+    if uploaded_file:
+        ext = os.path.splitext(uploaded_file.name)[1].lower() or '.pdf'
+        if ext not in ('.pdf', '.doc', '.docx', '.ppt', '.pptx'):
+            return None, "نوع الملف غير مدعوم. يُسمح بملفات PDF والمستندات فقط."
+        saved_path = default_storage.save(f"pdfs/{uuid.uuid4().hex[:16]}{ext}", uploaded_file)
+        return default_storage.url(saved_path), None
+    if link:
+        return link, None
+    return None, "يرجى اختيار ملف PDF أو إدخال رابط الملف."
+
+
+@login_required
+def add_pdf_to_group(request, group_id):
+    group, is_owner = get_group_permission(request, group_id, permission_type='videos')
+    if not group:
+        return redirect('home')
+
     if request.method == 'POST':
-        form = PDFForm(request.POST)
-        if form.is_valid():
-            pdf = form.save(commit=False)
-            pdf.group = group
-            pdf.save()
+        title = (request.POST.get('title') or '').strip()
+        resolved_link, err = _resolve_pdf_link_from_request(request)
+        if not title:
+            messages.error(request, "يرجى إدخال اسم الملف.")
+        elif err:
+            messages.error(request, err)
+        else:
+            PDFFile.objects.create(group=group, title=title, link=resolved_link)
             messages.success(request, "تم إضافة الملف.")
-    return redirect('group_detail', group_id=group.id)
+    return redirect(request.META.get('HTTP_REFERER') or reverse('group_detail', args=[group.id]))
+
 
 # 2. إضافة للحزمة (يدوي)
 @login_required
 def add_pdf_to_package(request, package_id):
     package, is_owner = get_package_permission(request, package_id, permission_type='videos')
-    if not package: return redirect('home')
-    
+    if not package:
+        return redirect('home')
+
     if request.method == 'POST':
-        form = PDFForm(request.POST)
-        if form.is_valid():
-            pdf = form.save(commit=False)
-            pdf.group = None # ملف حر
-            pdf.save()
+        title = (request.POST.get('title') or '').strip()
+        resolved_link, err = _resolve_pdf_link_from_request(request)
+        if not title:
+            messages.error(request, "يرجى إدخال اسم الملف.")
+        elif err:
+            messages.error(request, err)
+        else:
+            pdf = PDFFile.objects.create(group=None, title=title, link=resolved_link)
             package.pdfs.add(pdf)
             messages.success(request, "تم إضافة الملف للحزمة.")
-    return redirect('teacher_package_detail', package_id=package.id)
+    return redirect(request.META.get('HTTP_REFERER') or reverse('teacher_package_detail', args=[package.id]))
 
 # 3. حذف PDF
 @login_required

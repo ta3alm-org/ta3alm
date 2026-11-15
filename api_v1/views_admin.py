@@ -17,7 +17,8 @@ from rest_framework.views import APIView
 
 from accounts.models import StudentProfile, OneTimeLoginLink
 from assistants.models import AssistantProfile
-from core.models import SiteSetting, ManualPayment, Subject, CurriculumUnit, CurriculumLesson
+from decimal import Decimal, ROUND_HALF_UP
+from core.models import SiteSetting, ManualPayment, Subject, CurriculumUnit, CurriculumLesson, reconcile_teacher_wallet
 from dashboard_admin.models import AdminProfile, AdminRole, AuditLog, ZohoMailConfig
 from services.zoho_mail_service import ZohoMailService
 from students.models import PackageEnrollment
@@ -60,7 +61,84 @@ class AdminDashboardAPIView(APIView):
             'pending_manual_payments': ManualPayment.objects.filter(status='pending').count(),
             'pending_withdrawals': WithdrawRequest.objects.filter(is_paid=False).count(),
             'is_maintenance_mode': site_settings.is_maintenance_mode,
+            'platform_commission_percentage': site_settings.platform_commission_percentage,
+            'app_update': site_settings.build_app_update_payload(request=request),
             'recent_logs': AuditLogSerializer(recent_logs, many=True).data,
+        })
+
+    def post(self, request):
+        """تحديث إعدادات المنصة الأساسية مثل نسبة عمولة المنصة أو إعدادات إصدار التطبيق."""
+        profile = getattr(request.user, 'admin_profile', None)
+        if not (request.user.is_superuser or (profile and profile.is_owner)):
+            return Response({'error': 'هذا الإجراء متاح لمالك المنصة فقط.'}, status=status.HTTP_403_FORBIDDEN)
+
+        site_settings = SiteSetting.load()
+        updated_fields = []
+
+        if 'platform_commission_percentage' in request.data:
+            raw_commission = request.data.get('platform_commission_percentage')
+            try:
+                commission = int(raw_commission)
+            except (TypeError, ValueError):
+                return Response({'error': 'يرجى إدخال نسبة عمولة صحيحة بين 0 و 100.'}, status=status.HTTP_400_BAD_REQUEST)
+            if commission < 0 or commission > 100:
+                return Response({'error': 'يجب أن تكون نسبة العمولة بين 0 و 100%.'}, status=status.HTTP_400_BAD_REQUEST)
+            site_settings.platform_commission_percentage = commission
+            updated_fields.append('platform_commission_percentage')
+
+        if 'android_latest_version_code' in request.data:
+            try:
+                site_settings.android_latest_version_code = max(1, int(request.data.get('android_latest_version_code')))
+                updated_fields.append('android_latest_version_code')
+            except (TypeError, ValueError):
+                return Response({'error': 'رقم البناء الأحدث غير صالح.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if 'android_min_required_version_code' in request.data:
+            try:
+                site_settings.android_min_required_version_code = max(1, int(request.data.get('android_min_required_version_code')))
+                updated_fields.append('android_min_required_version_code')
+            except (TypeError, ValueError):
+                return Response({'error': 'أقل رقم بناء مسموح غير صالح.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if 'android_latest_version_name' in request.data:
+            site_settings.android_latest_version_name = str(request.data.get('android_latest_version_name', '1.0.0')).strip()[:32]
+            updated_fields.append('android_latest_version_name')
+
+        if 'android_apk_url' in request.data:
+            site_settings.android_apk_url = str(request.data.get('android_apk_url', '')).strip()[:500]
+            updated_fields.append('android_apk_url')
+
+        if 'android_update_release_notes' in request.data:
+            site_settings.android_update_release_notes = str(request.data.get('android_update_release_notes', '')).strip()
+            updated_fields.append('android_update_release_notes')
+
+        if 'android_apk_sha256' in request.data:
+            site_settings.android_apk_sha256 = str(request.data.get('android_apk_sha256', '')).strip().lower()[:64]
+            updated_fields.append('android_apk_sha256')
+
+        if 'android_force_update' in request.data:
+            val = request.data.get('android_force_update')
+            site_settings.android_force_update = str(val).lower() in ('1', 'true', 'yes', 'on') if not isinstance(val, bool) else val
+            updated_fields.append('android_force_update')
+
+        if 'android_apk_file' in request.FILES:
+            site_settings.android_apk_file = request.FILES['android_apk_file']
+            updated_fields.append('android_apk_file')
+
+        if not updated_fields:
+            return Response({'error': 'لم يتم إرسال أي حقول للتحديث.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        site_settings.save()
+        AuditLog.log(
+            request,
+            AuditLog.ACTION_EDIT_USER,
+            target_label='تحديث إعدادات المنصة / إصدار التطبيق',
+            details={'updated_fields': updated_fields},
+        )
+        return Response({
+            'message': 'تم حفظ الإعدادات بنجاح.',
+            'platform_commission_percentage': site_settings.platform_commission_percentage,
+            'app_update': site_settings.build_app_update_payload(request=request),
         })
 
 
@@ -175,7 +253,7 @@ class AdminManageUsersAPIView(APIView):
         if action == 'generate_login_link':
             expires = timezone.now() + timedelta(minutes=15)
             link = OneTimeLoginLink.objects.create(user=target, expires_at=expires)
-            login_url = f"https://ta3alm.online/login/auto/{link.token}/"
+            login_url = f"https://www.ta3alm.online/login/auto/{link.token}/"
             AuditLog.log(
                 request,
                 AuditLog.ACTION_EDIT_USER,
@@ -237,9 +315,26 @@ class AdminFinanceAPIView(APIView):
     permission_classes = [IsAuthenticated, IsPlatformFinance]
 
     def get(self, request):
+        site_settings = SiteSetting.load()
+        teacher_ids = PackageEnrollment.objects.filter(is_paid=True).values_list('package__teacher_id', flat=True).distinct()
+        for t in TeacherProfile.objects.filter(id__in=teacher_ids):
+            reconcile_teacher_wallet(t)
+
         transactions = PaymentTransaction.objects.select_related('teacher__user').order_by('-date')[:100]
         total_sub_revenue = PaymentTransaction.objects.aggregate(t=Sum('amount'))['t'] or 0
         total_pkg_revenue = PackageEnrollment.objects.filter(is_paid=True).aggregate(t=Sum('package__price'))['t'] or 0
+        gross_pkg = Decimal(str(total_pkg_revenue or 0))
+        commission_pct = int(site_settings.platform_commission_percentage or 0)
+        platform_commission_revenue = float(
+            (gross_pkg * Decimal(commission_pct) / Decimal('100')).quantize(
+                Decimal('0.01'), rounding=ROUND_HALF_UP
+            )
+        )
+        teachers_net_revenue = float(
+            (gross_pkg - Decimal(str(platform_commission_revenue))).quantize(
+                Decimal('0.01'), rounding=ROUND_HALF_UP
+            )
+        )
         withdraw_requests = WithdrawRequest.objects.select_related('wallet__teacher__user').order_by('-created_at')
         manual_payments = ManualPayment.objects.select_related('user').order_by('-created_at')
         student_payments = (
@@ -252,6 +347,9 @@ class AdminFinanceAPIView(APIView):
         return Response({
             'total_subscription_revenue': total_sub_revenue,
             'total_package_revenue': total_pkg_revenue,
+            'platform_commission_percentage': commission_pct,
+            'platform_commission_revenue': platform_commission_revenue,
+            'teachers_net_revenue': teachers_net_revenue,
             'withdraw_requests': WithdrawRequestSerializer(withdraw_requests, many=True).data,
             'manual_payments': ManualPaymentSerializer(manual_payments, many=True, context={'request': request}).data,
             'student_payments': PackageEnrollmentSerializer(student_payments, many=True, context={'request': request}).data,
@@ -268,8 +366,30 @@ class AdminFinanceAPIView(APIView):
         })
 
     def post(self, request):
-        """تسديد طلب سحب أو قبول/رفض طلب دفع يدوي."""
-        item_type = request.data.get('item_type')  # 'withdrawal' | 'manual_payment'
+        """تسديد طلب سحب، قبول/رفض طلب دفع يدوي، أو تحديث نسبة عمولة المنصة."""
+        item_type = request.data.get('item_type')  # 'withdrawal' | 'manual_payment' | 'commission'
+        if item_type == 'commission' or request.data.get('action') == 'update_commission':
+            raw_commission = request.data.get('platform_commission_percentage')
+            try:
+                commission = int(raw_commission)
+            except (TypeError, ValueError):
+                return Response({'error': 'يرجى إدخال نسبة عمولة صحيحة بين 0 و 100.'}, status=status.HTTP_400_BAD_REQUEST)
+            if commission < 0 or commission > 100:
+                return Response({'error': 'يجب أن تكون نسبة العمولة بين 0 و 100%.'}, status=status.HTTP_400_BAD_REQUEST)
+            site_settings = SiteSetting.load()
+            site_settings.platform_commission_percentage = commission
+            site_settings.save()
+            AuditLog.log(
+                request,
+                AuditLog.ACTION_EDIT_USER,
+                target_label='نسبة عمولة المنصة',
+                details={'platform_commission_percentage': commission},
+            )
+            return Response({
+                'message': f'تم تحديث نسبة عمولة المنصة إلى {commission}% بنجاح.',
+                'platform_commission_percentage': site_settings.platform_commission_percentage,
+            })
+
         if item_type == 'withdrawal':
             req = get_object_or_404(WithdrawRequest, id=request.data.get('id'))
             req.is_paid = True

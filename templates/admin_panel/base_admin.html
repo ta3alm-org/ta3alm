@@ -366,6 +366,10 @@
            class="sidebar-link {% block nav_users %}{% endblock %}">
             <i class="bi bi-people-fill"></i> إدارة المستخدمين
         </a>
+        <a href="{% url 'admin_panel:security_dashboard' %}"
+           class="sidebar-link {% block nav_security %}{% endblock %}">
+            <i class="bi bi-shield-lock-fill"></i> مركز أمان الأجهزة والحماية
+        </a>
         {% endif %}
 
         {% if can_manage_support %}

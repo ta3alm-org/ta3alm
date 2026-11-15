@@ -1,0 +1,731 @@
+"""
+api_v1/views_security.py
+نقاط النهاية الكاملة لإدارة الأجهزة، الجلسات، تقارير أحداث الشاشة والعبث،
+وإجراءات مسؤولي المنصة (الحظر، فك الحظر، إنهاء الجلسات، سياسات الحدود).
+"""
+from __future__ import annotations
+
+from django.contrib.auth import get_user_model
+from django.db.models import Q
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from dashboard_admin.models import AuditLog
+
+from .device_security_service import (
+    block_device_admin,
+    extract_network_context,
+    get_user_device_limit,
+    prune_expired_telemetry,
+    record_device_activity,
+    record_security_event,
+    register_or_update_device,
+    revoke_user_device,
+    serialize_device_summary,
+    unblock_device_admin,
+)
+from .models import (
+    DeviceBlock,
+    DeviceSecurityEvent,
+    DeviceSession,
+    DeviceTrustStatus,
+    PlaybackSession,
+    RegisteredDevice,
+    SecurityPolicyConfig,
+)
+from .permissions import IsNotBanned, IsPlatformAdmin
+
+User = get_user_model()
+
+ALLOWED_CLIENT_REPORT_EVENTS = {
+    'screenshot_attempt': ('medium', 20),
+    'screen_recording_detected': ('high', 35),
+    'display_capture_detected': ('high', 35),
+    'debugger_detected': ('critical', 75),
+    'tamper_detected': ('critical', 80),
+    'integrity_failure': ('high', 65),
+    'unfamiliar_device_report': ('high', 40),
+}
+
+
+def _is_platform_admin(user) -> bool:
+    if not user or not getattr(user, 'is_authenticated', False):
+        return False
+    if getattr(user, 'is_superuser', False):
+        return True
+    profile = getattr(user, 'admin_profile', None)
+    return bool(profile and profile.is_active_admin)
+
+
+def _extract_client_installation_id(request) -> str:
+    return str(
+        request.data.get('installation_id')
+        or request.data.get('device_id')
+        or request.META.get('HTTP_X_DEVICE_ID')
+        or request.META.get('HTTP_X_INSTALLATION_ID')
+        or ''
+    ).strip()
+
+
+def _serialize_event(evt: DeviceSecurityEvent) -> dict:
+    return {
+        'id': evt.id,
+        'event_uuid': str(evt.event_uuid),
+        'user_id': evt.user_id,
+        'username': evt.user.username if evt.user else None,
+        'device_id': evt.device_id,
+        'installation_id': evt.installation_id,
+        'event_type': evt.event_type,
+        'severity': evt.severity,
+        'risk_score': evt.risk_score,
+        'ip_address': evt.ip_address,
+        'country_code': evt.country_code,
+        'region_name': evt.region_name,
+        'action_taken': evt.action_taken,
+        'investigation_status': evt.investigation_status,
+        'investigation_notes': evt.investigation_notes,
+        'details': evt.details,
+        'created_at': evt.created_at.isoformat() if evt.created_at else None,
+    }
+
+
+def _serialize_session(sess: DeviceSession, current_inst_id: str = '') -> dict:
+    return {
+        'id': sess.id,
+        'session_uuid': str(sess.session_uuid),
+        'user_id': sess.user_id,
+        'device_id': sess.device_id,
+        'device_name': sess.device.device_name if sess.device else '',
+        'installation_id': sess.installation_id,
+        'is_current_device': bool(current_inst_id and sess.installation_id == current_inst_id),
+        'status': sess.status,
+        'ip_address': sess.ip_address,
+        'country_code': sess.country_code,
+        'region_name': sess.region_name,
+        'isp_name': sess.isp_name,
+        'is_vpn_or_proxy': sess.is_vpn_or_proxy,
+        'started_at': sess.started_at.isoformat() if sess.started_at else None,
+        'last_seen_at': sess.last_seen_at.isoformat() if sess.last_seen_at else None,
+        'expires_at': sess.expires_at.isoformat() if sess.expires_at else None,
+        'revoked_reason': sess.revoked_reason,
+    }
+
+
+def _serialize_policy(policy: SecurityPolicyConfig) -> dict:
+    return {
+        'student_device_limit': policy.student_device_limit,
+        'teacher_device_limit': policy.teacher_device_limit,
+        'assistant_device_limit': policy.assistant_device_limit,
+        'max_concurrent_sessions': policy.max_concurrent_sessions,
+        'max_concurrent_playback': policy.max_concurrent_playback,
+        'risk_threshold_medium': policy.risk_threshold_medium,
+        'risk_threshold_high': policy.risk_threshold_high,
+        'risk_threshold_critical': policy.risk_threshold_critical,
+        'rapid_login_threshold_5m': policy.rapid_login_threshold_5m,
+        'rapid_geo_kmh_threshold': policy.rapid_geo_kmh_threshold,
+        'event_retention_days': policy.event_retention_days,
+        'enforce_device_limits': policy.enforce_device_limits,
+        'enforce_screen_capture_policy': policy.enforce_screen_capture_policy,
+        'updated_at': policy.updated_at.isoformat() if policy.updated_at else None,
+    }
+
+
+class SecurityDeviceRegisterAPIView(APIView):
+    """تسجيل أو تحديث جهاز المستخدم وتوليد بصمة الخادم وجلسة الجهاز."""
+    permission_classes = [IsAuthenticated, IsNotBanned]
+
+    def post(self, request):
+        installation_id = _extract_client_installation_id(request)
+        raw_info = request.data.get('device_info')
+        if not isinstance(raw_info, dict):
+            raw_info = {
+                k: request.data.get(k)
+                for k in (
+                    'device_name', 'manufacturer', 'model', 'os_name', 'android_version',
+                    'api_level', 'cpu_arch', 'cpu_info', 'gpu_renderer', 'gpu_vendor',
+                    'screen_resolution', 'app_version', 'app_build_number', 'package_name',
+                    'signing_cert_sha256', 'apk_cert_sha256', 'installer_source',
+                    'installer_package', 'integrity_signals',
+                )
+                if k in request.data
+            }
+
+        token_jti = ''
+        if isinstance(request.auth, dict):
+            token_jti = str(request.auth.get('jti') or '')
+
+        outcome = register_or_update_device(
+            request=request,
+            user=request.user,
+            installation_id=installation_id,
+            device_info=raw_info,
+            token_jti=token_jti,
+        )
+        clean_payload = {k: v for k, v in outcome.items() if k not in ('device_obj', 'session_obj')}
+        http_status = status.HTTP_200_OK if clean_payload.get('allowed') else status.HTTP_403_FORBIDDEN
+        return Response(clean_payload, status=http_status)
+
+
+class SecurityDeviceListAPIView(APIView):
+    """عرض الأجهزة الموثوقة للمستخدم الحالي (أو لمستخدم محدد عند الطلب من مسؤول)."""
+    permission_classes = [IsAuthenticated, IsNotBanned]
+
+    def get(self, request):
+        target_user = request.user
+        req_user_id = request.query_params.get('user_id')
+        if req_user_id and str(req_user_id) != str(request.user.id):
+            if not _is_platform_admin(request.user):
+                return Response({'error': 'غير مصرح لك بعرض أجهزة مستخدم آخر.'}, status=status.HTTP_403_FORBIDDEN)
+            target_user = get_object_or_404(User, id=req_user_id)
+
+        current_inst_id = (
+            request.META.get('HTTP_X_DEVICE_ID')
+            or request.META.get('HTTP_X_INSTALLATION_ID')
+            or ''
+        ).strip()
+
+        devices_qs = RegisteredDevice.objects.filter(user=target_user).order_by('-is_active', '-last_active_at')
+        limit = get_user_device_limit(target_user)
+        active_count = devices_qs.filter(is_active=True).exclude(
+            trust_status__in=[DeviceTrustStatus.REVOKED, DeviceTrustStatus.BLOCKED]
+        ).count()
+
+        return Response({
+            'device_limit': limit,
+            'active_count': active_count,
+            'current_installation_id': current_inst_id,
+            'devices': [serialize_device_summary(d, current_inst_id) for d in devices_qs],
+        })
+
+
+class SecurityDeviceRevokeAPIView(APIView):
+    """إلغاء جهاز أو تسجيل خروجه أو الإبلاغ عنه كجهاز غير معروف مع فحص صارم للملكية (Anti-IDOR)."""
+    permission_classes = [IsAuthenticated, IsNotBanned]
+
+    def post(self, request, device_id):
+        device = get_object_or_404(RegisteredDevice, id=device_id)
+        is_admin = _is_platform_admin(request.user)
+
+        if device.user_id != request.user.id and not is_admin:
+            record_security_event(
+                event_type='cross_account_device_idor_attempt',
+                severity='high',
+                risk_score=80,
+                user=request.user,
+                device=device,
+                installation_id=_extract_client_installation_id(request) or device.installation_id,
+                request=request,
+                action_taken='denied_idor',
+                details={'target_device_id': device.id, 'target_owner_id': device.user_id},
+            )
+            return Response(
+                {'error': 'غير مصرح لك بالتحكم في جهاز تابع لحساب آخر.', 'code': 'FORBIDDEN_DEVICE_OWNER'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        action = str(request.data.get('action') or 'revoke').strip().lower()
+        if action not in ('revoke', 'logout', 'report_unfamiliar'):
+            return Response(
+                {'error': 'قيمة action غير صالحة. القيم المسموحة: revoke, logout, report_unfamiliar.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        reason = str(request.data.get('reason') or '').strip()
+        updated = revoke_user_device(
+            device=device,
+            actor=request.user,
+            request=request,
+            mode=action,
+            reason=reason,
+        )
+        current_inst_id = (request.META.get('HTTP_X_DEVICE_ID') or '').strip()
+        return Response({
+            'message': 'تم تنفيذ الإجراء على الجهاز بنجاح.',
+            'action': action,
+            'device': serialize_device_summary(updated, current_inst_id),
+        })
+
+
+class SecurityDeviceVerifyAPIView(APIView):
+    """إعادة التحقق من الجهاز المقيّد/المعلّق واستعادة ثقته بعد تأكيد كلمة المرور أو موافقة المسؤول."""
+    permission_classes = [IsAuthenticated, IsNotBanned]
+
+    def post(self, request, device_id):
+        device = get_object_or_404(RegisteredDevice, id=device_id)
+        is_admin = _is_platform_admin(request.user)
+
+        if device.user_id != request.user.id and not is_admin:
+            return Response(
+                {'error': 'غير مصرح لك بالتحقق من جهاز تابع لحساب آخر.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if device.trust_status == DeviceTrustStatus.BLOCKED and not is_admin:
+            return Response(
+                {'error': 'هذا الجهاز محظور إدارياً ولا يمكن تفعيله ذاتياً.', 'code': 'DEVICE_BLOCKED'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if not is_admin:
+            if request.user.has_usable_password():
+                password = str(request.data.get('password') or '')
+                if not password or not request.user.check_password(password):
+                    return Response(
+                        {'error': 'كلمة المرور غير صحيحة لإعادة توثيق الجهاز.', 'code': 'INVALID_PASSWORD'},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+            else:
+                confirm_email = str(request.data.get('email') or '').strip().lower()
+                if not confirm_email or confirm_email != (request.user.email or '').strip().lower():
+                    return Response(
+                        {'error': 'يرجى تأكيد البريد الإلكتروني لإعادة توثيق الجهاز.', 'code': 'EMAIL_CONFIRMATION_REQUIRED'},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+
+        device.trust_status = DeviceTrustStatus.TRUSTED
+        device.is_verified = True
+        device.is_active = True
+        device.requires_reauth = False
+        device.risk_score = 0
+        device.risk_level = 'low'
+        device.save(
+            update_fields=['trust_status', 'is_verified', 'is_active', 'requires_reauth', 'risk_score', 'risk_level']
+        )
+
+        record_device_activity(
+            request=request,
+            user=device.user,
+            device=device,
+            activity_type='device_reverified',
+            metadata={'verified_by_admin': is_admin},
+        )
+        record_security_event(
+            event_type='device_reverified',
+            severity='low',
+            risk_score=0,
+            user=device.user,
+            device=device,
+            request=request,
+            action_taken='restored_trusted',
+            details={'verified_by_admin': is_admin},
+        )
+        return Response({
+            'message': 'تم التحقق من الجهاز واستعادة ثقته بنجاح.',
+            'device': serialize_device_summary(device),
+        })
+
+
+class SecurityEventsListAPIView(APIView):
+    """سجل أحداث الأمان والمخاطر للمستخدم الحالي أو لجميع المستخدمين للمسؤولين."""
+    permission_classes = [IsAuthenticated, IsNotBanned]
+
+    def get(self, request):
+        is_admin = _is_platform_admin(request.user)
+        qs = DeviceSecurityEvent.objects.select_related('user', 'device').order_by('-created_at')
+
+        if is_admin:
+            user_id = request.query_params.get('user_id')
+            if user_id:
+                qs = qs.filter(user_id=user_id)
+        else:
+            qs = qs.filter(user=request.user)
+
+        severity = request.query_params.get('severity')
+        if severity:
+            qs = qs.filter(severity=severity)
+        event_type = request.query_params.get('event_type')
+        if event_type:
+            qs = qs.filter(event_type=event_type)
+        inv_status = request.query_params.get('investigation_status')
+        if inv_status:
+            qs = qs.filter(investigation_status=inv_status)
+        inst_id = request.query_params.get('installation_id')
+        if inst_id:
+            qs = qs.filter(installation_id=inst_id)
+
+        events = [_serialize_event(e) for e in qs[:100]]
+        return Response({'count': len(events), 'events': events})
+
+
+class SecuritySessionsListAPIView(APIView):
+    """استعراض أو إنهاء جلسات الأجهزة (DeviceSession)."""
+    permission_classes = [IsAuthenticated, IsNotBanned]
+
+    def get(self, request):
+        is_admin = _is_platform_admin(request.user)
+        current_inst_id = (request.META.get('HTTP_X_DEVICE_ID') or '').strip()
+        qs = DeviceSession.objects.select_related('device', 'user').order_by('-last_seen_at')
+
+        if is_admin:
+            req_user_id = request.query_params.get('user_id')
+            if req_user_id:
+                qs = qs.filter(user_id=req_user_id)
+        else:
+            qs = qs.filter(user=request.user)
+
+        sess_status = request.query_params.get('status')
+        if sess_status:
+            qs = qs.filter(status=sess_status)
+
+        return Response({
+            'sessions': [_serialize_session(s, current_inst_id) for s in qs[:100]],
+        })
+
+    def post(self, request):
+        session_uuid = str(request.data.get('session_uuid') or request.data.get('session_id') or '').strip()
+        if not session_uuid:
+            return Response({'error': 'معرّف الجلسة session_uuid مطلوب.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        sess = get_object_or_404(DeviceSession, session_uuid=session_uuid)
+        is_admin = _is_platform_admin(request.user)
+        if sess.user_id != request.user.id and not is_admin:
+            return Response({'error': 'غير مصرح لك بإنهاء جلسة حساب آخر.'}, status=status.HTTP_403_FORBIDDEN)
+
+        sess.status = 'revoked'
+        sess.ended_at = timezone.now()
+        sess.revoked_reason = str(request.data.get('reason') or ('revoked_by_admin' if is_admin else 'revoked_by_owner'))[:160]
+        sess.save(update_fields=['status', 'ended_at', 'revoked_reason'])
+
+        record_security_event(
+            event_type='device_session_revoked',
+            severity='medium',
+            risk_score=20,
+            user=sess.user,
+            device=sess.device,
+            installation_id=sess.installation_id,
+            request=request,
+            action_taken='session_revoked',
+            details={'session_uuid': str(sess.session_uuid), 'actor_id': request.user.id},
+        )
+        return Response({'message': 'تم إنهاء الجلسة بنجاح.', 'session': _serialize_session(sess)})
+
+
+class SecurityEventReportAPIView(APIView):
+    """استقبال بلاغات التطبيق (محاولة لقطة شاشة، تسجيل شاشة، عرض خارجي، أداة تصحيح/حقن)."""
+    permission_classes = [IsAuthenticated, IsNotBanned]
+
+    def post(self, request):
+        raw_type = str(request.data.get('event_type') or '').strip().lower()
+        if raw_type not in ALLOWED_CLIENT_REPORT_EVENTS:
+            return Response(
+                {
+                    'error': 'نوع الحدث غير معروف.',
+                    'allowed_types': sorted(ALLOWED_CLIENT_REPORT_EVENTS.keys()),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        severity, base_risk = ALLOWED_CLIENT_REPORT_EVENTS[raw_type]
+        inst_id = _extract_client_installation_id(request)
+        screen_name = str(request.data.get('screen_name') or '').strip()[:120]
+        details = request.data.get('details')
+        if not isinstance(details, dict):
+            details = {}
+        details = {**details, 'screen_name': screen_name, 'client_reported': True}
+
+        net_ctx = extract_network_context(request)
+        device = (
+            RegisteredDevice.objects.filter(user=request.user, installation_id=inst_id).first()
+            if inst_id
+            else None
+        )
+
+        record_device_activity(
+            request=request,
+            user=request.user,
+            device=device,
+            activity_type=raw_type,
+            net_ctx=net_ctx,
+            metadata=details,
+        )
+
+        action_taken = 'logged'
+        if device and device.trust_status != DeviceTrustStatus.BLOCKED:
+            new_score = min(max(device.risk_score, base_risk) if severity == 'critical' else device.risk_score + (base_risk // 2), 100)
+            device.risk_score = new_score
+            if new_score >= 85 or severity == 'critical':
+                device.risk_level = 'critical'
+                device.trust_status = DeviceTrustStatus.RESTRICTED
+                device.requires_reauth = True
+                action_taken = 'temp_restricted'
+            elif new_score >= 60 or raw_type in ('screen_recording_detected', 'display_capture_detected'):
+                device.risk_level = 'high'
+                if device.trust_status == DeviceTrustStatus.TRUSTED:
+                    device.trust_status = DeviceTrustStatus.SUSPICIOUS
+                action_taken = 'flagged_suspicious'
+            elif new_score >= 30:
+                device.risk_level = 'medium'
+                action_taken = 'monitored'
+            device.save(update_fields=['risk_score', 'risk_level', 'trust_status', 'requires_reauth'])
+
+        evt = record_security_event(
+            event_type=raw_type,
+            severity=severity,
+            risk_score=device.risk_score if device else base_risk,
+            user=request.user,
+            device=device,
+            installation_id=inst_id,
+            request=request,
+            net_ctx=net_ctx,
+            action_taken=action_taken,
+            details=details,
+            notify_user=severity in ('high', 'critical'),
+            notify_title='تنبيه حماية المحتوى',
+            notify_message='تم رصد محاولة التقاط أو تسجيل شاشة أو نشاط غير معتاد أثناء استعراض محتوى محمي.',
+        )
+
+        policy = SecurityPolicyConfig.load()
+        return Response(
+            {
+                'recorded': True,
+                'event': _serialize_event(evt),
+                'action_taken': action_taken,
+                'screen_capture_policy_enforced': policy.enforce_screen_capture_policy,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class SecurityAdminActionAPIView(APIView):
+    """إجراءات مسؤولي المنصة لإدارة حظر الأجهزة والجلسات والسياسات والأحداث الأمنية."""
+    permission_classes = [IsPlatformAdmin]
+
+    def get(self, request):
+        now = timezone.now()
+        policy = SecurityPolicyConfig.load()
+        return Response({
+            'metrics': {
+                'total_devices': RegisteredDevice.objects.count(),
+                'active_devices': RegisteredDevice.objects.filter(is_active=True).count(),
+                'suspicious_devices': RegisteredDevice.objects.filter(
+                    trust_status__in=[DeviceTrustStatus.SUSPICIOUS, DeviceTrustStatus.RESTRICTED]
+                ).count(),
+                'blocked_devices': DeviceBlock.objects.filter(is_active=True).count(),
+                'active_sessions': DeviceSession.objects.filter(status='active', expires_at__gt=now).count(),
+                'open_security_events': DeviceSecurityEvent.objects.filter(investigation_status='open').count(),
+                'critical_events': DeviceSecurityEvent.objects.filter(severity='critical', investigation_status='open').count(),
+            },
+            'policy': _serialize_policy(policy),
+        })
+
+    def post(self, request):
+        action = str(request.data.get('action') or '').strip()
+        if not action:
+            return Response({'error': 'حقل action مطلوب.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if action == 'block_device':
+            device_id = request.data.get('device_id')
+            inst_id = str(request.data.get('installation_id') or '').strip()
+            device = RegisteredDevice.objects.filter(id=device_id).first() if device_id else None
+            if not device and inst_id:
+                device = RegisteredDevice.objects.filter(installation_id=inst_id).first()
+            if not device and not inst_id:
+                return Response({'error': 'يجب تحديد device_id أو installation_id.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            block_type = 'temporary' if str(request.data.get('block_type') or 'permanent') == 'temporary' else 'permanent'
+            duration_hours = int(request.data.get('duration_hours') or 24)
+            reason = str(request.data.get('reason') or 'حظر إداري بسبب مخالفة سياسات الأمان').strip()
+
+            blk = block_device_admin(
+                device=device,
+                installation_id=inst_id or (device.installation_id if device else ''),
+                admin_user=request.user,
+                block_type=block_type,
+                reason=reason,
+                duration_hours=duration_hours,
+                request=request,
+            )
+            AuditLog.log(
+                request,
+                AuditLog.ACTION_BLOCK_DEVICE,
+                target_label=blk.installation_id,
+                target_id=device.id if device else None,
+                details={'block_id': blk.id, 'block_type': block_type, 'reason': reason},
+            )
+            return Response({
+                'message': 'تم حظر الجهاز وإبطال جميع جلساته بنجاح.',
+                'block': {
+                    'id': blk.id,
+                    'installation_id': blk.installation_id,
+                    'block_type': blk.block_type,
+                    'is_active': blk.is_active,
+                    'expires_at': blk.expires_at.isoformat() if blk.expires_at else None,
+                    'reason': blk.reason,
+                },
+            })
+
+        if action == 'unblock_device':
+            block_id = request.data.get('block_id')
+            device_id = request.data.get('device_id')
+            inst_id = str(request.data.get('installation_id') or '').strip()
+            reason = str(request.data.get('reason') or 'رفع الحظر بواسطة مسؤول المنصة').strip()
+
+            device = RegisteredDevice.objects.filter(id=device_id).first() if device_id else None
+            if block_id and not inst_id:
+                blk = get_object_or_404(DeviceBlock, id=block_id)
+                inst_id = blk.installation_id
+                if not device:
+                    device = blk.device
+            if not device and inst_id:
+                device = RegisteredDevice.objects.filter(installation_id=inst_id).first()
+            if not inst_id and device:
+                inst_id = device.installation_id
+            if not inst_id:
+                return Response({'error': 'يجب تحديد block_id أو device_id أو installation_id.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            count = unblock_device_admin(
+                device=device,
+                installation_id=inst_id,
+                admin_user=request.user,
+                reason=reason,
+                request=request,
+            )
+            AuditLog.log(
+                request,
+                AuditLog.ACTION_UNBLOCK_DEVICE,
+                target_label=inst_id,
+                target_id=device.id if device else None,
+                details={'unblocked_count': count, 'reason': reason},
+            )
+            return Response({'message': 'تم فك حظر الجهاز بنجاح.', 'unblocked_count': count})
+
+        if action == 'revoke_session':
+            session_uuid = str(request.data.get('session_uuid') or request.data.get('session_id') or '').strip()
+            sess = get_object_or_404(DeviceSession, session_uuid=session_uuid)
+            sess.status = 'revoked'
+            sess.ended_at = timezone.now()
+            sess.revoked_reason = str(request.data.get('reason') or 'revoked_by_admin')[:160]
+            sess.save(update_fields=['status', 'ended_at', 'revoked_reason'])
+            AuditLog.log(
+                request,
+                AuditLog.ACTION_REVOKE_SESSION,
+                target_label=str(sess.session_uuid),
+                target_id=sess.user_id,
+                details={'installation_id': sess.installation_id, 'reason': sess.revoked_reason},
+            )
+            return Response({'message': 'تم إنهاء الجلسة بنجاح.', 'session': _serialize_session(sess)})
+
+        if action == 'revoke_all_user_sessions':
+            user_id = request.data.get('user_id')
+            target_user = get_object_or_404(User, id=user_id)
+            now = timezone.now()
+            ds_count = DeviceSession.objects.filter(user=target_user, status='active').update(
+                status='revoked',
+                ended_at=now,
+                revoked_reason='revoked_all_by_admin',
+            )
+            ps_count = PlaybackSession.objects.filter(user=target_user, status='active').update(
+                status='revoked',
+                revoked_reason='revoked_all_by_admin',
+            )
+            AuditLog.log(
+                request,
+                AuditLog.ACTION_REVOKE_SESSION,
+                target_label=target_user.username,
+                target_id=target_user.id,
+                details={'device_sessions_revoked': ds_count, 'playback_sessions_revoked': ps_count},
+            )
+            return Response({
+                'message': 'تم إنهاء كافة جلسات المستخدم.',
+                'device_sessions_revoked': ds_count,
+                'playback_sessions_revoked': ps_count,
+            })
+
+        if action == 'force_reauth':
+            device = get_object_or_404(RegisteredDevice, id=request.data.get('device_id'))
+            now = timezone.now()
+            device.requires_reauth = True
+            if device.trust_status != DeviceTrustStatus.BLOCKED:
+                device.trust_status = DeviceTrustStatus.PENDING
+            device.save(update_fields=['requires_reauth', 'trust_status'])
+            DeviceSession.objects.filter(device=device, status='active').update(
+                status='revoked',
+                ended_at=now,
+                revoked_reason='force_reauth_by_admin',
+            )
+            AuditLog.log(
+                request,
+                AuditLog.ACTION_REVOKE_SESSION,
+                target_label=device.installation_id,
+                target_id=device.id,
+                details={'action': 'force_reauth'},
+            )
+            return Response({'message': 'تم فرض إعادة التحقق على الجهاز.', 'device': serialize_device_summary(device)})
+
+        if action in ('mark_false_positive', 'update_event_status'):
+            event = get_object_or_404(DeviceSecurityEvent, id=request.data.get('event_id'))
+            new_status = (
+                'false_positive'
+                if action == 'mark_false_positive'
+                else str(request.data.get('investigation_status') or 'resolved').strip()
+            )
+            if new_status not in ('open', 'investigating', 'resolved', 'false_positive'):
+                return Response({'error': 'حالة تحقيق غير صالحة.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            notes = str(request.data.get('investigation_notes') or request.data.get('notes') or '').strip()
+            event.investigation_status = new_status
+            if notes:
+                event.investigation_notes = notes
+            event.reviewed_by = request.user
+            event.reviewed_at = timezone.now()
+            event.save(update_fields=['investigation_status', 'investigation_notes', 'reviewed_by', 'reviewed_at'])
+
+            if new_status == 'false_positive' and event.device_id:
+                dev = event.device
+                if dev and dev.trust_status != DeviceTrustStatus.BLOCKED:
+                    dev.trust_status = DeviceTrustStatus.TRUSTED
+                    dev.requires_reauth = False
+                    dev.risk_score = max(dev.risk_score - 40, 0)
+                    dev.risk_level = 'low' if dev.risk_score < 30 else ('medium' if dev.risk_score < 60 else 'high')
+                    dev.save(update_fields=['trust_status', 'requires_reauth', 'risk_score', 'risk_level'])
+
+            return Response({'message': 'تم تحديث حالة الحدث الأمني.', 'event': _serialize_event(event)})
+
+        if action == 'update_policy_config':
+            policy = SecurityPolicyConfig.load()
+            int_fields = (
+                'student_device_limit',
+                'teacher_device_limit',
+                'assistant_device_limit',
+                'max_concurrent_sessions',
+                'max_concurrent_playback',
+                'risk_threshold_medium',
+                'risk_threshold_high',
+                'risk_threshold_critical',
+                'rapid_login_threshold_5m',
+                'rapid_geo_kmh_threshold',
+                'event_retention_days',
+            )
+            for field in int_fields:
+                if field in request.data and request.data[field] is not None:
+                    setattr(policy, field, max(int(request.data[field]), 1))
+            for bfield in ('enforce_device_limits', 'enforce_screen_capture_policy'):
+                if bfield in request.data:
+                    raw_b = request.data[bfield]
+                    setattr(policy, bfield, raw_b if isinstance(raw_b, bool) else str(raw_b).lower() in ('1', 'true', 'yes'))
+            policy.save()
+            AuditLog.log(
+                request,
+                AuditLog.ACTION_SECURITY_POLICY,
+                target_label='SecurityPolicyConfig',
+                target_id=policy.id,
+                details=_serialize_policy(policy),
+            )
+            return Response({'message': 'تم تحديث إعدادات السياسة الأمنية بنجاح.', 'policy': _serialize_policy(policy)})
+
+        if action == 'prune_telemetry':
+            days = request.data.get('retention_days')
+            result = prune_expired_telemetry(int(days) if days is not None else None)
+            AuditLog.log(
+                request,
+                AuditLog.ACTION_SECURITY_POLICY,
+                target_label='TelemetryPrune',
+                details=result,
+            )
+            return Response({'message': 'تم تنفيذ سياسة الاحتفاظ بالسجلات وتنظيف البيانات المنتهية.', 'result': result})
+
+        return Response({'error': f'إجراء غير معروف: {action}'}, status=status.HTTP_400_BAD_REQUEST)

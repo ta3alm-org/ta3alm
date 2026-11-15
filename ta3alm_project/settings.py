@@ -121,6 +121,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'ta3alm_project.middleware.TokenAuthMiddleware',
     'ta3alm_project.middleware.BanMiddleware',
+    'ta3alm_project.middleware.EmailVerificationMiddleware',
+    'ta3alm_project.middleware.AppVersionEnforcementMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'allauth.account.middleware.AccountMiddleware',

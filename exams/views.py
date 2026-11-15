@@ -83,9 +83,7 @@ def exam_manage(request, exam_id):
     # ==========================================
     # 3. التحقق من صلاحية الصور (الباقة)
     # ==========================================
-    allow_images = False
-    if teacher and teacher.current_plan and teacher.current_plan.allow_question_images:
-        allow_images = True
+    allow_images = True
 
     # ==========================================
     # 4. معالجة إضافة سؤال (POST)
@@ -154,9 +152,7 @@ def add_question_page(request, exam_id):
         # (يمكنك إضافة نفس التحقق من الصلاحيات هنا للحزم)
 
     # التحقق من صلاحية الصور
-    allow_images = False
-    if teacher and teacher.current_plan and teacher.current_plan.allow_question_images:
-        allow_images = True
+    allow_images = True
 
     if request.method == 'POST':
         form = QuestionForm(request.POST, request.FILES)
@@ -200,9 +196,7 @@ def edit_question_page(request, question_id):
         if pkg: teacher = pkg.teacher
 
     # التحقق من صلاحية الصور
-    allow_images = False
-    if teacher and teacher.current_plan and teacher.current_plan.allow_question_images:
-        allow_images = True
+    allow_images = True
 
     if request.method == 'POST':
         form = QuestionForm(request.POST, request.FILES, instance=question)
@@ -339,8 +333,10 @@ def edit_question(request, question_id):
 
     # 3. معالجة التعديل (POST)
     if request.method == 'POST':
-        form = QuestionForm(request.POST, instance=question)
+        form = QuestionForm(request.POST, request.FILES, instance=question)
         if form.is_valid():
+            if request.POST.get('image-clear') == 'on':
+                question.image = None
             form.save()
             messages.success(request, "تم تعديل السؤال بنجاح.")
             return redirect('exam_manage', exam_id=exam.id)
@@ -355,9 +351,7 @@ def edit_question(request, question_id):
         pkg = exam.packages.first()
         if pkg: teacher = pkg.teacher
 
-    allow_images = False
-    if teacher and teacher.current_plan and teacher.current_plan.allow_question_images:
-        allow_images = True
+    allow_images = True
 
     # تمرير المتغير للكونتكس
     
@@ -418,9 +412,7 @@ def exam_manage(request, exam_id):
         return render(request, 'students/teacher_unavailable.html', {'teacher_name': teacher.user.first_name})
 
     # 3. تحديد صلاحية الصور
-    allow_images = False
-    if teacher and teacher.current_plan and teacher.current_plan.allow_question_images:
-        allow_images = True
+    allow_images = True
 
     # 4. معالجة إضافة الأسئلة (من المودال في نفس الصفحة - اختياري)
     form = QuestionForm() # للعرض فقط، الإضافة الفعلية في الصفحة المنفصلة

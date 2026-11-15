@@ -3,7 +3,7 @@ ta3alm_project/middleware.py — Middleware المخصص للمنصة
 """
 from django.shortcuts import render, redirect
 from django.urls import reverse, resolve, Resolver404
-from django.http import Http404
+from django.http import Http404, JsonResponse
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import login
 from core.models import SiteSetting
@@ -144,5 +144,98 @@ class MaintenanceMiddleware:
 
         if is_maintenance and not (request.user.is_authenticated and request.user.is_superuser):
             return render(request, 'core/maintenance.html', status=503)
+
+        return self.get_response(request)
+
+
+class EmailVerificationMiddleware:
+    """
+    يمنع أي حساب ويب مسجل دخول ولم يُؤكد بالـ OTP/البريد الإلكتروني من الدخول لأي صفحة
+    في المنصة (ما عدا مسارات التأكيد وتسجيل الخروج والإدارة والملفات الثابتة).
+    """
+    ALLOWED_PREFIXES = (
+        '/verify-email/',
+        '/accounts/logout/',
+        '/banned/',
+        '/static/',
+        '/media/',
+        '/admin/',
+        '/admin-panel/',
+        '/i18n/',
+        '/.well-known/',
+    )
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if request.path.startswith(('/api/', '/teacher/api/')):
+            return self.get_response(request)
+
+        path = request.path
+        if path.startswith('/ar/') or path.startswith('/en/'):
+            path = path[3:]
+
+        if any(path.startswith(prefix) for prefix in self.ALLOWED_PREFIXES):
+            return self.get_response(request)
+
+        user = getattr(request, 'user', None)
+        if (
+            user is not None
+            and user.is_authenticated
+            and not getattr(user, 'is_banned', False)
+            and hasattr(user, 'requires_email_verification')
+            and user.requires_email_verification()
+        ):
+            request.session['pending_verification_user_id'] = user.id
+            return redirect('verify_email_page')
+
+        return self.get_response(request)
+
+
+class AppVersionEnforcementMiddleware:
+    """
+    يمنع نسخ تطبيق الأندرويد القديمة (أقل من الحد المطلوب في SiteSetting) من استخدام الـ API
+    ويعيد استجابة 426 Upgrade Required مع بيانات التحديث الإجباري ورابط APK.
+    """
+    EXEMPT_API_PREFIXES = (
+        '/api/v1/public/metadata/',
+        '/api/v1/public/app-version/',
+        '/api/v1/public/app-update/download/',
+        '/api/v1/schema/',
+        '/api/v1/docs/',
+    )
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if not request.path.startswith('/api/v1/'):
+            return self.get_response(request)
+
+        if any(request.path.startswith(prefix) for prefix in self.EXEMPT_API_PREFIXES):
+            return self.get_response(request)
+
+        raw_build = str(request.META.get('HTTP_X_APP_BUILD', '')).strip()
+        if not raw_build or not raw_build.isdigit():
+            return self.get_response(request)
+
+        client_build = int(raw_build)
+        try:
+            site_settings = SiteSetting.load()
+            min_required = site_settings.get_effective_min_version_code()
+        except Exception:
+            return self.get_response(request)
+
+        if client_build < min_required:
+            payload = {
+                'error': 'يتوفر تحديث إجباري جديد للتطبيق. يرجى تنزيل وتثبيت أحدث إصدار للمتابعة.',
+                'code': 'APP_UPDATE_REQUIRED',
+                'app_update': site_settings.build_app_update_payload(
+                    request=request,
+                    client_version_code=client_build,
+                ),
+            }
+            return JsonResponse(payload, status=426)
 
         return self.get_response(request)

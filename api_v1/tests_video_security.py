@@ -4,20 +4,26 @@ api_v1/tests_video_security.py
 تتبع التقدم والعلامات المرجعية، وحماية Google Play Integrity.
 """
 from datetime import timedelta
+from decimal import Decimal
 import json
+import shutil
+import tempfile
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core import mail
+from django.core.cache import cache
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
 from accounts.models import EmailVerification, StudentProfile
-from core.models import Subject
-from students.models import Enrollment, PackageEnrollment
-from teachers.models import CoursePackage, Group, Lecture, SubscriptionPlan, TeacherProfile, VideoCode
+from core.models import ManualPayment, SiteSetting, Subject, reconcile_teacher_wallet
+from exams.models import Exam, Question
+from students.models import Enrollment, PackageEnrollment, VideoViewTracking
+from teachers.models import CoursePackage, Group, Lecture, SubscriptionPlan, TeacherProfile, VideoCode, Wallet
 
 from api_v1.integrity_service import compute_request_hash
 from api_v1.models import (
@@ -36,6 +42,7 @@ User = get_user_model()
 
 class VideoSecurityAndIntegrityTests(APITestCase):
     def setUp(self):
+        cache.clear()
         self.subject = Subject.objects.create(name='Physics')
         self.plan = SubscriptionPlan.objects.create(
             name='Pro Plan',
@@ -117,6 +124,13 @@ class VideoSecurityAndIntegrityTests(APITestCase):
             code='SEC123',
             max_views=3,
         )
+        for u in (self.teacher_user, self.student_user, self.other_student_user):
+            EmailVerification.objects.create(
+                user=u,
+                code='123456',
+                is_verified=True,
+                expires_at=timezone.now() + timedelta(days=1),
+            )
 
     def test_unenrolled_student_cannot_authorize_video(self):
         self.client.force_authenticate(user=self.other_student_user)
@@ -337,10 +351,11 @@ class VideoSecurityAndIntegrityTests(APITestCase):
 
         self.assertEqual(resp.status_code, 200)
         body = resp.json()
-        self.assertEqual(len(body), 1)
+        self.assertEqual(len(body), 2)
         self.assertEqual(body[0]['relation'], ['delegate_permission/common.handle_all_urls'])
         self.assertEqual(body[0]['target']['package_name'], 'online.ta3alm.ta3alm_flutter')
         self.assertEqual(body[0]['target']['sha256_cert_fingerprints'], [':'.join(['AB'] * 32)])
+        self.assertEqual(body[1]['target']['package_name'], 'online.ta3alm.ta3alm_flutter.debug')
 
     def test_privacy_and_terms_pages_accessible(self):
         for url in ('/privacy/', '/privacy-policy/', '/terms/', '/ar/privacy/', '/en/terms/'):
@@ -411,3 +426,199 @@ class VideoSecurityAndIntegrityTests(APITestCase):
         verification.refresh_from_db()
         self.assertTrue(verification.is_verified)
         self.assertEqual(self.client.session.get('_auth_user_id'), str(user.pk))
+
+
+class PlatformFinancialAndContentFixesTests(APITestCase):
+    def setUp(self):
+        cache.clear()
+        self.media_dir = tempfile.mkdtemp()
+        self.subject = Subject.objects.create(name='Mathematics')
+        self.plan = SubscriptionPlan.objects.create(
+            name='Basic Plan',
+            price=100,
+            student_limit=500,
+            group_limit=10,
+            assistant_limit=2,
+            allow_online_packages=True,
+            allow_question_images=False,
+        )
+        self.admin_user = User.objects.create_superuser(
+            username='owner_admin',
+            email='owner@ta3alm.test',
+            password='Password123!',
+            role='admin',
+            first_name='Owner',
+        )
+        self.teacher_user = User.objects.create_user(
+            username='teacher_fin',
+            email='teacher_fin@ta3alm.test',
+            password='Password123!',
+            role='teacher',
+            first_name='Hassan',
+        )
+        self.teacher = TeacherProfile.objects.create(
+            user=self.teacher_user,
+            subject=self.subject,
+            current_plan=self.plan,
+            subscription_end_date=timezone.now() + timedelta(days=30),
+        )
+        self.student_user = User.objects.create_user(
+            username='student_fin',
+            email='student_fin@ta3alm.test',
+            password='Password123!',
+            role='student',
+            first_name='Youssef',
+            phone='01022223333',
+        )
+        self.student = StudentProfile.objects.create(user=self.student_user, parent_phone='01099998888')
+        self.group = Group.objects.create(teacher=self.teacher, name='Sec 3 Math', grade='3_sec')
+        Enrollment.objects.create(student=self.student, group=self.group, is_active=True)
+
+        self.lecture = Lecture.objects.create(
+            group=self.group,
+            title='Calculus Lesson 1',
+            video_link='https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+            description='Intro',
+            is_active=True,
+        )
+        self.package = CoursePackage.objects.create(
+            teacher=self.teacher,
+            title='Full Calculus Bundle',
+            grade='3_sec',
+            description='All lessons',
+            price=200,
+            view_limit=1,
+            is_active=True,
+        )
+        self.package.lectures.add(self.lecture)
+        for u in (self.teacher_user, self.student_user):
+            EmailVerification.objects.create(
+                user=u,
+                code='123456',
+                is_verified=True,
+                expires_at=timezone.now() + timedelta(days=1),
+            )
+
+    def tearDown(self):
+        cache.clear()
+        shutil.rmtree(self.media_dir, ignore_errors=True)
+
+    def test_single_watch_only_deducts_one_view_across_retries_and_reauthorizations(self):
+        VideoCode.objects.create(lecture=self.lecture, code='ONCE11', max_views=1)
+        self.client.force_authenticate(user=self.student_user)
+
+        auth_url = reverse('api_v1_video_authorize', args=[self.lecture.id])
+        watch_url = reverse('api_v1_student_watch_lecture', args=[self.lecture.id])
+
+        first_auth = self.client.post(auth_url, {'code': 'ONCE11', 'device_id': 'dev-phone'})
+        self.assertEqual(first_auth.status_code, 200)
+        self.assertEqual(first_auth.data['code_info']['current_views'], 1)
+
+        # محاولات إعادة التهيئة أو الدخول أثناء نفس نافذة المشاهدة لا تخصم مشاهدات إضافية ولا تغلق الفيديو
+        second_auth = self.client.post(auth_url, {'device_id': 'dev-phone'})
+        self.assertEqual(second_auth.status_code, 200)
+        self.assertEqual(second_auth.data['code_info']['current_views'], 1)
+
+        watch_get = self.client.get(watch_url)
+        self.assertEqual(watch_get.status_code, 200)
+        self.assertTrue(watch_get.data['is_unlocked'])
+        self.assertEqual(watch_get.data['code_info']['current_views'], 1)
+
+        # مسار الحزمة الأونلاين أيضاً يخصم مشاهدة واحدة فقط رغم تكرار الطلب
+        pkg_watch_url = reverse('api_v1_student_watch_pkg_lecture', args=[self.package.id, self.lecture.id])
+        PackageEnrollment.objects.create(student=self.student, package=self.package, is_paid=True)
+        cache.clear()
+        PlaybackSession.objects.all().delete()
+
+        pkg_first = self.client.post(pkg_watch_url)
+        self.assertEqual(pkg_first.status_code, 200)
+        self.assertEqual(pkg_first.data['remaining_views'], 0)
+
+        pkg_auth_retry = self.client.post(auth_url, {'package_id': self.package.id, 'device_id': 'dev-phone'})
+        self.assertEqual(pkg_auth_retry.status_code, 200)
+        tracker = VideoViewTracking.objects.get(student=self.student, package=self.package, lecture=self.lecture)
+        self.assertEqual(tracker.views_count, 1)
+
+    def test_commission_setting_manual_payment_credit_and_wallet_reconcile(self):
+        # المالك يضبط نسبة العمولة إلى 15%
+        self.client.force_authenticate(user=self.admin_user)
+        admin_dash_url = reverse('api_v1_admin_dashboard')
+        resp = self.client.post(admin_dash_url, {'platform_commission_percentage': 15})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(SiteSetting.load().platform_commission_percentage, 15)
+
+        # إنشاء طلب دفع يدوي ثم قبوله يضيف 85% من قيمة الحزمة لمحفظة المعلم مرة واحدة فقط
+        mp = ManualPayment.objects.create(
+            user=self.student_user,
+            amount=200,
+            payment_type='student_package',
+            target_id=self.package.id,
+            phone_number='01022223333',
+            receipt_image='receipts/dummy.png',
+        )
+        finance_url = reverse('api_v1_admin_finance')
+        approve_resp = self.client.post(
+            finance_url,
+            {'item_type': 'manual_payment', 'id': mp.id, 'action': 'approve'},
+        )
+        self.assertEqual(approve_resp.status_code, 200)
+
+        wallet = Wallet.objects.get(teacher=self.teacher)
+        self.assertEqual(wallet.balance, Decimal('170.00'))
+        self.assertEqual(wallet.total_earnings, Decimal('170.00'))
+
+        # إعادة المزامنة لصفوف مدفوعة سابقاً بدون رصيد في المحفظة
+        wallet.balance = Decimal('0.00')
+        wallet.total_earnings = Decimal('0.00')
+        wallet.save()
+
+        self.client.force_authenticate(user=self.teacher_user)
+        wallet_resp = self.client.get(reverse('api_v1_teacher_wallet'))
+        self.assertEqual(wallet_resp.status_code, 200)
+        self.assertEqual(Decimal(str(wallet_resp.data['wallet']['balance'])), Decimal('170.00'))
+        self.assertEqual(wallet_resp.data['platform_commission_percentage'], 15)
+
+    def test_pdf_file_upload_and_question_image_upload(self):
+        with override_settings(
+            MEDIA_ROOT=self.media_dir,
+            STORAGES={
+                'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+                'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+            },
+        ):
+            self.client.force_authenticate(user=self.teacher_user)
+
+            # 1. رفع ملف PDF مباشرة
+            pdf_bytes = b'%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n'
+            uploaded_pdf = SimpleUploadedFile('notes.pdf', pdf_bytes, content_type='application/pdf')
+            pdf_url = reverse('api_v1_teacher_group_pdfs', args=[self.group.id])
+            pdf_resp = self.client.post(pdf_url, {'title': 'ملخص التفاضل', 'file': uploaded_pdf}, format='multipart')
+            self.assertEqual(pdf_resp.status_code, 201)
+            self.assertIn('/media/pdfs/', pdf_resp.data['pdf']['file_url'])
+
+            # 2. رفع صورة سؤال حتى لو كانت خطة الباقة الأساسية allow_question_images=False
+            exam = Exam.objects.create(group=self.group, title='اختبار 1', duration_minutes=15)
+            png_1x1 = (
+                b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01'
+                b'\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\rIDATx\x9cc```\xf8\x0f\x00'
+                b'\x01\x01\x01\x00\x18\xdd\x8d\xb4\x00\x00\x00\x00IEND\xaeB`\x82'
+            )
+            uploaded_img = SimpleUploadedFile('diagram.png', png_1x1, content_type='image/png')
+            exam_url = reverse('api_v1_teacher_exam_detail', args=[exam.id])
+            q_resp = self.client.post(
+                exam_url,
+                {
+                    'text': 'أوجد قيمة س من الرسم',
+                    'option_a': '1',
+                    'option_b': '2',
+                    'option_c': '3',
+                    'option_d': '4',
+                    'correct_answer': 'B',
+                    'marks': 2,
+                    'image': uploaded_img,
+                },
+                format='multipart',
+            )
+            self.assertEqual(q_resp.status_code, 201)
+            self.assertTrue(bool(q_resp.data['question']['image']))
+            self.assertTrue(self.client.get(exam_url).data['allow_images'])

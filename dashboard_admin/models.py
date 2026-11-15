@@ -108,6 +108,10 @@ class AuditLog(models.Model):
     ACTION_REMOVE_ADMIN  = 'remove_admin'
     ACTION_ZOHO_REPLY    = 'zoho_reply'
     ACTION_ZOHO_COMPOSE  = 'zoho_compose'
+    ACTION_BLOCK_DEVICE  = 'block_device'
+    ACTION_UNBLOCK_DEVICE = 'unblock_device'
+    ACTION_REVOKE_SESSION = 'revoke_session'
+    ACTION_SECURITY_POLICY = 'security_policy'
 
     ACTION_CHOICES = [
         (ACTION_BAN,           _('حظر مستخدم')),
@@ -125,6 +129,10 @@ class AuditLog(models.Model):
         (ACTION_REMOVE_ADMIN,  _('إزالة مسؤول')),
         (ACTION_ZOHO_REPLY,    _('رد على بريد إلكتروني (Zoho)')),
         (ACTION_ZOHO_COMPOSE,  _('إرسال بريد جديد (Zoho)')),
+        (ACTION_BLOCK_DEVICE,  _('حظر جهاز')),
+        (ACTION_UNBLOCK_DEVICE,_('فك حظر جهاز')),
+        (ACTION_REVOKE_SESSION,_('إنهاء جلسة جهاز')),
+        (ACTION_SECURITY_POLICY,_('تحديث سياسات الأمان')),
     ]
 
     admin = models.ForeignKey(

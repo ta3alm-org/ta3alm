@@ -17,6 +17,7 @@
                 <div class="card-body p-4 text-center">
                     <h5 class="opacity-75 mb-3">{% trans "الرصيد الحالي (القابل للسحب)" %}</h5>
                     <h1 class="display-4 fw-bold">{{ wallet.balance }} <span class="fs-4">EGP</span></h1>
+                    <small class="opacity-75">{% trans "عمولة المنصة الحالية:" %} {{ commission_percentage|default:20 }}%</small>
                 </div>
             </div>
         </div>

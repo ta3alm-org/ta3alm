@@ -222,24 +222,62 @@ def verify_email_page(request):
         messages.info(request, _("يرجى تسجيل الدخول أو إنشاء حساب أولاً."))
         return redirect('account_login')
 
+    if user.is_superuser or user.role == 'admin':
+        request.session.pop('pending_verification_user_id', None)
+        return redirect('custom_login_redirect')
+
     if not user.requires_email_verification():
         request.session.pop('pending_verification_user_id', None)
         if user.is_authenticated:
-            return redirect('complete_profile')
+            return redirect('custom_login_redirect')
         return redirect('account_login')
 
-    verification = user.email_verification
+    try:
+        verification = user.email_verification
+    except EmailVerification.DoesNotExist:
+        verification = None
+
+    if verification is None or not verification.code or verification.is_expired():
+        if verification is None or _remaining_resend_seconds(verification) == 0:
+            verification = issue_email_verification(user, update_sent_time=True)
+            if user.email:
+                sent, err_msg = send_verification_email(request, user, verification)
+                if not sent:
+                    messages.warning(request, err_msg)
+
     cooldown_remaining = _remaining_resend_seconds(verification)
 
     if request.method == 'POST':
+        action = request.POST.get('action', 'verify_code').strip()
+        if action == 'update_email':
+            new_email = request.POST.get('email', '').strip().lower()
+            if not new_email or '@' not in new_email or '.' not in new_email.split('@')[-1]:
+                messages.error(request, _("يرجى إدخال بريد إلكتروني صحيح."))
+            elif User.objects.filter(email__iexact=new_email).exclude(pk=user.pk).exists():
+                messages.error(request, _("هذا البريد الإلكتروني مستخدم لحساب آخر بالفعل."))
+            else:
+                old_email = (user.email or '').strip().lower()
+                user.email = new_email
+                update_fields = ['email']
+                if (user.username or '').strip().lower() == old_email and not User.objects.filter(username__iexact=new_email).exclude(pk=user.pk).exists():
+                    user.username = new_email
+                    update_fields.append('username')
+                user.save(update_fields=update_fields)
+                verification = issue_email_verification(user, update_sent_time=True)
+                sent, err_msg = send_verification_email(request, user, verification)
+                if sent:
+                    messages.success(request, _("تم تحديث البريد وإرسال كود التحقق الجديد."))
+                else:
+                    messages.warning(request, err_msg)
+            return redirect('verify_email_page')
+
         code = request.POST.get('code', '').strip()
         if verification.is_expired():
             messages.error(request, _("انتهت صلاحية كود التفعيل. اضغط على إعادة إرسال الكود والرابط."))
         elif not code or not secrets.compare_digest(code, verification.code):
             messages.error(request, _("كود التفعيل غير صحيح. تأكد من الأرقام الستة وحاول مرة أخرى."))
         else:
-            verification.is_verified = True
-            verification.save(update_fields=['is_verified'])
+            verification.mark_verified()
             if not request.user.is_authenticated or request.user.pk != user.pk:
                 login(request, user, backend='accounts.backends.MultiFieldAuthBackend')
             request.session.pop('pending_verification_user_id', None)
@@ -249,7 +287,7 @@ def verify_email_page(request):
     return render(request, 'accounts/verify_email.html', {
         'target_email': user.email,
         'cooldown_remaining': cooldown_remaining,
-        'is_expired': verification.is_expired(),
+        'is_expired': verification.is_expired() if verification else False,
     })
 
 
@@ -265,9 +303,7 @@ def verify_email_link(request, token):
         messages.error(request, _("انتهت صلاحية رابط التفعيل. يمكنك طلب رابط وكود جديد من هنا."))
         return redirect('verify_email_page')
 
-    if not verification.is_verified:
-        verification.is_verified = True
-        verification.save(update_fields=['is_verified'])
+    verification.mark_verified()
 
     login(request, user, backend='accounts.backends.MultiFieldAuthBackend')
     request.session.pop('pending_verification_user_id', None)
@@ -287,13 +323,21 @@ def resend_verification_email(request):
     if not user.requires_email_verification():
         return redirect('complete_profile')
 
-    verification = getattr(user, 'email_verification', None)
+    try:
+        verification = user.email_verification
+    except EmailVerification.DoesNotExist:
+        verification = None
+
     remaining = _remaining_resend_seconds(verification)
     if remaining > 0:
         messages.warning(
             request,
             _("يرجى الانتظار %(sec)s ثانية قبل إعادة إرسال البريد.") % {'sec': remaining},
         )
+        return redirect('verify_email_page')
+
+    if not user.email:
+        messages.error(request, _("يرجى إضافة بريد إلكتروني صحيح أولاً لتتمكن من استلام كود التفعيل."))
         return redirect('verify_email_page')
 
     verification = issue_email_verification(user, update_sent_time=True)

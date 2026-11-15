@@ -18,6 +18,8 @@ from .views_auth import (
     GoogleLoginAPIView,
     OneTimeLoginAPIView,
     GoogleMobileCallbackView,
+    VerifyEmailOTPAPIView,
+    ResendEmailOTPAPIView,
 )
 from .views_public import (
     PublicHomeAPIView,
@@ -28,6 +30,8 @@ from .views_public import (
     NotificationsAPIView,
     MarkNotificationReadAPIView,
     ManualCheckoutAPIView,
+    AppUpdateCheckAPIView,
+    AppUpdateDownloadAPIView,
 )
 from .views_student import (
     StudentDashboardAPIView,
@@ -86,6 +90,16 @@ from .views_video import (
     PlayIntegrityChallengeAPIView,
     PlayIntegrityVerifyAPIView,
 )
+from .views_security import (
+    SecurityDeviceRegisterAPIView,
+    SecurityDeviceListAPIView,
+    SecurityDeviceRevokeAPIView,
+    SecurityDeviceVerifyAPIView,
+    SecurityEventsListAPIView,
+    SecuritySessionsListAPIView,
+    SecurityEventReportAPIView,
+    SecurityAdminActionAPIView,
+)
 
 urlpatterns = [
     # OpenAPI & Swagger Docs
@@ -108,10 +122,14 @@ urlpatterns = [
     path('auth/google/', GoogleLoginAPIView.as_view(), name='api_v1_google_login'),
     path('auth/google/callback/', GoogleMobileCallbackView.as_view(), name='api_v1_google_mobile_callback'),
     path('auth/one-time-login/', OneTimeLoginAPIView.as_view(), name='api_v1_one_time_login'),
+    path('auth/verify-otp/', VerifyEmailOTPAPIView.as_view(), name='api_v1_verify_otp'),
+    path('auth/resend-otp/', ResendEmailOTPAPIView.as_view(), name='api_v1_resend_otp'),
 
     # 2. Public & General
     path('public/home/', PublicHomeAPIView.as_view(), name='api_v1_public_home'),
     path('public/metadata/', PublicMetadataAPIView.as_view(), name='api_v1_public_metadata'),
+    path('public/app-version/', AppUpdateCheckAPIView.as_view(), name='api_v1_app_version'),
+    path('public/app-update/download/', AppUpdateDownloadAPIView.as_view(), name='api_v1_app_update_download'),
     path('public/plans/', PublicPlansAPIView.as_view(), name='api_v1_public_plans'),
     path('public/guide/', PlatformGuideAPIView.as_view(), name='api_v1_public_guide'),
     path('curriculum/lessons/', CurriculumLookupAPIView.as_view(), name='api_v1_curriculum_lessons'),
@@ -181,5 +199,15 @@ urlpatterns = [
     path('videos/stream/<str:playback_token>/', ProtectedVideoStreamProxyAPIView.as_view(), name='api_v1_video_stream_proxy'),
     path('security/integrity/challenge/', PlayIntegrityChallengeAPIView.as_view(), name='api_v1_integrity_challenge'),
     path('security/integrity/verify/', PlayIntegrityVerifyAPIView.as_view(), name='api_v1_integrity_verify'),
+
+    # 7. Device Fingerprinting, Device Limits, Session & Security Monitoring
+    path('security/devices/register/', SecurityDeviceRegisterAPIView.as_view(), name='api_v1_security_device_register'),
+    path('security/devices/', SecurityDeviceListAPIView.as_view(), name='api_v1_security_devices_list'),
+    path('security/devices/<int:device_id>/revoke/', SecurityDeviceRevokeAPIView.as_view(), name='api_v1_security_device_revoke'),
+    path('security/devices/<int:device_id>/verify/', SecurityDeviceVerifyAPIView.as_view(), name='api_v1_security_device_verify'),
+    path('security/events/', SecurityEventsListAPIView.as_view(), name='api_v1_security_events'),
+    path('security/events/report/', SecurityEventReportAPIView.as_view(), name='api_v1_security_event_report'),
+    path('security/sessions/', SecuritySessionsListAPIView.as_view(), name='api_v1_security_sessions'),
+    path('security/admin/actions/', SecurityAdminActionAPIView.as_view(), name='api_v1_security_admin_actions'),
 ]
 
