@@ -66,6 +66,15 @@ class SiteSetting(models.Model):
             return ''
         return ':'.join(cleaned[i:i + 2] for i in range(0, 64, 2))
 
+    @staticmethod
+    def normalize_file_sha256(raw: str) -> str:
+        """تنظيف بصمة SHA-256 لملف APK (يدعم إزالة بادئة sha256: والنقطتين والمسافات)."""
+        text = str(raw or '').strip()
+        if text.lower().startswith('sha256:'):
+            text = text[7:].strip()
+        cleaned = ''.join(ch for ch in text.lower() if ch in '0123456789abcdef')
+        return cleaned if len(cleaned) == 64 else ''
+
     def get_assetlinks_fingerprints(self) -> list:
         """دمج بصمات SHA-256 من لوحة الإدارة ومن متغيرات البيئة لملف assetlinks.json."""
         sources = [
@@ -123,7 +132,7 @@ class SiteSetting(models.Model):
             'update_required': update_required,
             'update_available': update_available,
             'apk_download_url': self.get_effective_apk_url(request=request),
-            'apk_sha256': (self.android_apk_sha256 or '').strip().lower(),
+            'apk_sha256': self.normalize_file_sha256(self.android_apk_sha256),
             'release_notes': (self.android_update_release_notes or '').strip(),
         }
 
@@ -136,6 +145,9 @@ class SiteSetting(models.Model):
         self.android_min_required_version_code = max(
             1, int(self.android_min_required_version_code or 1)
         )
+        if self.android_apk_sha256:
+            normalized = self.normalize_file_sha256(self.android_apk_sha256)
+            self.android_apk_sha256 = normalized
         super().save(*args, **kwargs)
 
     @classmethod

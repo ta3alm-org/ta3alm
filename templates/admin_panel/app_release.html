@@ -146,10 +146,13 @@
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label small fw-bold">بصمة SHA-256 لملف APK (اختياري للتحقق من سلامة الملف)</label>
+                        <label class="form-label small fw-bold">بصمة SHA-256 لملف الـ APK نفسه (اختياري — من GitHub Releases أو Get-FileHash)</label>
                         <input type="text" name="android_apk_sha256" value="{{ site_settings.android_apk_sha256 }}"
-                               class="form-control font-monospace" dir="ltr" maxlength="64"
-                               placeholder="64 hex chars (اختياري)">
+                               class="form-control font-monospace" dir="ltr" maxlength="128"
+                               placeholder="sha256:... أو 64 حرف Hex (اتركه فارغاً للتجاوز)">
+                        <div class="form-text text-muted">
+                            تنبيه: هذه بصمة <strong>الملف</strong> نفسه وليست بصمة شهادة التوقيع (<code>apksigner</code>). يمكنك تركها فارغة لتخطي فحص الملف أو نسخ قيمة <code>sha256:...</code> من GitHub مباشرة.
+                        </div>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label small fw-bold">ملاحظات التحديث للمستخدمين</label>
@@ -161,7 +164,7 @@
                         <hr class="my-2">
                         <label class="form-label fw-bold">
                             <i class="bi bi-shield-lock-fill text-primary me-1"></i>
-                            بصمة شهادة التوقيع SHA-256 لفتح الروابط في التطبيق (Android App Links)
+                            بصمة شهادة توقيع التطبيق SHA-256 (من apksigner — لفتح الروابط App Links فقط)
                         </label>
                         <textarea name="android_assetlinks_sha256" rows="2" class="form-control font-monospace" dir="ltr"
                                   placeholder="AA:BB:CC:... (يمكن كتابة أكثر من بصمة مفصولة بفاصلة أو سطر جديد)">{{ site_settings.android_assetlinks_sha256 }}</textarea>

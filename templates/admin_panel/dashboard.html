@@ -202,11 +202,11 @@
                         </div>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label small fw-bold">بصمة SHA-256 لملف APK (اختياري)</label>
-                        <input type="text" name="android_apk_sha256" value="{{ site_settings.android_apk_sha256 }}" class="form-control font-monospace" dir="ltr" maxlength="64">
+                        <label class="form-label small fw-bold">بصمة SHA-256 لملف APK نفسه (اختياري — من GitHub أو Get-FileHash، وليس apksigner)</label>
+                        <input type="text" name="android_apk_sha256" value="{{ site_settings.android_apk_sha256 }}" class="form-control font-monospace" dir="ltr" maxlength="128" placeholder="sha256:... أو 64 حرف Hex (أو اتركه فارغاً)">
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label small fw-bold">بصمة شهادة توقيع التطبيق لـ App Links (SHA-256)</label>
+                        <label class="form-label small fw-bold">بصمة شهادة توقيع التطبيق SHA-256 (من apksigner — لـ App Links)</label>
                         <input type="text" name="android_assetlinks_sha256" value="{{ site_settings.android_assetlinks_sha256 }}" class="form-control font-monospace" dir="ltr" placeholder="AA:BB:CC:... (تُدمج مع متغير البيئة)">
                     </div>
                     <div class="col-md-6">

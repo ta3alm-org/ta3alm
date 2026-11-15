@@ -167,7 +167,10 @@ def _apply_app_release_post(request, site_settings):
         request.POST.get('android_update_release_notes', '')
     ).strip()
     site_settings.android_force_update = request.POST.get('android_force_update') in ('1', 'true', 'on', 'yes')
-    manual_sha = str(request.POST.get('android_apk_sha256', '')).strip().lower()[:64]
+    raw_manual_sha = str(request.POST.get('android_apk_sha256', '')).strip()
+    manual_sha = SiteSetting.normalize_file_sha256(raw_manual_sha) if raw_manual_sha else ''
+    if raw_manual_sha and not manual_sha:
+        return False, "صيغة بصمة SHA-256 لملف APK غير صالحة (يجب أن تكون 64 حرفاً Hex، ويمكن نسخها من GitHub حتى لو بدأت بـ sha256:)."
 
     if 'android_assetlinks_sha256' in request.POST:
         site_settings.android_assetlinks_sha256 = str(

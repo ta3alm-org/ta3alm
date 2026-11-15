@@ -1256,7 +1256,7 @@ class DeviceSecuritySystemTests(APITestCase):
                         'android_min_required_version_code': 3,
                         'android_latest_version_name': '1.2.0',
                         'android_force_update': '1',
-                        'android_apk_sha256': 'cc33' * 16,
+                        'android_apk_sha256': 'sha256:' + ('CC33' * 16),
                         'android_assetlinks_sha256': 'dd44' * 16,
                         'android_update_release_notes': 'GitHub Release 1.2.0',
                         'clear_uploaded_apk': '1',
@@ -1265,6 +1265,7 @@ class DeviceSecuritySystemTests(APITestCase):
                 self.assertEqual(post_resp.status_code, 302)
                 site_settings.refresh_from_db()
                 self.assertEqual(site_settings.android_apk_url, new_github_url)
+                self.assertEqual(site_settings.android_apk_sha256, 'cc33' * 16)
                 self.assertEqual(site_settings.android_latest_version_code, 3)
                 self.assertFalse(bool(site_settings.android_apk_file))
 

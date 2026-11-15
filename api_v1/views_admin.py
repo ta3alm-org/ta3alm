@@ -120,7 +120,14 @@ class AdminDashboardAPIView(APIView):
             updated_fields.append('android_update_release_notes')
 
         if 'android_apk_sha256' in request.data:
-            site_settings.android_apk_sha256 = str(request.data.get('android_apk_sha256', '')).strip().lower()[:64]
+            raw_sha = str(request.data.get('android_apk_sha256', '')).strip()
+            normalized_sha = SiteSetting.normalize_file_sha256(raw_sha) if raw_sha else ''
+            if raw_sha and not normalized_sha:
+                return Response(
+                    {'error': 'بصمة SHA-256 لملف APK غير صالحة (يجب أن تكون 64 حرفاً Hex).'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            site_settings.android_apk_sha256 = normalized_sha
             updated_fields.append('android_apk_sha256')
 
         if 'android_force_update' in request.data:
