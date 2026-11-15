@@ -399,6 +399,12 @@
             <!-- ... (بعد روابط المستخدمين وقبل الـ hr) ... -->
 
             <!-- رابط الدليل والخصوصية (للجميع) -->
+            {% if user.is_authenticated %}
+            <a href="{% url 'web_trusted_devices' %}" class="sidebar-link mt-2">
+                <i class="bi bi-shield-check text-primary"></i>
+                <span>{% trans "الأجهزة المتصلة والأمان" %}</span>
+            </a>
+            {% endif %}
             <a href="{% url 'platform_guide' %}" class="sidebar-link mt-2">
                 <i class="bi bi-info-circle-fill text-primary"></i>
                 <span>{% trans "دليل المنصة" %}</span>
@@ -605,8 +611,64 @@
         </div>
     </footer>
 
+    <!-- Smart Android App Banner (يظهر تلقائياً على متصفحات أندرويد لفتح الرابط داخل التطبيق فوراً أو تنزيل APK) -->
+    <div id="ta3almAndroidAppBanner" class="d-none position-fixed bottom-0 start-0 end-0 p-2 px-3 shadow-lg" style="z-index:1060; background:linear-gradient(135deg,#520000,#170000); border-top:2px solid #FFD700; color:#fff;">
+        <div class="container d-flex align-items-center justify-content-between gap-2 flex-wrap">
+            <div class="d-flex align-items-center gap-2">
+                <button type="button" id="ta3almDismissBanner" class="btn btn-sm btn-link text-white-50 p-0 text-decoration-none" aria-label="إغلاق">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+                <span class="rounded-3 d-inline-flex align-items-center justify-content-center" style="width:36px;height:36px;background:rgba(255,215,0,0.16);border:1px solid rgba(255,215,0,0.4);">
+                    <i class="bi bi-android2 text-warning fs-5"></i>
+                </span>
+                <div>
+                    <div class="fw-bold small mb-0">{% trans "تجربة أسرع على تطبيق تعلّم" %}</div>
+                    <div class="text-white-50" style="font-size:0.72rem;">{% trans "افتح هذه الصفحة في التطبيق أو نزّل أحدث APK" %}</div>
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <a id="ta3almOpenInAppBtn" href="#" class="btn btn-warning btn-sm fw-bold rounded-pill px-3 text-dark">
+                    <i class="bi bi-box-arrow-up-right me-1"></i>{% trans "فتح في التطبيق" %}
+                </a>
+                <a href="/api/v1/public/app-update/download/" class="btn btn-outline-light btn-sm rounded-pill px-2">
+                    <i class="bi bi-download"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        (function () {
+            try {
+                var ua = navigator.userAgent || '';
+                var isAndroid = /Android/i.test(ua);
+                var isWebView = /;\s*wv\)|Ta3almApp/i.test(ua);
+                var banner = document.getElementById('ta3almAndroidAppBanner');
+                var openBtn = document.getElementById('ta3almOpenInAppBtn');
+                var dismissBtn = document.getElementById('ta3almDismissBanner');
+                if (!banner || !openBtn || !isAndroid || isWebView) return;
+                if (window.sessionStorage && sessionStorage.getItem('ta3alm_app_banner_dismissed') === '1') return;
+
+                var host = window.location.host || 'www.ta3alm.online';
+                var path = (window.location.pathname || '/') + (window.location.search || '');
+                var scheme = (window.location.protocol || 'https:').replace(':', '');
+                var fallbackUrl = window.location.origin + '/api/v1/public/app-update/download/';
+                openBtn.href = 'intent://' + host + path + '#Intent;scheme=' + scheme + ';package=online.ta3alm.ta3alm_flutter;S.browser_fallback_url=' + encodeURIComponent(fallbackUrl) + ';end';
+
+                banner.classList.remove('d-none');
+                if (dismissBtn) {
+                    dismissBtn.addEventListener('click', function () {
+                        banner.classList.add('d-none');
+                        try {
+                            sessionStorage.setItem('ta3alm_app_banner_dismissed', '1');
+                        } catch (e) {}
+                    });
+                }
+            } catch (e) {}
+        })();
+    </script>
     <script>
         const toggleBtn = document.getElementById('darkModeSidebar');
         const body = document.body;
@@ -645,6 +707,68 @@
             });
         }
     </script>
+    {% if user.is_authenticated %}
+    <script>
+        (function () {
+            try {
+                if (window.sessionStorage && sessionStorage.getItem('ta3alm_web_traits_synced') === '1') {
+                    return;
+                }
+                function getCookie(name) {
+                    var value = '; ' + document.cookie;
+                    var parts = value.split('; ' + name + '=');
+                    if (parts.length === 2) return parts.pop().split(';').shift();
+                    return '';
+                }
+                var gpuRenderer = '';
+                var gpuVendor = '';
+                try {
+                    var canvas = document.createElement('canvas');
+                    var gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                    if (gl) {
+                        var dbg = gl.getExtension('WEBGL_debug_renderer_info');
+                        if (dbg) {
+                            gpuVendor = String(gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL) || '').slice(0, 128);
+                            gpuRenderer = String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || '').slice(0, 128);
+                        }
+                    }
+                } catch (e) {}
+
+                var tz = '';
+                try {
+                    tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+                } catch (e) {}
+
+                var payload = {
+                    cpu_arch: String(navigator.platform || '').slice(0, 64),
+                    cpu_info: navigator.hardwareConcurrency ? (String(navigator.hardwareConcurrency) + ' cores') : '',
+                    gpu_renderer: gpuRenderer,
+                    gpu_vendor: gpuVendor,
+                    screen_resolution: (window.screen && window.screen.width && window.screen.height)
+                        ? (String(window.screen.width) + 'x' + String(window.screen.height))
+                        : '',
+                    timezone: String(tz).slice(0, 64),
+                    webdriver_detected: Boolean(navigator.webdriver)
+                };
+
+                var csrf = getCookie('csrftoken') || '{{ csrf_token }}';
+                fetch("{% url 'web_device_traits_sync' %}", {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrf
+                    },
+                    body: JSON.stringify(payload)
+                }).then(function (resp) {
+                    if (resp && resp.ok && window.sessionStorage) {
+                        sessionStorage.setItem('ta3alm_web_traits_synced', '1');
+                    }
+                }).catch(function () {});
+            } catch (e) {}
+        })();
+    </script>
+    {% endif %}
     {% block extra_js %}{% endblock %}
 </body>
 

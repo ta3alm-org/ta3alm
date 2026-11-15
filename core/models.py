@@ -1,4 +1,6 @@
 from decimal import Decimal, ROUND_HALF_UP
+import os
+import re
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models, transaction
 from django.utils.translation import gettext_lazy as _
@@ -51,6 +53,34 @@ class SiteSetting(models.Model):
         default='',
         verbose_name=_("بصمة SHA-256 لملف التحديث"),
     )
+    android_assetlinks_sha256 = models.TextField(
+        blank=True,
+        default='',
+        verbose_name=_("بصمات SHA-256 لشهادات توقيع التطبيق (App Links)"),
+    )
+
+    @staticmethod
+    def format_sha256_colons(raw: str) -> str:
+        cleaned = ''.join(ch for ch in str(raw or '').upper() if ch in '0123456789ABCDEF')
+        if len(cleaned) != 64:
+            return ''
+        return ':'.join(cleaned[i:i + 2] for i in range(0, 64, 2))
+
+    def get_assetlinks_fingerprints(self) -> list:
+        """دمج بصمات SHA-256 من لوحة الإدارة ومن متغيرات البيئة لملف assetlinks.json."""
+        sources = [
+            self.android_assetlinks_sha256 or '',
+            os.environ.get('ANDROID_ASSETLINKS_SHA256', ''),
+            os.environ.get('ANDROID_RELEASE_CERT_SHA256', ''),
+            os.environ.get('ANDROID_DEBUG_CERT_SHA256', ''),
+        ]
+        fingerprints = []
+        for src in sources:
+            for token in re.split(r'[\s,;]+', str(src).strip().strip('"\'')):
+                formatted = self.format_sha256_colons(token)
+                if formatted and formatted not in fingerprints:
+                    fingerprints.append(formatted)
+        return fingerprints
 
     @property
     def teacher_share_ratio(self):
@@ -287,7 +317,7 @@ class ManualPayment(models.Model):
             if not enrollment.is_paid:
                 enrollment.is_paid = True
                 enrollment.save(update_fields=['is_paid'])
-                gross_amount = self.amount if self.amount else package.price
+                gross_amount = package.price
                 credit_teacher_wallet_for_sale(package.teacher, gross_amount)
         except Exception as e:
             print(f"Error activating student package: {e}")

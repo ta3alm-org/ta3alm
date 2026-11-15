@@ -45,7 +45,9 @@
             <div class="admin-card-body p-4">
                 <div class="email-body-content border rounded-3 p-3 bg-white" style="min-height: 250px; font-size: 0.95rem; line-height: 1.7; overflow-x: auto;">
                     {% if message_data.content %}
-                        {{ message_data.content|safe }}
+                        <iframe sandbox="" referrerpolicy="no-referrer"
+                                srcdoc="{{ message_data.sanitized_content }}"
+                                style="width: 100%; min-height: 280px; border: 0; background: #fff;"></iframe>
                     {% elif message_data.summary %}
                         <p class="mb-0">{{ message_data.summary }}</p>
                     {% else %}

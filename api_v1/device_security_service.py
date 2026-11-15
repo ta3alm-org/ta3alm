@@ -16,6 +16,7 @@ from typing import Any
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core import signing
 from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Count, Q
@@ -41,6 +42,9 @@ User = get_user_model()
 
 FINGERPRINT_ALGORITHM_VERSION = 'fp_v1'
 MAX_IP_HISTORY_ENTRIES = 20
+WEB_PACKAGE_NAME = 'web.ta3alm.online'
+WEB_COOKIE_NAME = 'ta3alm_web_inst_id'
+WEB_COOKIE_SALT = 'ta3alm-web-device-v1'
 
 CORE_FINGERPRINT_FIELDS = ('manufacturer', 'model', 'cpu_arch', 'package_name')
 SUPPORTING_FINGERPRINT_FIELDS = (
@@ -454,15 +458,17 @@ def record_security_event(
 
 def _verify_app_identity_signals(traits: dict[str, Any], tamper_signals: dict[str, Any]) -> dict[str, Any]:
     """
-    يتحقق على مستوى الخادم من حزمة التطبيق وشهادة التوقيع ووضع الـ Debug ومؤشرات العبث.
+    يتحقق على مستوى الخادم من حزمة التطبيق وشهادة التوقيع ووضع الـ Debug ومؤشرات العبث،
+    مع دعم معرّف أجهزة متصفح الويب (web.ta3alm.online) دون معاقبته على شهادة توقيع APK.
     """
     is_debug_build = bool(tamper_signals.get('is_debug_build'))
     expected_pkg = os.environ.get('PLAY_INTEGRITY_PACKAGE_NAME', 'online.ta3alm.ta3alm_flutter').strip()
-    allowed_pkgs = {expected_pkg}
+    allowed_pkgs = {expected_pkg, WEB_PACKAGE_NAME}
     if settings.DEBUG or is_debug_build:
         allowed_pkgs.add(f"{expected_pkg}.debug")
 
     pkg = (traits.get('package_name') or tamper_signals.get('package_name') or '').strip()
+    is_web_browser = pkg == WEB_PACKAGE_NAME
     package_mismatch = bool(pkg and expected_pkg and pkg not in allowed_pkgs)
 
     raw_expected_certs = (
@@ -481,12 +487,13 @@ def _verify_app_identity_signals(traits: dict[str, Any], tamper_signals: dict[st
     ).lower()
 
     cert_mismatch = bool(
-        expected_certs
+        not is_web_browser
+        and expected_certs
         and client_cert
         and client_cert not in expected_certs
         and not (settings.DEBUG and is_debug_build)
     )
-    if tamper_signals.get('signature_mismatch'):
+    if not is_web_browser and tamper_signals.get('signature_mismatch'):
         cert_mismatch = True
 
     frida = bool(tamper_signals.get('frida_detected'))
@@ -494,11 +501,13 @@ def _verify_app_identity_signals(traits: dict[str, Any], tamper_signals: dict[st
     debugger = bool(tamper_signals.get('debugger_attached'))
     rooted = bool(tamper_signals.get('root_detected'))
     emulator = bool(tamper_signals.get('emulator_detected'))
+    webdriver_detected = bool(tamper_signals.get('webdriver_detected'))
 
-    debug_in_prod = bool(is_debug_build and not settings.DEBUG)
-    debugger_in_release = bool(debugger and not is_debug_build)
+    debug_in_prod = bool(not is_web_browser and is_debug_build and not settings.DEBUG)
+    debugger_in_release = bool(not is_web_browser and debugger and not is_debug_build)
 
     return {
+        'is_web_browser': is_web_browser,
         'package_mismatch': package_mismatch,
         'cert_mismatch': cert_mismatch,
         'frida': frida,
@@ -507,7 +516,8 @@ def _verify_app_identity_signals(traits: dict[str, Any], tamper_signals: dict[st
         'debug_in_prod': debug_in_prod,
         'rooted': rooted,
         'emulator': emulator,
-        'signing_cert_verified': not cert_mismatch and not package_mismatch,
+        'webdriver_detected': webdriver_detected,
+        'signing_cert_verified': (not is_web_browser) and (not cert_mismatch) and (not package_mismatch),
     }
 
 
@@ -560,6 +570,9 @@ def evaluate_and_apply_risk(
     if app_checks['emulator']:
         score += 15
         indicators.append('emulator_environment')
+    if app_checks.get('webdriver_detected'):
+        score += 20
+        indicators.append('automated_browser_webdriver')
 
     # 2. تغير البصمة (تمييز التحديث الطبيعي عن تغير العتاد الجوهري)
     if fp_info.get('core_mismatch'):
@@ -1350,5 +1363,239 @@ def prune_expired_telemetry(retention_days: int | None = None) -> dict[str, int]
         'activities_deleted': act_deleted,
         'events_deleted': evt_deleted,
         'video_logs_deleted': audit_deleted,
+    }
+
+
+def parse_web_user_agent(user_agent: str) -> dict[str, str]:
+    """يحلّل سلسلة User-Agent لاستخلاص اسم وإصدار المتصفح ونظام التشغيل بشكل مقروء."""
+    ua = str(user_agent or '')
+    browser_name = 'Web Browser'
+    browser_vendor = 'Web Browser'
+    browser_version = ''
+
+    if 'Edg/' in ua or 'Edge/' in ua:
+        browser_name = 'Microsoft Edge'
+        browser_vendor = 'Microsoft Edge'
+        m = re.search(r'Edg(?:e)?/([\d.]+)', ua)
+        browser_version = m.group(1) if m else ''
+    elif 'OPR/' in ua or 'Opera/' in ua:
+        browser_name = 'Opera'
+        browser_vendor = 'Opera'
+        m = re.search(r'(?:OPR|Opera)/([\d.]+)', ua)
+        browser_version = m.group(1) if m else ''
+    elif 'Chrome/' in ua and 'Chromium/' not in ua:
+        browser_name = 'Google Chrome'
+        browser_vendor = 'Google Chrome'
+        m = re.search(r'Chrome/([\d.]+)', ua)
+        browser_version = m.group(1) if m else ''
+    elif 'Firefox/' in ua:
+        browser_name = 'Mozilla Firefox'
+        browser_vendor = 'Mozilla Firefox'
+        m = re.search(r'Firefox/([\d.]+)', ua)
+        browser_version = m.group(1) if m else ''
+    elif 'Safari/' in ua and 'Chrome/' not in ua:
+        browser_name = 'Apple Safari'
+        browser_vendor = 'Apple Safari'
+        m = re.search(r'Version/([\d.]+)', ua)
+        browser_version = m.group(1) if m else ''
+
+    os_label = 'Desktop/Web'
+    if 'Windows' in ua:
+        os_label = 'Windows'
+    elif 'iPhone' in ua or 'iPad' in ua or 'iPod' in ua:
+        os_label = 'iOS'
+    elif 'Android' in ua:
+        os_label = 'Android'
+    elif 'Macintosh' in ua or 'Mac OS X' in ua:
+        os_label = 'macOS'
+    elif 'Linux' in ua:
+        os_label = 'Linux'
+
+    return {
+        'browser_name': browser_name,
+        'browser_vendor': browser_vendor,
+        'browser_version': browser_version[:32],
+        'os_label': os_label,
+    }
+
+
+def build_web_device_info(request, client_traits: dict[str, Any] | None = None) -> dict[str, Any]:
+    """
+    يبني قاموس خصائص متصفح الويب (Device Info) عبر الدمج بين الترويسات التي يلاحظها الخادم
+    والخصائص المسموح بها التي يرسلها المتصفح لتوليد بصمة fp_v1 موثوقة.
+    """
+    meta = getattr(request, 'META', {}) if request is not None else {}
+    ua = str(meta.get('HTTP_USER_AGENT') or '')
+    parsed = parse_web_user_agent(ua)
+    src = client_traits if isinstance(client_traits, dict) else {}
+
+    sec_platform = str(meta.get('HTTP_SEC_CH_UA_PLATFORM') or '').strip().strip('"')
+    os_label = sec_platform or parsed['os_label']
+    accept_lang = str(meta.get('HTTP_ACCEPT_LANGUAGE') or '').split(',')[0].strip()[:32]
+
+    browser_name = parsed['browser_name']
+    browser_vendor = parsed['browser_vendor']
+
+    def _clean(val: Any, max_len: int = 128) -> str:
+        return re.sub(r'\s+', ' ', str(val or '').strip())[:max_len]
+
+    return {
+        'device_name': f"متصفح {browser_name} ({os_label})",
+        'manufacturer': browser_vendor,
+        'model': f"{browser_name} on {os_label}",
+        'os_name': f"Web ({os_label})",
+        'android_version': parsed['browser_version'],
+        'api_level': 0,
+        'cpu_arch': _clean(os_label.lower(), 64).lower(),
+        'cpu_info': _clean(
+            ' | '.join(filter(None, [_clean(src.get('cpu_arch'), 64), _clean(src.get('cpu_info'), 180)])),
+            255,
+        ),
+        'gpu_renderer': _clean(src.get('gpu_renderer'), 255),
+        'gpu_vendor': _clean(src.get('gpu_vendor'), 255),
+        'screen_resolution': _clean(src.get('screen_resolution'), 64).lower(),
+        'app_version': parsed['browser_version'] or 'web-1.0',
+        'app_build_number': 'web',
+        'package_name': WEB_PACKAGE_NAME,
+        'signing_cert_sha256': '',
+        'installer_source': 'web_browser',
+        'integrity_signals': {
+            'is_web_browser': True,
+            'webdriver_detected': bool(src.get('webdriver_detected')),
+            'timezone': _clean(src.get('timezone'), 64),
+            'accept_language': accept_lang,
+            'sec_ch_ua': _clean(meta.get('HTTP_SEC_CH_UA'), 255),
+            'sec_ch_platform': sec_platform[:64],
+        },
+    }
+
+
+def get_or_create_web_installation_id(request) -> str:
+    """
+    يسترجع معرّف تثبيت المتصفح الموقّع من الكوكي أو الجلسة، أو يولّد معرّفًا عشوائيًا قويًا جديدًا
+    ويحفظه لكي تثبّته طبقة Middleware في كوكي HttpOnly موقّع.
+    """
+    cached = getattr(request, '_web_installation_id', None)
+    if cached:
+        return cached
+
+    candidate = ''
+    has_valid_cookie = False
+    if hasattr(request, 'get_signed_cookie'):
+        try:
+            loaded = request.get_signed_cookie(WEB_COOKIE_NAME, default='', salt=WEB_COOKIE_SALT)
+            if loaded:
+                ok, cleaned, _ = validate_installation_id(loaded)
+                if ok and cleaned.startswith('web-'):
+                    candidate = cleaned
+                    has_valid_cookie = True
+        except Exception:
+            candidate = ''
+    elif hasattr(request, 'COOKIES'):
+        cookie_val = (request.COOKIES.get(WEB_COOKIE_NAME) or '').strip()
+        if cookie_val:
+            try:
+                loaded = signing.loads(cookie_val, salt=WEB_COOKIE_SALT)
+                ok, cleaned, _ = validate_installation_id(loaded)
+                if ok and cleaned.startswith('web-'):
+                    candidate = cleaned
+                    has_valid_cookie = True
+            except Exception:
+                candidate = ''
+
+    if not candidate and hasattr(request, 'session'):
+        sess_val = (request.session.get('web_installation_id') or '').strip()
+        ok, cleaned, _ = validate_installation_id(sess_val)
+        if ok and cleaned.startswith('web-'):
+            candidate = cleaned
+
+    if not candidate:
+        candidate = f"web-{uuid.uuid4().hex}"
+
+    if hasattr(request, 'session') and request.session.get('web_installation_id') != candidate:
+        request.session['web_installation_id'] = candidate
+
+    if not has_valid_cookie:
+        request._web_set_cookie_id = candidate
+
+    request._web_installation_id = candidate
+    return candidate
+
+
+def enforce_web_lecture_playback(request, user, lecture, *, course_package=None) -> dict[str, Any]:
+    """
+    يفحص صلاحية جهاز الويب وحد الأجهزة ومشاركة الحساب والتشغيل المتزامن قبل عرض مشغّل الفيديو
+    على الموقع، وينشئ أو يدوّر جلسة PlaybackSession نشطة لهذا المتصفح.
+    """
+    from .video_security import build_watermark_payload, create_or_rotate_playback_session
+
+    installation_id = get_or_create_web_installation_id(request)
+    allowed, code, err = check_device_allowed(user, installation_id)
+    if not allowed:
+        return {
+            'allowed': False,
+            'code': code or 'DEVICE_NOT_ALLOWED',
+            'error': err or 'هذا المتصفح غير مخوّل لتشغيل المحاضرات حاليًا.',
+            'installation_id': installation_id,
+        }
+
+    device = RegisteredDevice.objects.filter(
+        user=user,
+        installation_id=installation_id,
+        is_active=True,
+    ).exclude(trust_status__in=[DeviceTrustStatus.REVOKED, DeviceTrustStatus.BLOCKED]).first()
+
+    if device is None:
+        reg = register_or_update_device(
+            request=request,
+            user=user,
+            installation_id=installation_id,
+            device_info=build_web_device_info(request),
+            token_jti=f"web:{getattr(getattr(request, 'session', None), 'session_key', '') or 'sess'}",
+        )
+        if not reg.get('allowed'):
+            return {
+                'allowed': False,
+                'code': reg.get('code') or 'DEVICE_LIMIT_REACHED',
+                'error': reg.get('error') or 'تعذر تسجيل هذا المتصفح لتشغيل الفيديو.',
+                'installation_id': installation_id,
+            }
+        device = reg.get('device_obj')
+
+    sharing = detect_account_sharing(request, user, lecture=lecture, installation_id=installation_id)
+    session, revoked_count = create_or_rotate_playback_session(
+        request=request,
+        user=user,
+        lecture=lecture,
+        package=course_package,
+        device_id=installation_id,
+        device_fingerprint=device.current_fingerprint if device else '',
+        client_platform='web',
+        app_version=device.app_version if device else 'web-1.0',
+        integrity_verdict='web_browser',
+    )
+    watermark = build_watermark_payload(user, session)
+
+    record_device_activity(
+        request=request,
+        user=user,
+        device=device,
+        activity_type='web_lecture_playback',
+        metadata={
+            'lecture_id': lecture.id,
+            'package_id': getattr(course_package, 'id', None),
+            'revoked_concurrent_sessions': revoked_count,
+            'sharing_suspected': bool(sharing.get('suspected')),
+        },
+    )
+
+    return {
+        'allowed': True,
+        'installation_id': installation_id,
+        'playback_session': session,
+        'playback_session_uuid': str(session.session_id),
+        'revoked_concurrent_sessions': revoked_count,
+        'sharing': sharing,
+        'watermark': watermark,
     }
 

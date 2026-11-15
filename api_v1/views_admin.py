@@ -63,6 +63,13 @@ class AdminDashboardAPIView(APIView):
             'is_maintenance_mode': site_settings.is_maintenance_mode,
             'platform_commission_percentage': site_settings.platform_commission_percentage,
             'app_update': site_settings.build_app_update_payload(request=request),
+            'app_release_admin': {
+                'android_apk_url': (site_settings.android_apk_url or '').strip(),
+                'has_uploaded_apk': bool(site_settings.android_apk_file),
+                'uploaded_apk_name': site_settings.android_apk_file.name if site_settings.android_apk_file else '',
+                'android_assetlinks_sha256': (site_settings.android_assetlinks_sha256 or '').strip(),
+                'effective_assetlinks_fingerprints': site_settings.get_assetlinks_fingerprints(),
+            },
             'recent_logs': AuditLogSerializer(recent_logs, many=True).data,
         })
 
@@ -121,6 +128,20 @@ class AdminDashboardAPIView(APIView):
             site_settings.android_force_update = str(val).lower() in ('1', 'true', 'yes', 'on') if not isinstance(val, bool) else val
             updated_fields.append('android_force_update')
 
+        if 'android_assetlinks_sha256' in request.data:
+            site_settings.android_assetlinks_sha256 = str(request.data.get('android_assetlinks_sha256', '')).strip()
+            updated_fields.append('android_assetlinks_sha256')
+
+        clear_uploaded = request.data.get('clear_uploaded_apk')
+        if str(clear_uploaded).lower() in ('1', 'true', 'yes', 'on') or clear_uploaded is True:
+            if site_settings.android_apk_file:
+                try:
+                    site_settings.android_apk_file.delete(save=False)
+                except Exception:
+                    pass
+                site_settings.android_apk_file = None
+                updated_fields.append('android_apk_file')
+
         if 'android_apk_file' in request.FILES:
             site_settings.android_apk_file = request.FILES['android_apk_file']
             updated_fields.append('android_apk_file')
@@ -139,6 +160,13 @@ class AdminDashboardAPIView(APIView):
             'message': 'تم حفظ الإعدادات بنجاح.',
             'platform_commission_percentage': site_settings.platform_commission_percentage,
             'app_update': site_settings.build_app_update_payload(request=request),
+            'app_release_admin': {
+                'android_apk_url': (site_settings.android_apk_url or '').strip(),
+                'has_uploaded_apk': bool(site_settings.android_apk_file),
+                'uploaded_apk_name': site_settings.android_apk_file.name if site_settings.android_apk_file else '',
+                'android_assetlinks_sha256': (site_settings.android_assetlinks_sha256 or '').strip(),
+                'effective_assetlinks_fingerprints': site_settings.get_assetlinks_fingerprints(),
+            },
         })
 
 

@@ -126,6 +126,8 @@ def search_groups(request):
 # 3. إرسال طلب انضمام
 @login_required
 def join_group(request, group_id):
+    if not hasattr(request.user, 'student_profile'):
+        return redirect('home')
     student = request.user.student_profile
     group = get_object_or_404(Group, id=group_id)
     teacher = group.teacher
@@ -292,12 +294,107 @@ def student_watch_lecture(request, lecture_id):
         except VideoCode.DoesNotExist:
             messages.error(request, "الكود غير صحيح أو مستخدم من قبل.")
 
+    playback_ctx = {}
+    if is_unlocked:
+        from django.utils.translation import gettext as _
+        from api_v1.device_security_service import enforce_web_lecture_playback
+        playback_res = enforce_web_lecture_playback(request, request.user, lecture)
+        if not playback_res.get('allowed'):
+            messages.error(request, playback_res.get('error') or _("هذا المتصفح غير مخوّل لتشغيل المحاضرة."))
+            return redirect('web_trusted_devices')
+        playback_ctx = {
+            'playback_session_uuid': playback_res.get('playback_session_uuid', ''),
+            'web_installation_id': playback_res.get('installation_id', ''),
+            'watermark': playback_res.get('watermark', {}),
+        }
+
     return render(request, 'students/watch_lecture.html', {
         'lecture': lecture,
         'group': group,
         'is_unlocked': is_unlocked,
-        'active_code': active_code # لنعرض له (المتبقي: X)
+        'active_code': active_code, # لنعرض له (المتبقي: X)
+        **playback_ctx,
     })
+
+
+import json as _json
+from django.http import JsonResponse as _JsonResponse
+from django.views.decorators.http import require_POST as _require_POST
+
+
+@login_required
+@_require_POST
+def web_lecture_heartbeat(request, lecture_id):
+    """
+    نبض جلسة المشاهدة على الويب: يتحقق من بقاء المتصفح مخوّلاً ومن عدم فتح نفس المحاضرة
+    من جهاز أو متصفح آخر، ويمدّد صلاحية الجلسة النشطة.
+    """
+    from datetime import timedelta as _td
+    from django.utils import timezone as _tz
+    from django.utils.translation import gettext as _
+    from api_v1.device_security_service import check_device_allowed, get_or_create_web_installation_id
+    from api_v1.models import PlaybackSession
+
+    session_id = ''
+    if request.content_type and 'application/json' in request.content_type:
+        try:
+            data = _json.loads((request.body or b'{}').decode('utf-8'))
+            if isinstance(data, dict):
+                session_id = str(data.get('session_id') or '').strip()
+        except Exception:
+            session_id = ''
+    if not session_id:
+        session_id = str(request.POST.get('session_id') or '').strip()
+
+    installation_id = get_or_create_web_installation_id(request)
+    allowed, code, err = check_device_allowed(request.user, installation_id)
+    if not allowed:
+        return _JsonResponse({
+            'ok': False,
+            'code': code or 'DEVICE_NOT_ALLOWED',
+            'error': err or _("تم إيقاف تصريح هذا المتصفح."),
+        }, status=409)
+
+    if not session_id:
+        return _JsonResponse({'ok': False, 'code': 'MISSING_SESSION'}, status=400)
+
+    try:
+        playback_session = PlaybackSession.objects.filter(
+            session_id=session_id,
+            user=request.user,
+            lecture_id=lecture_id,
+        ).first()
+    except Exception:
+        playback_session = None
+
+    if playback_session is None:
+        return _JsonResponse({'ok': False, 'code': 'SESSION_NOT_FOUND'}, status=404)
+
+    now = _tz.now()
+    if playback_session.status != 'active':
+        return _JsonResponse({
+            'ok': False,
+            'code': 'SESSION_REVOKED',
+            'error': playback_session.revoked_reason or _("تم إيقاف هذه الجلسة لأن المحاضرة فُتحت من جهاز آخر."),
+        }, status=409)
+
+    if playback_session.expires_at and playback_session.expires_at <= now:
+        playback_session.status = 'expired'
+        playback_session.save(update_fields=['status'])
+        return _JsonResponse({
+            'ok': False,
+            'code': 'SESSION_EXPIRED',
+            'error': _("انتهت صلاحية جلسة المشاهدة، يرجى تحديث الصفحة."),
+        }, status=409)
+
+    playback_session.last_heartbeat_at = now
+    if playback_session.expires_at is None or playback_session.expires_at < now + _td(minutes=10):
+        playback_session.expires_at = now + _td(minutes=10)
+        playback_session.save(update_fields=['last_heartbeat_at', 'expires_at'])
+    else:
+        playback_session.save(update_fields=['last_heartbeat_at'])
+
+    return _JsonResponse({'ok': True, 'status': 'active'})
 
 # ==========================================
 # 3. قائمة الامتحانات
@@ -605,15 +702,21 @@ def paymob_package_checkout(request, package_id):
 
 @login_required
 def watch_package_lecture(request, package_id, lecture_id):
+    if not hasattr(request.user, 'student_profile'):
+        return redirect('home')
     student = request.user.student_profile
     package = get_object_or_404(CoursePackage, id=package_id)
     lecture = get_object_or_404(Lecture, id=lecture_id)
 
-    # 1. التحقق من الاشتراك (الدفع)
+    # 1. التحقق من الاشتراك (الدفع) وانتماء المحاضرة وتفعيلها داخل الباقة
     is_enrolled = PackageEnrollment.objects.filter(student=student, package=package, is_paid=True).exists()
     if not is_enrolled:
         messages.error(request, "يجب شراء الحزمة أولاً.")
         return redirect('package_detail', package_id=package.id)
+
+    if not package.lectures.filter(id=lecture.id, is_active=True).exists():
+        messages.error(request, "هذه المحاضرة غير متاحة ضمن هذه الباقة.")
+        return redirect('my_package_content', package_id=package.id)
 
     # 2. تتبع المشاهدة
     tracker, created = VideoViewTracking.objects.get_or_create(
@@ -647,23 +750,39 @@ def watch_package_lecture(request, package_id, lecture_id):
         tracker.save()
         request.session[session_key] = now_ts
 
+    from django.utils.translation import gettext as _
+    from api_v1.device_security_service import enforce_web_lecture_playback
+    playback_res = enforce_web_lecture_playback(request, request.user, lecture, course_package=package)
+    if not playback_res.get('allowed'):
+        messages.error(request, playback_res.get('error') or _("هذا المتصفح غير مخوّل لتشغيل المحاضرة."))
+        return redirect('web_trusted_devices')
+
     return render(request, 'students/watch_package_lecture.html', {
         'lecture': lecture,
         'package': package,
-        'tracker': tracker
+        'tracker': tracker,
+        'playback_session_uuid': playback_res.get('playback_session_uuid', ''),
+        'web_installation_id': playback_res.get('installation_id', ''),
+        'watermark': playback_res.get('watermark', {}),
     })
 
 from .models import PackageExamResult
 
 @login_required
 def student_take_package_exam(request, package_id, exam_id):
+    if not hasattr(request.user, 'student_profile'):
+        return redirect('home')
     student = request.user.student_profile
     package = get_object_or_404(CoursePackage, id=package_id)
     exam = get_object_or_404(Exam, id=exam_id)
 
-    # 1. التأكد من شراء الحزمة
+    # 1. التأكد من شراء الحزمة وارتباط الامتحان وتفعيله
     if not PackageEnrollment.objects.filter(student=student, package=package, is_paid=True).exists():
         return redirect('package_detail', package_id=package.id)
+
+    if not package.exams.filter(id=exam.id, is_active=True).exists():
+        messages.error(request, "هذا الامتحان غير متاح حالياً ضمن هذه الباقة.")
+        return redirect('my_package_content', package_id=package.id)
 
     # 2. التأكد من عدم أداء الامتحان "داخل هذه الحزمة"
     if PackageExamResult.objects.filter(student=student, package=package, exam=exam).exists():
@@ -690,8 +809,14 @@ def student_take_package_exam(request, package_id, exam_id):
 
 @login_required
 def my_package_marks(request, package_id):
+    if not hasattr(request.user, 'student_profile'):
+        return redirect('home')
     student = request.user.student_profile
     package = get_object_or_404(CoursePackage, id=package_id)
+
+    if not PackageEnrollment.objects.filter(student=student, package=package, is_paid=True).exists():
+        messages.error(request, "يجب الاشتراك في الباقة أولاً لعرض الدرجات.")
+        return redirect('package_detail', package_id=package.id)
     
     # 1. نتائج الامتحانات
     exam_results = PackageExamResult.objects.filter(student=student, package=package)
@@ -714,9 +839,15 @@ from django.db.models import Sum # تأكد من الاستيراد
 
 @login_required
 def package_leaderboard(request, package_id):
+    if not hasattr(request.user, 'student_profile'):
+        return redirect('home')
+    student = request.user.student_profile
     package = get_object_or_404(CoursePackage, id=package_id)
+    if not PackageEnrollment.objects.filter(student=student, package=package, is_paid=True).exists():
+        messages.error(request, "يجب الاشتراك في الباقة أولاً لعرض لوحة الشرف.")
+        return redirect('package_detail', package_id=package.id)
     leaderboard = get_optimized_package_leaderboard(package)
-    my_rank = next((x['rank'] for x in leaderboard if x['student'] == request.user.student_profile), '-')
+    my_rank = next((x['rank'] for x in leaderboard if x['student'] == student), '-')
 
     return render(request, 'students/package_leaderboard.html', {
         'package': package,

@@ -901,4 +901,400 @@ class DeviceSecuritySystemTests(APITestCase):
         )
         self.assertEqual(ok_api.status_code, 200)
 
+    def test_21_web_device_fingerprinting_limit_and_trusted_devices_ui(self):
+        from django.test import Client
+        from teachers.models import CoursePackage
+        from students.models import PackageEnrollment
+        from .models import PlaybackSession
+
+        policy = SecurityPolicyConfig.load()
+        policy.max_devices_per_student = 2
+        policy.enforce_device_limits = True
+        policy.enforce_single_playback_session = True
+        policy.save()
+
+        # 1) متصفح أول: تسجيل جهاز الويب تلقائياً وإصدار كوكي موقّع وتحديث بصمة fp_v1
+        b1 = Client(
+            HTTP_USER_AGENT='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/128.0.0.0',
+        )
+        b1.force_login(self.student_user)
+        resp1 = b1.get(reverse('student_dashboard'))
+        self.assertEqual(resp1.status_code, 200)
+        self.assertIn('ta3alm_web_inst_id', b1.cookies)
+
+        web_devices = RegisteredDevice.objects.filter(
+            user=self.student_user,
+            package_name='web.ta3alm.online',
+            is_active=True,
+        )
+        self.assertEqual(web_devices.count(), 1)
+
+        sync_resp = b1.post(
+            reverse('web_device_traits_sync'),
+            data=json.dumps({
+                'cpu_arch': 'Win32',
+                'cpu_info': '8 cores',
+                'gpu_renderer': 'ANGLE (NVIDIA RTX)',
+                'gpu_vendor': 'Google Inc.',
+                'screen_resolution': '1920x1080',
+                'timezone': 'Africa/Cairo',
+                'webdriver_detected': True,
+            }),
+            content_type='application/json',
+        )
+        self.assertEqual(sync_resp.status_code, 200)
+        sync_data = json.loads(sync_resp.content.decode('utf-8'))
+        self.assertTrue(sync_data.get('ok'))
+        self.assertEqual(sync_data.get('trust_status'), DeviceTrustStatus.TRUSTED)
+        self.assertTrue(
+            DeviceSecurityEvent.objects.filter(
+                user=self.student_user,
+                event_type='automated_browser_webdriver',
+            ).exists()
+        )
+
+        # 2) متصفح ثانٍ: مسموح ضمن الحد (2)
+        b2 = Client(
+            HTTP_USER_AGENT='Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 Safari/605.1.15',
+        )
+        b2.force_login(self.student_user)
+        resp2 = b2.get(reverse('student_dashboard'))
+        self.assertEqual(resp2.status_code, 200)
+        self.assertEqual(
+            RegisteredDevice.objects.filter(user=self.student_user, is_active=True).count(),
+            2,
+        )
+
+        # 3) متصفح ثالث: يُمنع بسبب حد الأجهزة ويُعاد توجيهه لشاشة الأجهزة المتصلة
+        b3 = Client(
+            HTTP_USER_AGENT='Mozilla/5.0 (X11; Linux x86_64; rv:129.0) Gecko/20100101 Firefox/129.0',
+        )
+        b3.force_login(self.student_user)
+        resp3 = b3.get(reverse('student_dashboard'))
+        self.assertEqual(resp3.status_code, 302)
+        self.assertIn(reverse('web_trusted_devices'), resp3['Location'])
+
+        dev_page = b3.get(reverse('web_trusted_devices'))
+        self.assertEqual(dev_page.status_code, 200)
+
+        # إلغاء تفويض المتصفح الأول من واجهة الويب يحرر مقعدًا ويسمح للمتصفح الثالث تلقائيًا
+        dev1 = RegisteredDevice.objects.filter(
+            user=self.student_user,
+            package_name='web.ta3alm.online',
+            is_active=True,
+        ).order_by('id').first()
+        revoke_resp = b3.post(
+            reverse('web_trusted_devices'),
+            {'action': 'revoke', 'device_uuid': str(dev1.device_uuid)},
+        )
+        self.assertEqual(revoke_resp.status_code, 302)
+        self.assertEqual(b3.get(reverse('student_dashboard')).status_code, 200)
+
+        # المتصفح الأول يُطرد على الفور عند أي طلب تالٍ
+        b1_after = b1.get(reverse('student_dashboard'))
+        self.assertEqual(b1_after.status_code, 302)
+
+        # 4) تدوير جلسة المشاهدة على الويب ونبض القلب (Heartbeat)
+        pkg = CoursePackage.objects.create(
+            teacher=self.teacher,
+            title='Web Security Package',
+            grade='3_sec',
+            description='Pkg for playback concurrency test',
+            price=250,
+            is_active=True,
+        )
+        pkg.lectures.add(self.lecture)
+        PackageEnrollment.objects.create(student=self.student, package=pkg, is_paid=True)
+
+        watch_url = reverse('watch_package_lecture', args=[pkg.id, self.lecture.id])
+        w2 = b2.get(watch_url)
+        self.assertEqual(w2.status_code, 200)
+        sess2 = PlaybackSession.objects.filter(user=self.student_user, lecture=self.lecture, status='active').latest('id')
+
+        w3 = b3.get(watch_url)
+        self.assertEqual(w3.status_code, 200)
+        sess2.refresh_from_db()
+        self.assertEqual(sess2.status, 'revoked')
+
+        # نبض الجلسة القديمة يُرفض بـ 409
+        hb_old = b2.post(
+            reverse('web_lecture_heartbeat', args=[self.lecture.id]),
+            data=json.dumps({'session_id': str(sess2.session_id)}),
+            content_type='application/json',
+        )
+        self.assertEqual(hb_old.status_code, 409)
+
+    def test_22_web_vulnerabilities_remediation_idor_payment_and_exam_auth(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.test import Client
+        from core.models import ManualPayment, Notification
+        from dashboard_admin.views import _sanitize_email_html
+        from exams.models import Exam, Question
+        from teachers.models import CoursePackage, TeacherProfile
+        from students.models import PackageEnrollment
+
+        # 1) رفض Paymob callback بدون توقيع HMAC صحيح
+        pkg = CoursePackage.objects.create(
+            teacher=self.teacher,
+            title='Checkout Hardened Pkg',
+            grade='3_sec',
+            description='Protected checkout test',
+            price=450,
+            is_active=True,
+        )
+        pkg.lectures.add(self.lecture)
+
+        stu_client = Client()
+        stu_client.force_login(self.student_user)
+        sess = stu_client.session
+        sess['buying_package_id'] = pkg.id
+        sess.save()
+
+        forged_cb = stu_client.get(reverse('payment_callback') + '?success=true&id=99999')
+        self.assertEqual(forged_cb.status_code, 403)
+        self.assertFalse(
+            PackageEnrollment.objects.filter(student=self.student, package=pkg, is_paid=True).exists()
+        )
+
+        # 2) منع التلاعب بالسعر في صفحة الدفع اليدوي (اعتماد سعر قاعدة البيانات)
+        import io
+        from PIL import Image
+        buf = io.BytesIO()
+        Image.new('RGB', (10, 10), color='blue').save(buf, format='PNG')
+        buf.seek(0)
+        fake_receipt = SimpleUploadedFile('receipt.png', buf.read(), content_type='image/png')
+        checkout_resp = stu_client.post(
+            reverse('manual_checkout') + f'?type=package&id={pkg.id}&amount=1',
+            {
+                'phone_number': '01012345678',
+                'receipt_image': fake_receipt,
+            },
+        )
+        self.assertEqual(checkout_resp.status_code, 302)
+        mp = ManualPayment.objects.get(user=self.student_user, payment_type='package', target_id=pkg.id)
+        self.assertEqual(mp.amount, 450)
+
+        # 3) منع الطالب من مشاهدة محاضرة غير مرتبطة بالباقة المدفوعة (IDOR)
+        PackageEnrollment.objects.create(student=self.student, package=pkg, is_paid=True)
+        other_lecture = Lecture.objects.create(
+            group=self.group,
+            title='Unlinked Lecture',
+            video_link='https://origin.private.ta3alm.online/raw/other.mp4',
+            is_active=True,
+        )
+        unlinked_watch = stu_client.get(
+            reverse('watch_package_lecture', args=[pkg.id, other_lecture.id])
+        )
+        self.assertEqual(unlinked_watch.status_code, 302)
+
+        # 4) منع معلم آخر من استيراد محاضرة لا يملكها أو تعديل سؤال في امتحان حزمة أخرى
+        other_t_user = User.objects.create_user(
+            username='other_teacher_sec',
+            email='other_teacher_sec@example.com',
+            password='Password123!',
+            role='teacher',
+            first_name='Adel',
+            phone='01055554444',
+        )
+        EmailVerification.objects.create(
+            user=other_t_user,
+            code='654321',
+            is_verified=True,
+            expires_at=timezone.now() + timedelta(days=1),
+        )
+        other_teacher = TeacherProfile.objects.create(
+            user=other_t_user,
+            subject=self.subject,
+            current_plan=self.plan,
+            subscription_end_date=timezone.now() + timedelta(days=30),
+        )
+        other_pkg = CoursePackage.objects.create(
+            teacher=other_teacher,
+            title='Other Teacher Pkg',
+            grade='3_sec',
+            description='Owned by other teacher',
+            price=200,
+        )
+        pkg_exam = Exam.objects.create(group=None, title='Pkg Exam', duration_minutes=30, is_active=True)
+        pkg.exams.add(pkg_exam)
+        question = Question.objects.create(
+            exam=pkg_exam,
+            text='Original Protected Question?',
+            option_a='A',
+            option_b='B',
+            option_c='C',
+            option_d='D',
+            correct_answer='A',
+            marks=2,
+        )
+
+        other_t_client = Client()
+        other_t_client.force_login(other_t_user)
+
+        other_t_client.post(
+            reverse('import_package_content', args=[other_pkg.id]),
+            {'lecture_ids': [str(self.lecture.id)]},
+        )
+        self.assertFalse(other_pkg.lectures.filter(id=self.lecture.id).exists())
+
+        edit_q_resp = other_t_client.post(
+            reverse('edit_question_page', args=[question.id]),
+            {
+                'text': 'Hacked Question!',
+                'option_a': 'A',
+                'option_b': 'B',
+                'option_c': 'C',
+                'option_d': 'D',
+                'correct_answer': 'B',
+                'marks': '10',
+            },
+        )
+        self.assertEqual(edit_q_resp.status_code, 302)
+        question.refresh_from_db()
+        self.assertEqual(question.text, 'Original Protected Question?')
+
+        # 5) منع Open Redirect في الإشعارات وتنقية HTML البريد
+        notif = Notification.objects.create(
+            recipient=self.student_user,
+            title='Notice',
+            message='Msg',
+            link='https://evil.example.com/phish',
+        )
+        notif_resp = stu_client.get(reverse('read_notification', args=[notif.id]))
+        self.assertEqual(notif_resp.status_code, 302)
+        self.assertNotIn('evil.example.com', notif_resp['Location'])
+
+        sanitized = _sanitize_email_html(
+            '<p onclick="alert(1)">Hello</p><script>evil()</script><a href="javascript:alert(2)">x</a>'
+        )
+        self.assertNotIn('<script', sanitized.lower())
+        self.assertNotIn('onclick=', sanitized.lower())
+        self.assertNotIn('javascript:', sanitized.lower())
+
+    def test_23_app_links_assetlinks_and_github_release_apk_settings(self):
+        import os
+        from django.conf import settings as django_settings
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.test import Client
+        from core.models import SiteSetting
+
+        # 1) التحقق من استثناء /.well-known/assetlinks.json من التحويل الإجباري
+        self.assertTrue(hasattr(django_settings, 'SECURE_REDIRECT_EXEMPT'))
+        self.assertTrue(
+            any('assetlinks' in pat for pat in django_settings.SECURE_REDIRECT_EXEMPT)
+        )
+
+        # 2) دمج بصمات SHA-256 من قاعدة البيانات ومتغيرات البيئة وعملها حتى في وضع الصيانة
+        site_settings = SiteSetting.load()
+        db_fp_raw = 'aa11' * 16
+        env_fp_raw = 'BB22' * 16
+        site_settings.is_maintenance_mode = True
+        site_settings.android_assetlinks_sha256 = db_fp_raw
+        site_settings.save()
+
+        prev_env = os.environ.get('ANDROID_ASSETLINKS_SHA256')
+        os.environ['ANDROID_ASSETLINKS_SHA256'] = env_fp_raw
+        try:
+            anon = Client()
+            al_resp = anon.get('/.well-known/assetlinks.json')
+            self.assertEqual(al_resp.status_code, 200)
+            payload = al_resp.json()
+            self.assertEqual(len(payload), 2)
+            fps = payload[0]['target']['sha256_cert_fingerprints']
+            self.assertIn(SiteSetting.format_sha256_colons(db_fp_raw), fps)
+            self.assertIn(SiteSetting.format_sha256_colons(env_fp_raw), fps)
+        finally:
+            if prev_env is None:
+                os.environ.pop('ANDROID_ASSETLINKS_SHA256', None)
+            else:
+                os.environ['ANDROID_ASSETLINKS_SHA256'] = prev_env
+            site_settings.is_maintenance_mode = False
+            site_settings.save()
+
+        # 3) أولوية رابط GitHub Releases على الملف المرفوع في AppUpdateDownloadAPIView
+        import tempfile
+        from django.test import override_settings
+
+        github_apk_url = 'https://github.com/ta3alm/releases/releases/download/v1.1.0/app-release.apk'
+        with tempfile.TemporaryDirectory() as tmp_media:
+            with override_settings(
+                STORAGES={
+                    'default': {
+                        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+                        'OPTIONS': {'location': tmp_media},
+                    },
+                    'staticfiles': django_settings.STORAGES['staticfiles'],
+                }
+            ):
+                site_settings.android_apk_file = SimpleUploadedFile('old.apk', b'PK\x03\x04old')
+                site_settings.android_apk_url = github_apk_url
+                site_settings.android_latest_version_code = 2
+                site_settings.android_min_required_version_code = 2
+                site_settings.android_latest_version_name = '1.1.0'
+                site_settings.save()
+
+                dl_resp = self.client.get(reverse('api_v1_app_update_download'))
+                self.assertEqual(dl_resp.status_code, 302)
+                self.assertEqual(dl_resp['Location'], github_apk_url)
+
+                # 4) إدارة الرابط والإصدارات عبر صفحة الويب المخصصة و API الإدارة
+                self.student_user.is_superuser = True
+                self.student_user.is_staff = True
+                self.student_user.save(update_fields=['is_superuser', 'is_staff'])
+
+                owner_web = Client()
+                owner_web.force_login(self.student_user)
+                page_resp = owner_web.get(reverse('admin_panel:app_release_settings'))
+                self.assertEqual(page_resp.status_code, 200)
+
+                new_github_url = 'https://github.com/ta3alm/releases/releases/download/v1.2.0/app-release.apk'
+                post_resp = owner_web.post(
+                    reverse('admin_panel:app_release_settings'),
+                    {
+                        'android_apk_url': new_github_url,
+                        'android_latest_version_code': 3,
+                        'android_min_required_version_code': 3,
+                        'android_latest_version_name': '1.2.0',
+                        'android_force_update': '1',
+                        'android_apk_sha256': 'cc33' * 16,
+                        'android_assetlinks_sha256': 'dd44' * 16,
+                        'android_update_release_notes': 'GitHub Release 1.2.0',
+                        'clear_uploaded_apk': '1',
+                    },
+                )
+                self.assertEqual(post_resp.status_code, 302)
+                site_settings.refresh_from_db()
+                self.assertEqual(site_settings.android_apk_url, new_github_url)
+                self.assertEqual(site_settings.android_latest_version_code, 3)
+                self.assertFalse(bool(site_settings.android_apk_file))
+
+                # التحقق عبر AdminDashboardAPIView (GET و POST)
+                self.client.force_authenticate(user=self.student_user)
+                api_dash = self.client.get(reverse('api_v1_admin_dashboard'))
+                self.assertEqual(api_dash.status_code, 200)
+                self.assertEqual(api_dash.data['app_release_admin']['android_apk_url'], new_github_url)
+                self.assertIn(
+                    SiteSetting.format_sha256_colons('dd44' * 16),
+                    api_dash.data['app_release_admin']['effective_assetlinks_fingerprints'],
+                )
+
+                api_post_url = 'https://github.com/ta3alm/releases/releases/download/v1.3.0/app-release.apk'
+                api_post = self.client.post(
+                    reverse('api_v1_admin_dashboard'),
+                    {
+                        'android_apk_url': api_post_url,
+                        'android_latest_version_code': 4,
+                        'android_min_required_version_code': 4,
+                        'android_latest_version_name': '1.3.0',
+                        'android_assetlinks_sha256': 'ee55' * 16,
+                    },
+                    format='json',
+                )
+                self.assertEqual(api_post.status_code, 200)
+                site_settings.refresh_from_db()
+                self.assertEqual(site_settings.android_apk_url, api_post_url)
+                self.assertEqual(site_settings.android_latest_version_code, 4)
+
+
+
 

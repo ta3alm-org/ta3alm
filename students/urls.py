@@ -12,6 +12,7 @@ urlpatterns = [
     path('group/<int:group_id>/marks/', views.student_group_marks, name='student_group_marks'),
     path('group/<int:group_id>/ranking/', views.student_group_ranking, name='student_group_ranking'),
     path('lecture/<int:lecture_id>/watch/', views.student_watch_lecture, name='student_watch_lecture'),
+    path('lecture/<int:lecture_id>/heartbeat/', views.web_lecture_heartbeat, name='web_lecture_heartbeat'),
     path('exam/<int:exam_id>/take/', views.student_take_exam, name='student_take_exam'),
     path('group/<int:group_id>/contact/', views.student_group_contact, name='student_group_contact'),
     path('package/<int:package_id>/checkout/', views.paymob_package_checkout, name='paymob_package_checkout'),

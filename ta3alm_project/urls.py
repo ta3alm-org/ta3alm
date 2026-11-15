@@ -68,6 +68,8 @@ urlpatterns += i18n_patterns(
     path('verify-email/',   account_views.verify_email_page, name='verify_email_page'),
     path('verify-email/resend/', account_views.resend_verification_email, name='resend_verification_email'),
     path('verify-email/<uuid:token>/', account_views.verify_email_link, name='verify_email_link'),
+    path('devices/',        account_views.web_trusted_devices, name='web_trusted_devices'),
+    path('devices/sync/',   account_views.web_device_traits_sync, name='web_device_traits_sync'),
 
 
     # ✅ لوحة الإدارة المستقلة — تحت /admin-panel/

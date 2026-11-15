@@ -5,7 +5,8 @@ from django.shortcuts import render, redirect
 from django.urls import reverse, resolve, Resolver404
 from django.http import Http404, JsonResponse
 from rest_framework.authtoken.models import Token
-from django.contrib.auth import login
+from django.contrib.auth import login, logout
+from django.conf import settings as django_settings
 from core.models import SiteSetting
 
 
@@ -75,8 +76,12 @@ class TokenAuthMiddleware:
             if token_key:
                 try:
                     token = Token.objects.select_related('user').get(key=token_key)
-                    login(request, token.user,
-                          backend='django.contrib.auth.backends.ModelBackend')
+                    if token.user.is_active and not getattr(token.user, 'is_banned', False):
+                        login(
+                            request,
+                            token.user,
+                            backend='django.contrib.auth.backends.ModelBackend',
+                        )
                 except Token.DoesNotExist:
                     pass
 
@@ -117,7 +122,7 @@ class MaintenanceMiddleware:
     """
     يُظهر صفحة الصيانة لغير المشرفين عند تفعيل وضع الصيانة.
     """
-    ALLOWED_PREFIXES = ('/admin/', '/admin-panel/', '/accounts/', '/static/', '/media/')
+    ALLOWED_PREFIXES = ('/admin/', '/admin-panel/', '/accounts/', '/static/', '/media/', '/.well-known/')
 
     def __init__(self, get_response):
         self.get_response = get_response
@@ -239,3 +244,140 @@ class AppVersionEnforcementMiddleware:
             return JsonResponse(payload, status=426)
 
         return self.get_response(request)
+
+
+class WebDeviceSecurityMiddleware:
+    """
+    يطبّق نفس معايير الأمان وبصمة الأجهزة (fp_v1) وحدود الأجهزة وإدارة الجلسات على موقع الويب
+    بالكامل بالتوازي مع تطبيق الأندرويد، كما يضيف ترويسات الحماية الأمنية لاستجابات الويب.
+    """
+    SKIP_PREFIXES = (
+        '/api/',
+        '/teacher/api/',
+        '/static/',
+        '/media/',
+        '/admin/',
+        '/admin-panel/',
+        '/.well-known/',
+        '/i18n/',
+        '/robots.txt',
+        '/sitemap.xml',
+    )
+    EXEMPT_PATHS = (
+        '/devices/',
+        '/verify-email/',
+        '/accounts/logout/',
+        '/banned/',
+        '/privacy/',
+        '/privacy-policy/',
+        '/terms/',
+    )
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def _strip_lang_prefix(self, path: str) -> str:
+        if path.startswith('/ar/') or path.startswith('/en/'):
+            return path[3:]
+        return path
+
+    def _apply_security_headers(self, request, response):
+        response.setdefault('X-Content-Type-Options', 'nosniff')
+        response.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+        response.setdefault('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+
+        cookie_id = getattr(request, '_web_set_cookie_id', None)
+        if cookie_id:
+            from api_v1.device_security_service import WEB_COOKIE_NAME, WEB_COOKIE_SALT
+            response.set_signed_cookie(
+                WEB_COOKIE_NAME,
+                cookie_id,
+                salt=WEB_COOKIE_SALT,
+                max_age=365 * 24 * 60 * 60,
+                httponly=True,
+                secure=bool(getattr(django_settings, 'SESSION_COOKIE_SECURE', not getattr(django_settings, 'DEBUG', False))),
+                samesite='Lax',
+            )
+        return response
+
+    def __call__(self, request):
+        path_no_lang = self._strip_lang_prefix(request.path)
+        if any(request.path.startswith(p) or path_no_lang.startswith(p) for p in self.SKIP_PREFIXES):
+            return self.get_response(request)
+
+        user = getattr(request, 'user', None)
+        if (
+            user is not None
+            and user.is_authenticated
+            and not getattr(user, 'is_superuser', False)
+            and getattr(user, 'role', '') != 'admin'
+            and not getattr(user, 'is_banned', False)
+        ):
+            from api_v1.device_security_service import (
+                build_web_device_info,
+                check_device_allowed,
+                get_or_create_web_installation_id,
+                register_or_update_device,
+            )
+            from api_v1.models import DeviceSession
+
+            installation_id = get_or_create_web_installation_id(request)
+            is_exempt = any(path_no_lang.startswith(p) for p in self.EXEMPT_PATHS)
+
+            if request.session.get('web_device_registered_id') != installation_id:
+                if not request.session.session_key:
+                    request.session.save()
+                result = register_or_update_device(
+                    request=request,
+                    user=user,
+                    installation_id=installation_id,
+                    device_info=build_web_device_info(request),
+                    token_jti=f"web:{request.session.session_key or installation_id[:24]}",
+                )
+                if result.get('allowed'):
+                    request.session['web_device_registered_id'] = installation_id
+                    request.session['web_device_session_uuid'] = result.get('session_uuid', '')
+                    request.session.pop('web_device_limit_error', None)
+                else:
+                    code = result.get('code')
+                    if code == 'DEVICE_BLOCKED':
+                        request.session.pop('web_device_registered_id', None)
+                        request.session.pop('web_device_session_uuid', None)
+                        logout(request)
+                        if not path_no_lang.startswith('/banned/'):
+                            return self._apply_security_headers(request, redirect('banned_page'))
+                    else:
+                        request.session['web_device_limit_error'] = result.get('error')
+                        if not is_exempt:
+                            return self._apply_security_headers(request, redirect('web_trusted_devices'))
+            else:
+                allowed, code, err = check_device_allowed(user, installation_id)
+                sess_uuid = request.session.get('web_device_session_uuid')
+                session_revoked_remotely = False
+                if sess_uuid:
+                    try:
+                        session_revoked_remotely = DeviceSession.objects.filter(
+                            session_uuid=sess_uuid,
+                            status__in=('revoked', 'logged_out'),
+                        ).exists()
+                    except Exception:
+                        session_revoked_remotely = False
+
+                if session_revoked_remotely or (not allowed and code == 'DEVICE_REVOKED'):
+                    request.session.pop('web_device_registered_id', None)
+                    request.session.pop('web_device_session_uuid', None)
+                    logout(request)
+                    return self._apply_security_headers(request, redirect('account_login'))
+
+                if not allowed:
+                    if code == 'DEVICE_BLOCKED':
+                        request.session.pop('web_device_registered_id', None)
+                        request.session.pop('web_device_session_uuid', None)
+                        logout(request)
+                        return self._apply_security_headers(request, redirect('banned_page'))
+                    request.session['web_device_limit_error'] = err
+                    if not is_exempt:
+                        return self._apply_security_headers(request, redirect('web_trusted_devices'))
+
+        response = self.get_response(request)
+        return self._apply_security_headers(request, response)

@@ -238,6 +238,35 @@
         user-select: none;
         will-change: transform;
     }
+
+    @media print {
+        #playerWrapper,
+        .ta3alm-web-player-fallback,
+        .custom-player-wrapper {
+            display: none !important;
+            visibility: hidden !important;
+        }
+    }
+
+    .custom-player-wrapper,
+    .ta3alm-web-player-fallback {
+        -webkit-user-select: none;
+        user-select: none;
+    }
+
+    .ta3alm-capture-shield {
+        position: absolute;
+        inset: 0;
+        background: rgba(2, 6, 23, 0.96);
+        color: #ffffff;
+        z-index: 60;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 24px;
+        backdrop-filter: blur(8px);
+    }
 </style>
 
 <div class="custom-player-wrapper paused" id="playerWrapper">
@@ -255,11 +284,23 @@
 
     <!-- كبسولة كود الطالب العائمة -->
     <div class="floating-watermark" id="floatingWatermark">
-        {{ request.user.custom_id|default:request.user.username|default:"TA3ALM-USER" }}
+        {{ watermark.display_text|default:request.user.custom_id|default:request.user.username|default:"TA3ALM-USER" }}
     </div>
 
     <div class="video-container" id="yt-player-container"></div>
     <div class="video-click-overlay" id="clickOverlay"></div>
+    <div class="ta3alm-capture-shield" id="webCaptureShield">
+        <div>
+            <i class="bi bi-shield-lock-fill fs-1 text-warning mb-2 d-block"></i>
+            <h5 class="fw-bold mb-2" id="webShieldTitle">{% trans "حماية المحتوى مفعّلة" %}</h5>
+            <p class="small text-light opacity-75 mb-3" id="webShieldMsg">
+                {% trans "تم تعتيم الفيديو مؤقتًا عند فقدان التركيز أو محاولة التصوير." %}
+            </p>
+            <a href="{% url 'web_trusted_devices' %}" class="btn btn-outline-warning btn-sm d-none" id="webShieldDevicesBtn">
+                {% trans "إدارة الأجهزة المتصلة" %}
+            </a>
+        </div>
+    </div>
 
     <div class="custom-controls">
         <div class="progress-container" id="progressContainer">
@@ -494,11 +535,161 @@
 </script>
 
 {% else %}
-<!-- فيديوهات خارجية غير يوتيوب تبقى بالمشغل العادي -->
-<div class="ratio ratio-16x9 bg-dark shadow rounded mb-3 overflow-hidden">
-    <iframe src="{{ lecture.video_link }}" title="Video player" frameborder="0"
+<!-- فيديوهات خارجية غير يوتيوب تبقى بالمشغل العادي المحمي -->
+<div class="ratio ratio-16x9 bg-dark shadow rounded mb-3 overflow-hidden position-relative ta3alm-web-player-fallback" id="playerFallbackWrapper">
+    <iframe id="fallbackVideoIframe" src="{{ lecture.video_link }}" title="Video player" frameborder="0"
         allow="autoplay; fullscreen; picture-in-picture" allowfullscreen
         style="width: 100%; height: 100%; border-radius: 12px;">
     </iframe>
+    <div class="position-absolute top-0 end-0 m-3 px-2 py-1 rounded bg-dark bg-opacity-75 text-white small"
+         id="floatingWatermarkFallback" style="pointer-events: none; z-index: 20; opacity: 0.5;">
+        {{ watermark.display_text|default:request.user.custom_id|default:request.user.username|default:"TA3ALM-USER" }}
+    </div>
+    <div class="position-absolute top-0 start-0 w-100 h-100 bg-dark text-white align-items-center justify-content-center text-center p-4"
+         id="webCaptureShieldFallback" style="display: none; z-index: 60;">
+        <div>
+            <i class="bi bi-shield-lock-fill fs-1 text-warning mb-2 d-block"></i>
+            <h5 class="fw-bold mb-2" id="webShieldTitleFallback">{% trans "حماية المحتوى مفعّلة" %}</h5>
+            <p class="small text-light opacity-75 mb-3" id="webShieldMsgFallback">
+                {% trans "تم تعتيم الفيديو مؤقتًا لحماية المحتوى التعليمي." %}
+            </p>
+            <a href="{% url 'web_trusted_devices' %}" class="btn btn-outline-warning btn-sm d-none" id="webShieldDevicesBtnFallback">
+                {% trans "إدارة الأجهزة المتصلة" %}
+            </a>
+        </div>
+    </div>
 </div>
 {% endif %}
+
+<script>
+    (function () {
+        var shield = document.getElementById('webCaptureShield') || document.getElementById('webCaptureShieldFallback');
+        var shieldTitle = document.getElementById('webShieldTitle') || document.getElementById('webShieldTitleFallback');
+        var shieldMsg = document.getElementById('webShieldMsg') || document.getElementById('webShieldMsgFallback');
+        var shieldBtn = document.getElementById('webShieldDevicesBtn') || document.getElementById('webShieldDevicesBtnFallback');
+        var wrapper = document.getElementById('playerWrapper') || document.getElementById('playerFallbackWrapper');
+        var lockedPermanently = false;
+
+        function activateShield(titleText, msgText, permanent) {
+            if (!shield) return;
+            if (titleText && shieldTitle) shieldTitle.textContent = titleText;
+            if (msgText && shieldMsg) shieldMsg.textContent = msgText;
+            if (permanent) {
+                lockedPermanently = true;
+                if (shieldBtn) shieldBtn.classList.remove('d-none');
+                try {
+                    if (typeof player !== 'undefined' && player && typeof player.pauseVideo === 'function') {
+                        player.pauseVideo();
+                    }
+                } catch (e) {}
+                var fallbackIframe = document.getElementById('fallbackVideoIframe');
+                if (fallbackIframe) {
+                    fallbackIframe.removeAttribute('src');
+                }
+            }
+            shield.style.display = 'flex';
+        }
+
+        function hideTransientShield() {
+            if (shield && !lockedPermanently) {
+                shield.style.display = 'none';
+            }
+        }
+
+        if (wrapper) {
+            ['contextmenu', 'copy', 'cut', 'selectstart', 'dragstart'].forEach(function (evt) {
+                wrapper.addEventListener(evt, function (e) { e.preventDefault(); });
+            });
+        }
+
+        document.addEventListener('keydown', function (e) {
+            var k = (e.key || '').toLowerCase();
+            if (e.key === 'PrintScreen' || e.keyCode === 44) {
+                activateShield('{% trans "التقاط الشاشة محظور" %}', '{% trans "يُمنع تصوير أو تسجيل شاشة المحاضرات المحمية." %}', false);
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText('').catch(function () {});
+                }
+            }
+            if (e.key === 'F12' || ((e.ctrlKey || e.metaKey) && ['s', 'p', 'u'].indexOf(k) !== -1) ||
+                ((e.ctrlKey || e.metaKey) && e.shiftKey && ['i', 'j', 'c'].indexOf(k) !== -1)) {
+                e.preventDefault();
+            }
+        });
+
+        document.addEventListener('visibilitychange', function () {
+            if (document.hidden) {
+                try {
+                    if (typeof player !== 'undefined' && player && typeof player.pauseVideo === 'function') {
+                        player.pauseVideo();
+                    }
+                } catch (e) {}
+                activateShield('', '', false);
+            } else {
+                hideTransientShield();
+            }
+        });
+        window.addEventListener('blur', function () { activateShield('', '', false); });
+        window.addEventListener('focus', hideTransientShield);
+
+        var wm = document.getElementById('floatingWatermark');
+        if (wm && wrapper) {
+            var moveSec = parseInt('{{ watermark.move_interval_seconds|default:9 }}', 10) || 9;
+            setInterval(function () {
+                if (lockedPermanently) return;
+                var topPct = 10 + Math.floor(Math.random() * 65);
+                var leftPct = 8 + Math.floor(Math.random() * 62);
+                wm.style.top = topPct + '%';
+                wm.style.left = leftPct + '%';
+                wm.style.right = 'auto';
+                wm.style.bottom = 'auto';
+            }, moveSec * 1000);
+        }
+
+        var sessionUuid = '{{ playback_session_uuid|default:""|escapejs }}';
+        var heartbeatUrl = '{% if lecture.id %}{% url "web_lecture_heartbeat" lecture.id %}{% endif %}';
+        if (sessionUuid && heartbeatUrl) {
+            function getCookie(name) {
+                var value = '; ' + document.cookie;
+                var parts = value.split('; ' + name + '=');
+                if (parts.length === 2) return parts.pop().split(';').shift();
+                return '';
+            }
+            var hbTimer = setInterval(function () {
+                if (lockedPermanently) {
+                    clearInterval(hbTimer);
+                    return;
+                }
+                fetch(heartbeatUrl, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken') || '{{ csrf_token }}'
+                    },
+                    body: JSON.stringify({ session_id: sessionUuid })
+                }).then(function (res) {
+                    if (!res.ok) {
+                        return res.json().catch(function () { return {}; }).then(function (data) {
+                            clearInterval(hbTimer);
+                            activateShield(
+                                '{% trans "تم إيقاف جلسة المشاهدة" %}',
+                                (data && data.error) || '{% trans "تم فتح الحساب أو المحاضرة من متصفح أو جهاز آخر." %}',
+                                true
+                            );
+                        });
+                    }
+                    return res.json().catch(function () { return {}; }).then(function (data) {
+                        if (data && data.ok === false) {
+                            clearInterval(hbTimer);
+                            activateShield(
+                                '{% trans "تم إيقاف جلسة المشاهدة" %}',
+                                data.error || '{% trans "تم إيقاف تصريح المشاهدة الحالي." %}',
+                                true
+                            );
+                        }
+                    });
+                }).catch(function () {});
+            }, 25000);
+        }
+    })();
+</script>

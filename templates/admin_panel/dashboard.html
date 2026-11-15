@@ -167,13 +167,22 @@
     {% if is_owner %}
     <div class="col-12">
         <div class="admin-card">
-            <div class="admin-card-header">
-                <span class="admin-card-title"><i class="bi bi-phone-fill me-2" style="color:var(--admin-accent);"></i>إدارة التحديثات الداخلية لتطبيق الأندرويد (In-App OTA Update)</span>
-                <span class="badge bg-secondary">أحدث بناء: {{ site_settings.android_latest_version_code }} ({{ site_settings.android_latest_version_name }})</span>
+            <div class="admin-card-header flex-wrap gap-2">
+                <span class="admin-card-title"><i class="bi bi-android2 me-2 text-success"></i>إدارة رابط APK (GitHub Releases) والتحديثات الداخلية</span>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-secondary">أحدث بناء: {{ site_settings.android_latest_version_code }} ({{ site_settings.android_latest_version_name }})</span>
+                    <a href="{% url 'admin_panel:app_release_settings' %}" class="btn btn-sm btn-outline-primary fw-bold">
+                        <i class="bi bi-sliders me-1"></i> صفحة الإدارة والتشخيص الكاملة
+                    </a>
+                </div>
             </div>
             <form method="POST" action="{% url 'admin_panel:update_app_release_settings' %}" enctype="multipart/form-data" class="p-3">
                 {% csrf_token %}
                 <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label small fw-bold">رابط تحميل APK المباشر من GitHub Releases (يوفر مساحة السيرفر والباندويث)</label>
+                        <input type="url" name="android_apk_url" value="{{ site_settings.android_apk_url }}" class="form-control" dir="ltr" placeholder="https://github.com/USERNAME/REPO/releases/download/v1.1.0/app-release.apk">
+                    </div>
                     <div class="col-md-3">
                         <label class="form-label small fw-bold">رقم البناء الأحدث (Version Code)</label>
                         <input type="number" name="android_latest_version_code" min="1" value="{{ site_settings.android_latest_version_code }}" class="form-control" required>
@@ -193,23 +202,26 @@
                         </div>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label small fw-bold">رابط تحميل ملف APK المباشر (اختياري إذا رُفع الملف)</label>
-                        <input type="url" name="android_apk_url" value="{{ site_settings.android_apk_url }}" class="form-control" dir="ltr" placeholder="https://...">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label small fw-bold">رفع ملف التحديث (APK) مباشرة على المنصة</label>
-                        <input type="file" name="android_apk_file" accept=".apk,application/vnd.android.package-archive" class="form-control">
-                        {% if site_settings.android_apk_file %}
-                        <small class="text-success d-block mt-1">مرفوع حالياً: {{ site_settings.android_apk_file.name }}</small>
-                        {% endif %}
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label small fw-bold">بصمة SHA-256 لملف APK (تُحسب تلقائياً عند الرفع)</label>
+                        <label class="form-label small fw-bold">بصمة SHA-256 لملف APK (اختياري)</label>
                         <input type="text" name="android_apk_sha256" value="{{ site_settings.android_apk_sha256 }}" class="form-control font-monospace" dir="ltr" maxlength="64">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">بصمة شهادة توقيع التطبيق لـ App Links (SHA-256)</label>
+                        <input type="text" name="android_assetlinks_sha256" value="{{ site_settings.android_assetlinks_sha256 }}" class="form-control font-monospace" dir="ltr" placeholder="AA:BB:CC:... (تُدمج مع متغير البيئة)">
                     </div>
                     <div class="col-md-6">
                         <label class="form-label small fw-bold">ملاحظات التحديث</label>
                         <input type="text" name="android_update_release_notes" value="{{ site_settings.android_update_release_notes }}" class="form-control" placeholder="تحسينات أمنية وتحديثات جديدة...">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">أو رفع ملف APK على الخادم (اختياري)</label>
+                        <input type="file" name="android_apk_file" accept=".apk,application/vnd.android.package-archive" class="form-control">
+                        {% if site_settings.android_apk_file %}
+                        <div class="d-flex justify-content-between align-items-center mt-1">
+                            <small class="text-success">مرفوع حالياً: {{ site_settings.android_apk_file.name }}</small>
+                            <label class="small text-danger fw-bold"><input type="checkbox" name="clear_uploaded_apk" value="1"> حذف المرفوع</label>
+                        </div>
+                        {% endif %}
                     </div>
                     <div class="col-12 d-flex justify-content-end">
                         <button type="submit" class="btn btn-primary fw-bold px-4">

@@ -12,6 +12,7 @@ urlpatterns = [
     path('',                    views.dashboard,          name='dashboard'),
     path('maintenance/toggle/', views.toggle_maintenance, name='toggle_maintenance'),
     path('commission/update/',  views.update_platform_commission, name='update_platform_commission'),
+    path('app-release/',        views.app_release_settings,       name='app_release_settings'),
     path('app-release/update/', views.update_app_release_settings, name='update_app_release_settings'),
 
     # إدارة المستخدمين

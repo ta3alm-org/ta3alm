@@ -122,6 +122,7 @@ MIDDLEWARE = [
     'ta3alm_project.middleware.TokenAuthMiddleware',
     'ta3alm_project.middleware.BanMiddleware',
     'ta3alm_project.middleware.EmailVerificationMiddleware',
+    'ta3alm_project.middleware.WebDeviceSecurityMiddleware',
     'ta3alm_project.middleware.AppVersionEnforcementMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -165,6 +166,7 @@ CORS_ALLOW_CREDENTIALS = True
 # ==========================================================
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SECURE_SSL_REDIRECT = not DEBUG
+SECURE_REDIRECT_EXEMPT = [r'^\.well-known/assetlinks\.json$']
 SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0
 SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
 SECURE_HSTS_PRELOAD = not DEBUG

@@ -103,11 +103,17 @@ def banned_page(request):
 # ==========================================================
 @login_required
 def read_notification(request, notif_id):
+    from django.utils.http import url_has_allowed_host_and_scheme
+
     notif = get_object_or_404(Notification, id=notif_id, recipient=request.user)
     notif.is_read = True
     notif.save(update_fields=['is_read'])
 
-    if notif.link:
+    if notif.link and url_has_allowed_host_and_scheme(
+        notif.link,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
         return redirect(notif.link)
     return redirect('all_notifications')
 
@@ -141,13 +147,33 @@ from .forms import ManualPaymentForm
 
 @login_required
 def manual_checkout_view(request):
-    # استقبال المتغيرات من الـ session أو GET
-    payment_type = request.GET.get('type')
-    target_id = request.GET.get('id')
-    amount = request.GET.get('amount')
+    from teachers.models import CoursePackage, SubscriptionPlan
 
-    if not payment_type or not target_id or not amount:
-        messages.error(request, _("بيانات الدفع غير مكتملة."))
+    payment_type = (request.GET.get('type') or '').strip()
+    raw_target_id = (request.GET.get('id') or '').strip()
+
+    try:
+        target_id = int(raw_target_id)
+    except (TypeError, ValueError):
+        messages.error(request, _("بيانات الدفع غير مكتملة أو غير صالحة."))
+        return redirect('home')
+
+    # اعتماد السعر من قاعدة البيانات فقط وتجاهل أي مبلغ مُرسل في رابط GET
+    authoritative_amount = None
+    if payment_type == 'package':
+        package = CoursePackage.objects.filter(id=target_id, is_active=True).first()
+        if package:
+            authoritative_amount = package.price
+    elif payment_type == 'subscription':
+        plan = SubscriptionPlan.objects.filter(id=target_id).first()
+        if plan:
+            authoritative_amount = plan.price
+    else:
+        messages.error(request, _("نوع الدفع غير صالح."))
+        return redirect('home')
+
+    if authoritative_amount is None:
+        messages.error(request, _("العنصر المطلوب للدفع غير موجود أو غير متاح."))
         return redirect('home')
 
     if request.method == 'POST':
@@ -157,7 +183,7 @@ def manual_checkout_view(request):
             payment.user = request.user
             payment.payment_type = payment_type
             payment.target_id = target_id
-            payment.amount = amount
+            payment.amount = authoritative_amount
             payment.save()
             messages.success(request, _("تم إرسال طلب الدفع بنجاح. يرجى الانتظار حتى تتم مراجعته من قبل الإدارة."))
             if request.user.role == 'student':
@@ -169,8 +195,9 @@ def manual_checkout_view(request):
         form = ManualPaymentForm()
 
     return render(request, 'core/manual_checkout.html', {
-        'amount': amount,
+        'amount': authoritative_amount,
         'payment_type': payment_type,
+        'form': form,
     })
 
 # ==========================================================

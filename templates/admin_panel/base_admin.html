@@ -411,6 +411,12 @@
            class="sidebar-link {% block nav_plans %}{% endblock %}">
             <i class="bi bi-tags-fill"></i> الباقات
         </a>
+        {% if is_owner %}
+        <a href="{% url 'admin_panel:app_release_settings' %}"
+           class="sidebar-link {% block nav_app_release %}{% endblock %}">
+            <i class="bi bi-android2"></i> إصدارات التطبيق ورابط APK
+        </a>
+        {% endif %}
         {% endif %}
 
         {% if is_owner %}

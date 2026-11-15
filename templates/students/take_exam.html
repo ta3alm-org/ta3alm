@@ -96,5 +96,56 @@
     window.onload = function () {
         startTimer();
     };
+    // حماية شاشة الامتحان من النسخ والطباعة والتصوير السريع
+    (function () {
+        document.body.classList.add('ta3alm-protected-surface');
+        var style = document.createElement('style');
+        style.textContent = '@media print { body * { visibility: hidden !important; } body::after { content: "الطباعة غير مسموحة لهذه الصفحة المحمية."; visibility: visible; position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; } } .ta3alm-protected-surface { -webkit-user-select: none; user-select: none; } #examFocusShield { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.94); color: #fff; z-index: 99999; display: none; align-items: center; justify-content: center; text-align: center; padding: 24px; backdrop-filter: blur(10px); }';
+        document.head.appendChild(style);
+
+        var shield = document.createElement('div');
+        shield.id = 'examFocusShield';
+        shield.innerHTML = '<div><i class="bi bi-shield-lock-fill fs-1 text-warning mb-3 d-block"></i><h4>تم إخفاء محتوى الامتحان مؤقتًا</h4><p class="text-light opacity-75">للحفاظ على نزاهة الاختبار، يُمنع مغادرة النافذة أو استخدام أدوات النسخ والتصوير.</p><button type="button" class="btn btn-warning btn-sm mt-2" id="resumeExamShieldBtn">العودة للامتحان</button></div>';
+        document.body.appendChild(shield);
+        var resumeBtn = document.getElementById('resumeExamShieldBtn');
+        if (resumeBtn) {
+            resumeBtn.addEventListener('click', function () {
+                shield.style.display = 'none';
+            });
+        }
+
+        function showShield() {
+            shield.style.display = 'flex';
+        }
+
+        document.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+        document.addEventListener('copy', function (e) { e.preventDefault(); });
+        document.addEventListener('cut', function (e) { e.preventDefault(); });
+        document.addEventListener('selectstart', function (e) { e.preventDefault(); });
+        document.addEventListener('keydown', function (e) {
+            var k = (e.key || '').toLowerCase();
+            if (e.key === 'PrintScreen' || e.keyCode === 44) {
+                showShield();
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText('').catch(function () {});
+                }
+            }
+            if ((e.ctrlKey || e.metaKey) && ['c', 'u', 's', 'p', 'a'].indexOf(k) !== -1) {
+                e.preventDefault();
+            }
+            if (e.key === 'F12' || ((e.ctrlKey || e.metaKey) && e.shiftKey && ['i', 'j', 'c'].indexOf(k) !== -1)) {
+                e.preventDefault();
+            }
+        });
+        document.addEventListener('visibilitychange', function () {
+            if (document.hidden) {
+                showShield();
+            } else {
+                shield.style.display = 'none';
+            }
+        });
+        window.addEventListener('blur', showShield);
+        window.addEventListener('focus', function () { shield.style.display = 'none'; });
+    })();
 </script>
 {% endblock %}

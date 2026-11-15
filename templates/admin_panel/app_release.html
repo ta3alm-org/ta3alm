@@ -1,0 +1,226 @@
+{% extends 'admin_panel/base_admin.html' %}
+
+{% block title %}إصدارات التطبيق ورابط APK{% endblock %}
+{% block nav_app_release %}active{% endblock %}
+
+{% block breadcrumb %}
+<span>/</span>
+<span>إصدارات التطبيق ورابط APK</span>
+{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+    <div>
+        <h1><i class="bi bi-android2 text-success me-2"></i>إصدارات تطبيق الأندرويد ورابط APK الخارجي</h1>
+        <p>ضع رابط ملف <code>.apk</code> المباشر من <strong>GitHub Releases</strong> لتوفير مساحة الخادم والباندويث، مع إدارة التحديث الإجباري وبصمات فتح الروابط داخل التطبيق (App Links).</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="/.well-known/assetlinks.json" target="_blank" class="btn btn-outline-primary btn-sm fw-bold rounded-3">
+            <i class="bi bi-filetype-json me-1"></i> فحص assetlinks.json
+        </a>
+        <a href="{% url 'api_v1_app_version' %}" target="_blank" class="btn btn-outline-secondary btn-sm fw-bold rounded-3">
+            <i class="bi bi-code-slash me-1"></i> فحص API الإصدار
+        </a>
+    </div>
+</div>
+
+<!-- بطاقات الحالة السريعة -->
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="stat-label">أحدث إصدار منشور</div>
+                    <div class="stat-number mt-1" dir="ltr">v{{ site_settings.android_latest_version_name }} (+{{ site_settings.android_latest_version_code }})</div>
+                    <div class="stat-sub">أقل بناء مسموح: {{ site_settings.android_min_required_version_code }}</div>
+                </div>
+                <div class="stat-icon" style="background:linear-gradient(135deg,#0f9b58,#00b894);">
+                    <i class="bi bi-phone-fill"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="stat-label">مصدر تنزيل APK الفعّال</div>
+                    <div class="mt-2">
+                        {% if site_settings.android_apk_url %}
+                        <span class="badge bg-success-subtle text-success fw-bold px-3 py-2">رابط خارجي (GitHub / CDN)</span>
+                        {% elif site_settings.android_apk_file %}
+                        <span class="badge bg-warning-subtle text-warning fw-bold px-3 py-2">ملف مرفوع على الخادم</span>
+                        {% else %}
+                        <span class="badge bg-danger-subtle text-danger fw-bold px-3 py-2">غير مضبوط بعد</span>
+                        {% endif %}
+                    </div>
+                    <div class="stat-sub mt-2">
+                        {% if effective_apk_url %}الأولوية دائماً للرابط الخارجي عند إدخاله{% else %}أضف رابط GitHub Releases أدناه{% endif %}
+                    </div>
+                </div>
+                <div class="stat-icon" style="background:linear-gradient(135deg,#0d6efd,#4f46e5);">
+                    <i class="bi bi-cloud-arrow-down-fill"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="stat-label">بصمات App Links المفعّلة</div>
+                    <div class="stat-number mt-1">{{ assetlinks_fingerprints|length }}</div>
+                    <div class="stat-sub">
+                        {% if assetlinks_fingerprints %}
+                        <span class="text-success fw-bold">جاهزة في assetlinks.json</span>
+                        {% else %}
+                        <span class="text-danger fw-bold">لا توجد بصمة SHA-256 مسجلة</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="stat-icon" style="background:linear-gradient(135deg,#6f42c1,#a855f7);">
+                    <i class="bi bi-link-45deg"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="admin-card">
+            <div class="admin-card-header">
+                <span class="admin-card-title"><i class="bi bi-github me-2"></i>إعداد رابط APK من GitHub Releases وإصدار التطبيق</span>
+            </div>
+            <form method="POST" action="{% url 'admin_panel:app_release_settings' %}" enctype="multipart/form-data" class="p-4">
+                {% csrf_token %}
+
+                <div class="alert alert-info mb-4">
+                    <div class="fw-bold mb-1"><i class="bi bi-info-circle-fill me-1"></i>طريقة استخدام GitHub Releases بشكل صحيح:</div>
+                    <div class="small">
+                        1. ارفع ملف <code>app-release.apk</code> في صفحة Releases على مستودع GitHub.<br>
+                        2. انسخ رابط التحميل <strong>المباشر للملف</strong> الذي ينتهي بـ <code>.apk</code> (مثال:
+                        <code dir="ltr">https://github.com/user/repo/releases/download/v1.1.0/app-release.apk</code>) وليس رابط صفحة الـ Tag.<br>
+                        3. عند حفظ الرابط هنا، سيقوم التطبيق القديم بتنزيل التحديث من GitHub مباشرة دون استهلاك مساحة أو باندويث السيرفر.
+                    </div>
+                </div>
+
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label fw-bold">رابط ملف APK المباشر (GitHub Releases Direct Asset URL)</label>
+                        <input type="url" name="android_apk_url" value="{{ site_settings.android_apk_url }}"
+                               class="form-control form-control-lg" dir="ltr"
+                               placeholder="https://github.com/USERNAME/REPO/releases/download/v1.1.0/app-release.apk">
+                        {% if site_settings.android_apk_url %}
+                        <div class="form-text text-success fw-bold mt-1">
+                            الرابط الحالي الفعّال: <a href="{{ site_settings.android_apk_url }}" target="_blank" dir="ltr">{{ site_settings.android_apk_url }}</a>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label small fw-bold">رقم البناء الأحدث (Version Code)</label>
+                        <input type="number" name="android_latest_version_code" min="1"
+                               value="{{ site_settings.android_latest_version_code }}" class="form-control" required>
+                        <div class="form-text">يطابق الرقم بعد علامة <code>+</code> في <code>pubspec.yaml</code></div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-bold">أقل بناء مسموح بفتحه (Min Build)</label>
+                        <input type="number" name="android_min_required_version_code" min="1"
+                               value="{{ site_settings.android_min_required_version_code }}" class="form-control" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-bold">اسم الإصدار (Version Name)</label>
+                        <input type="text" name="android_latest_version_name"
+                               value="{{ site_settings.android_latest_version_name }}" class="form-control" dir="ltr" required>
+                    </div>
+
+                    <div class="col-12">
+                        <div class="form-check form-switch p-3 rounded-3 bg-light border">
+                            <input class="form-check-input ms-0 me-3" type="checkbox" id="forceUpdatePageSwitch"
+                                   name="android_force_update" value="1" {% if site_settings.android_force_update %}checked{% endif %}>
+                            <label class="form-check-label fw-bold" for="forceUpdatePageSwitch">
+                                إجبار المستخدمين على الفتح بأعلى إصدار فقط (Force In-App Update Gate)
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">بصمة SHA-256 لملف APK (اختياري للتحقق من سلامة الملف)</label>
+                        <input type="text" name="android_apk_sha256" value="{{ site_settings.android_apk_sha256 }}"
+                               class="form-control font-monospace" dir="ltr" maxlength="64"
+                               placeholder="64 hex chars (اختياري)">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">ملاحظات التحديث للمستخدمين</label>
+                        <input type="text" name="android_update_release_notes" value="{{ site_settings.android_update_release_notes }}"
+                               class="form-control" placeholder="تحسينات شاشة البداية، دعم فتح الروابط، وترقيات أمنية...">
+                    </div>
+
+                    <div class="col-12">
+                        <hr class="my-2">
+                        <label class="form-label fw-bold">
+                            <i class="bi bi-shield-lock-fill text-primary me-1"></i>
+                            بصمة شهادة التوقيع SHA-256 لفتح الروابط في التطبيق (Android App Links)
+                        </label>
+                        <textarea name="android_assetlinks_sha256" rows="2" class="form-control font-monospace" dir="ltr"
+                                  placeholder="AA:BB:CC:... (يمكن كتابة أكثر من بصمة مفصولة بفاصلة أو سطر جديد)">{{ site_settings.android_assetlinks_sha256 }}</textarea>
+                        <div class="form-text">
+                            تُدمج هذه البصمات تلقائياً مع متغير البيئة <code>ANDROID_ASSETLINKS_SHA256</code>
+                            {% if env_sha256_configured %}<span class="badge bg-success ms-1">متغير البيئة مضبوط أيضاً</span>{% endif %}.
+                            تأكد من تطابق البصمة مع شهادة التوقيع التي بُني بها ملف <code>APK</code> الفعلي.
+                        </div>
+                    </div>
+
+                    <div class="col-12">
+                        <details class="border rounded-3 p-3 bg-light">
+                            <summary class="fw-bold small text-muted" style="cursor:pointer;">
+                                خيارات رفع ملف APK على الخادم (اختياري — يُنصح بالاكتفاء برابط GitHub أعلاه)
+                            </summary>
+                            <div class="mt-3">
+                                <input type="file" name="android_apk_file" accept=".apk,application/vnd.android.package-archive" class="form-control mb-2">
+                                {% if site_settings.android_apk_file %}
+                                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                                    <small class="text-success fw-bold">يوجد ملف قديم مرفوع على الخادم: {{ site_settings.android_apk_file.name }}</small>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="clear_uploaded_apk" value="1" id="clearUploadedApk">
+                                        <label class="form-check-label small text-danger fw-bold" for="clearUploadedApk">
+                                            حذف الملف المرفوع على الخادم لتوفير المساحة
+                                        </label>
+                                    </div>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </details>
+                    </div>
+
+                    <div class="col-12 d-flex justify-content-end">
+                        <button type="submit" class="btn btn-primary btn-lg fw-bold px-4">
+                            <i class="bi bi-check2-circle me-1"></i> حفظ وتطبيق إعدادات التطبيق
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="admin-card mb-4">
+            <div class="admin-card-header">
+                <span class="admin-card-title"><i class="bi bi-bug-fill me-2 text-warning"></i>تشخيص فتح الروابط بدون Google Play</span>
+            </div>
+            <div class="p-3 small" style="line-height:1.75;">
+                <p class="mb-2">عند توزيع التطبيق عبر ملف <strong>APK خارجي</strong> (خارج Google Play)، يعمل فتح روابط <code>ta3alm.online</code> مباشرة عند تحقق الآتي:</p>
+                <ol class="ps-3 mb-3">
+                    <li>بناء الـ APK بنفس شهادة التوقيع المسجلة بصمتها في <code>assetlinks.json</code> (إذا بُني بـ debug بدون <code>key.properties</code> ستختلف البصمة!).</li>
+                    <li>وصول <code>/.well-known/assetlinks.json</code> برمز <strong>200 OK بدون إعادة توجيه (No 301/302 redirect)</strong> على النطاقين <code>www.ta3alm.online</code> و<code>ta3alm.online</code>.</li>
+                    <li>على بعض إصدارات Android 12+ عند التثبيت اليدوي (Sideload)، قد يطلب النظام تفعيل <strong>"الفتح افتراضياً / Open by default &rarr; إضافة روابط"</strong> أو استخدام زر <strong>"فتح في التطبيق"</strong> الذي أضفناه تلقائياً في شريط الموقع على هواتف أندرويد.</li>
+                </ol>
+                <div class="fw-bold mb-1">معاينة محتوى <code dir="ltr">/.well-known/assetlinks.json</code>:</div>
+                <pre class="p-2 rounded bg-dark text-light mb-0" style="font-size:0.72rem; max-height:280px; overflow:auto;" dir="ltr">{{ assetlinks_preview }}</pre>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

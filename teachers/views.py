@@ -312,7 +312,9 @@ def group_students(request, group_id):
             )
         if 'pending_enrollments' in locals():
             pending_enrollments = pending_enrollments.filter(
-                Q(student__user__first_name__icontains=query) | ...
+                Q(student__user__first_name__icontains=query) |
+                Q(student__user__last_name__icontains=query) |
+                Q(student__user__phone__icontains=query)
             )
 
     context = {
@@ -382,7 +384,9 @@ def group_requests(request, group_id):
             )
         if 'pending_enrollments' in locals():
             pending_enrollments = pending_enrollments.filter(
-                Q(student__user__first_name__icontains=query) | ...
+                Q(student__user__first_name__icontains=query) |
+                Q(student__user__last_name__icontains=query) |
+                Q(student__user__phone__icontains=query)
             )
 
     context = {
@@ -812,21 +816,71 @@ from teachers.models import CoursePackage # لو مش مستورد
 from students.models import PackageEnrollment
 from .models import Wallet, CoursePackage, SubscriptionPlan, PaymentTransaction
 
+import hashlib
+import hmac
+import logging
+from decimal import Decimal, InvalidOperation
+from django.conf import settings as django_settings
+from django.db import transaction
+from django.utils.http import url_has_allowed_host_and_scheme
+
+_pay_logger = logging.getLogger(__name__)
+_PAYMOB_HMAC_FIELDS = (
+    'amount_cents',
+    'created_at',
+    'currency',
+    'error_occured',
+    'has_parent_transaction',
+    'id',
+    'integration_id',
+    'is_3d_secure',
+    'is_auth',
+    'is_capture',
+    'is_refunded',
+    'is_standalone_payment',
+    'is_voided',
+    'order',
+    'owner',
+    'pending',
+    'source_data.pan',
+    'source_data.sub_type',
+    'source_data.type',
+    'success',
+)
+
+
+def _verify_paymob_hmac(query_dict) -> bool:
+    """يتحقق من توقيع Paymob HMAC-SHA512 قبل اعتماد أي معاملة مالية."""
+    hmac_sent = (query_dict.get('hmac') or '').strip()
+    secret = (getattr(django_settings, 'PAYMOB_HMAC_SECRET', '') or '').strip()
+    if not secret or not hmac_sent:
+        return False
+    concat = ''.join(str(query_dict.get(field, '')) for field in _PAYMOB_HMAC_FIELDS)
+    expected = hmac.new(
+        secret.encode('utf-8'),
+        concat.encode('utf-8'),
+        hashlib.sha512,
+    ).hexdigest()
+    return hmac.compare_digest(expected.lower(), hmac_sent.lower())
+
+
 @login_required
 def payment_callback(request):
-    print("--- UNIFIED PAYMOB CALLBACK ---")
-    
     success = request.GET.get('success')
-    pending = request.GET.get('pending')
-    
-    # 1. حالة الفشل
-    if success != "true" and pending != "true":
-        error_msg = request.GET.get('data.message', 'Unknown Error')
-        messages.error(request, f"فشلت عملية الدفع: {error_msg}")
-        # يمكن إنشاء صفحة فشل خاصة بالطالب لو أردت، لكن الحالية تكفي
-        return render(request, 'teachers/payment_failed.html')
 
-    # 2. حالة النجاح (نتفرع حسب الدور)
+    # 1. التحقق الصارم من نجاح الدفع وصحة توقيع HMAC
+    if success != "true" or not _verify_paymob_hmac(request.GET):
+        _pay_logger.warning(
+            "Rejected unverified payment callback for user=%s success=%s has_hmac=%s",
+            getattr(request.user, 'id', None),
+            success,
+            bool(request.GET.get('hmac')),
+        )
+        error_msg = request.GET.get('data.message') or "فشل التحقق الأمني من عملية الدفع (HMAC غير صالح)."
+        messages.error(request, f"فشلت عملية الدفع: {error_msg}")
+        return render(request, 'teachers/payment_failed.html', status=403)
+
+    # 2. حالة النجاح الموثّقة (نتفرع حسب الدور)
     try:
         user = request.user
         paymob_id = str(request.GET.get('id') or request.GET.get('order') or "Unknown")
@@ -837,28 +891,34 @@ def payment_callback(request):
         if user.role == 'teacher':
             try:
                 teacher = user.teacher_profile
-            except:
+            except Exception:
                 return redirect('home')
-            
-            # تحديث الباقة
-            plan_id = request.session.get('selected_plan_id')
-            if plan_id:
-                try:
-                    new_plan = SubscriptionPlan.objects.get(id=plan_id)
-                    teacher.current_plan = new_plan
-                except SubscriptionPlan.DoesNotExist: pass
-            
-            # تمديد التاريخ
-            if teacher.has_active_subscription():
-                teacher.subscription_end_date += timedelta(days=30)
-            else:
-                teacher.subscription_end_date = timezone.now() + timedelta(days=30)
-            teacher.save()
-            
-            # حفظ السجل
-            amount = teacher.current_plan.price if teacher.current_plan else 500
-            PaymentTransaction.objects.create(teacher=teacher, amount=amount, transaction_id=paymob_id)
-            
+
+            if paymob_id != "Unknown" and PaymentTransaction.objects.filter(transaction_id=paymob_id).exists():
+                messages.info(request, "تم تسجيل هذه المعاملة مسبقًا.")
+                return render(request, 'teachers/payment_success.html')
+
+            with transaction.atomic():
+                # تحديث الباقة
+                plan_id = request.session.get('selected_plan_id')
+                if plan_id:
+                    try:
+                        new_plan = SubscriptionPlan.objects.get(id=plan_id)
+                        teacher.current_plan = new_plan
+                    except SubscriptionPlan.DoesNotExist:
+                        pass
+
+                # تمديد التاريخ
+                if teacher.has_active_subscription():
+                    teacher.subscription_end_date += timedelta(days=30)
+                else:
+                    teacher.subscription_end_date = timezone.now() + timedelta(days=30)
+                teacher.save()
+
+                # حفظ السجل
+                amount = teacher.current_plan.price if teacher.current_plan else 500
+                PaymentTransaction.objects.create(teacher=teacher, amount=amount, transaction_id=paymob_id)
+
             # تنظيف السيشن
             if 'selected_plan_id' in request.session:
                 del request.session['selected_plan_id']
@@ -871,36 +931,33 @@ def payment_callback(request):
         # ==========================
         elif user.role == 'student':
             pkg_id = request.session.get('buying_package_id')
-            
+
             if not pkg_id:
                 messages.error(request, "حدث خطأ: بيانات الحزمة غير موجودة في الجلسة.")
                 return redirect('student_dashboard')
 
             package = get_object_or_404(CoursePackage, id=pkg_id)
             student = user.student_profile
-            
-            # 1. تفعيل الحزمة (إنشاء أو تحديث الاشتراك)
-            enrollment, created = PackageEnrollment.objects.get_or_create(
-                student=student,
-                package=package,
-                defaults={'is_paid': False}
-            )
 
-            # 2. ++++++ إضافة الرصيد لمحفظة المعلم مرة واحدة فقط ++++++
-            if not enrollment.is_paid:
-                enrollment.is_paid = True
-                enrollment.save(update_fields=['is_paid'])
-                credit_teacher_wallet_for_sale(package.teacher, package.price)
-            
-            print(f"💰 Wallet updated for {package.teacher.user.username}: +{teacher_share} EGP")
-            # +++++++++++++++++++++++++++++++++++++++++++
+            # 1 & 2. تفعيل الحزمة وإضافة الرصيد مرة واحدة فقط داخل معاملة ذرية
+            with transaction.atomic():
+                enrollment, _created = PackageEnrollment.objects.get_or_create(
+                    student=student,
+                    package=package,
+                    defaults={'is_paid': False}
+                )
+                enrollment = PackageEnrollment.objects.select_for_update().get(id=enrollment.id)
+                if not enrollment.is_paid:
+                    enrollment.is_paid = True
+                    enrollment.save(update_fields=['is_paid'])
+                    credit_teacher_wallet_for_sale(package.teacher, package.price)
 
             # 3. تنظيف السيشن
             if 'buying_package_id' in request.session:
                 del request.session['buying_package_id']
 
             messages.success(request, f"تم شراء حزمة '{package.title}' بنجاح! ابدأ التعلم الآن.")
-            
+
             # التوجيه المباشر لمحتوى الحزمة
             return redirect('my_package_content', package_id=package.id)
 
@@ -1132,26 +1189,28 @@ def teacher_wallet(request):
 
     if request.method == 'POST':
         try:
-            amount = float(request.POST.get('amount') or 0)
-        except (TypeError, ValueError):
-            amount = 0.0
-        method = request.POST.get('method')
-        details = request.POST.get('details')
-        
-        if amount > float(wallet.balance):
-            messages.error(request, "رصيدك الحالي لا يكفي.")
-        elif amount < 50:
+            amount = Decimal(str(request.POST.get('amount') or '0').strip())
+        except (InvalidOperation, TypeError, ValueError):
+            amount = Decimal('0')
+        method = (request.POST.get('method') or '').strip()
+        details = (request.POST.get('details') or '').strip()
+
+        if amount < Decimal('50'):
             messages.error(request, "الحد الأدنى للسحب 50 جنيه.")
         else:
-            # خصم الرصيد مؤقتاً وإنشاء الطلب
-            wallet.balance = float(wallet.balance) - amount
-            wallet.save()
-            
-            WithdrawRequest.objects.create(
-                wallet=wallet, amount=amount, method=method, details=details
-            )
-            messages.success(request, "تم إرسال طلب السحب بنجاح.")
-            return redirect('teacher_wallet')
+            with transaction.atomic():
+                locked_wallet = Wallet.objects.select_for_update().get(id=wallet.id)
+                if amount > locked_wallet.balance:
+                    messages.error(request, "رصيدك الحالي لا يكفي.")
+                else:
+                    locked_wallet.balance = locked_wallet.balance - amount
+                    locked_wallet.save(update_fields=['balance'])
+
+                    WithdrawRequest.objects.create(
+                        wallet=locked_wallet, amount=amount, method=method, details=details
+                    )
+                    messages.success(request, "تم إرسال طلب السحب بنجاح.")
+                    return redirect('teacher_wallet')
 
     withdraws = wallet.withdrawals.all().order_by('-created_at')
     return render(
@@ -1285,14 +1344,20 @@ def import_package_content(request, package_id):
         selected_lecture_ids = request.POST.getlist('lecture_ids')
         selected_exam_ids = request.POST.getlist('exam_ids')
         
-        # أ) استيراد المحاضرات (ربط فقط لأن الفيديو واحد)
+        # أ) استيراد المحاضرات (مملوكة لمعلم هذه الحزمة فقط)
         if selected_lecture_ids:
-            lectures = Lecture.objects.filter(id__in=selected_lecture_ids)
+            lectures = Lecture.objects.filter(
+                id__in=selected_lecture_ids,
+                group__teacher=package.teacher,
+            )
             package.lectures.add(*lectures)
-            
-        # ب) استيراد الامتحانات (نسخ عميق Deep Copy)
+
+        # ب) استيراد الامتحانات (نسخ عميق لامتحانات معلم هذه الحزمة فقط)
         if selected_exam_ids:
-            source_exams = Exam.objects.filter(id__in=selected_exam_ids)
+            source_exams = Exam.objects.filter(
+                id__in=selected_exam_ids,
+                group__teacher=package.teacher,
+            )
             
             for old_exam in source_exams:
                 # 1. إنشاء امتحان جديد مستقل (بدون مجموعة)
@@ -1400,10 +1465,18 @@ def add_exam_to_package(request, package_id):
 
 
 
-# 1. إضافة للمجموعة
-@login_required
-def add_pdf_to_group(request, group_id):
-    group, is_owner = get_group_permission(request, group_id, permission_type='videos') # نستخدم نفس صلاحية الفيديو
+def _safe_referer_redirect(request, fallback_url):
+    """يتحقق من أمان رابط العودة (HTTP_REFERER) لمنع الثغرات الأمنية للإعادة التوجيه المفتوح."""
+    referer = (request.META.get('HTTP_REFERER') or '').strip()
+    if referer and url_has_allowed_host_and_scheme(
+        referer,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return redirect(referer)
+    return redirect(fallback_url)
+
+
 def _resolve_pdf_link_from_request(request):
     uploaded_file = request.FILES.get('file')
     link = (request.POST.get('link') or '').strip()
@@ -1434,7 +1507,7 @@ def add_pdf_to_group(request, group_id):
         else:
             PDFFile.objects.create(group=group, title=title, link=resolved_link)
             messages.success(request, "تم إضافة الملف.")
-    return redirect(request.META.get('HTTP_REFERER') or reverse('group_detail', args=[group.id]))
+    return _safe_referer_redirect(request, reverse('group_detail', args=[group.id]))
 
 
 # 2. إضافة للحزمة (يدوي)
@@ -1455,7 +1528,7 @@ def add_pdf_to_package(request, package_id):
             pdf = PDFFile.objects.create(group=None, title=title, link=resolved_link)
             package.pdfs.add(pdf)
             messages.success(request, "تم إضافة الملف للحزمة.")
-    return redirect(request.META.get('HTTP_REFERER') or reverse('teacher_package_detail', args=[package.id]))
+    return _safe_referer_redirect(request, reverse('teacher_package_detail', args=[package.id]))
 
 # 3. حذف PDF
 @login_required

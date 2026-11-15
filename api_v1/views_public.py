@@ -144,6 +144,10 @@ class AppUpdateDownloadAPIView(APIView):
 
     def get(self, request):
         site_settings = SiteSetting.load()
+        external_url = (site_settings.android_apk_url or '').strip()
+        if external_url:
+            return HttpResponseRedirect(external_url)
+
         if site_settings.android_apk_file:
             file_field = site_settings.android_apk_file
             try:
@@ -164,10 +168,6 @@ class AppUpdateDownloadAPIView(APIView):
                         return HttpResponseRedirect(url)
                 except Exception:
                     pass
-
-        external_url = (site_settings.android_apk_url or '').strip()
-        if external_url:
-            return HttpResponseRedirect(external_url)
 
         return Response(
             {'error': 'ملف التحديث غير مرفوع حالياً على الخادم.', 'code': 'APK_NOT_AVAILABLE'},
@@ -320,26 +320,27 @@ class ManualCheckoutAPIView(APIView):
 
 
 def _format_sha256_colons(raw: str) -> str:
-    cleaned = ''.join(ch for ch in raw.upper() if ch in '0123456789ABCDEF')
-    if len(cleaned) != 64:
-        return ''
-    return ':'.join(cleaned[i:i + 2] for i in range(0, 64, 2))
+    return SiteSetting.format_sha256_colons(raw)
 
 
 class AndroidAssetLinksView(View):
     """خدمة Digital Asset Links على /.well-known/assetlinks.json لتفعيل Android App Links."""
 
     def get(self, request):
-        package_name = os.environ.get('PLAY_INTEGRITY_PACKAGE_NAME', 'online.ta3alm.ta3alm_flutter').strip()
-        raw_fps = (
-            os.environ.get('ANDROID_ASSETLINKS_SHA256', '').strip()
-            or os.environ.get('ANDROID_RELEASE_CERT_SHA256', '').strip()
-        )
-        fingerprints = []
-        for part in raw_fps.split(','):
-            formatted = _format_sha256_colons(part.strip())
-            if formatted and formatted not in fingerprints:
-                fingerprints.append(formatted)
+        package_name = os.environ.get('PLAY_INTEGRITY_PACKAGE_NAME', 'online.ta3alm.ta3alm_flutter').strip() or 'online.ta3alm.ta3alm_flutter'
+        try:
+            fingerprints = SiteSetting.load().get_assetlinks_fingerprints()
+        except Exception:
+            raw_fps = (
+                os.environ.get('ANDROID_ASSETLINKS_SHA256', '').strip()
+                or os.environ.get('ANDROID_RELEASE_CERT_SHA256', '').strip()
+                or os.environ.get('ANDROID_DEBUG_CERT_SHA256', '').strip()
+            )
+            fingerprints = []
+            for part in raw_fps.replace('\n', ',').replace(';', ',').split(','):
+                formatted = _format_sha256_colons(part.strip())
+                if formatted and formatted not in fingerprints:
+                    fingerprints.append(formatted)
 
         packages = [package_name]
         if not package_name.endswith('.debug'):
@@ -358,5 +359,6 @@ class AndroidAssetLinksView(View):
         ]
         response = JsonResponse(payload, safe=False)
         response['Access-Control-Allow-Origin'] = '*'
+        response['Cache-Control'] = 'public, max-age=300'
         return response
 
