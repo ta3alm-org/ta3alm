@@ -30,6 +30,7 @@ from assistants.models import AssistantProfile, AssistantJob
 from core.models import (
     SiteSetting,
     Notification,
+    FCMDeviceToken,
     Subject,
     ManualPayment,
     CurriculumUnit,
@@ -586,6 +587,7 @@ class WalletSerializer(serializers.ModelSerializer):
 
 class WithdrawRequestSerializer(serializers.ModelSerializer):
     method_display = serializers.CharField(source='get_method_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
     teacher_name = serializers.SerializerMethodField()
     teacher_phone = serializers.CharField(source='wallet.teacher.user.phone', read_only=True)
 
@@ -593,9 +595,14 @@ class WithdrawRequestSerializer(serializers.ModelSerializer):
         model = WithdrawRequest
         fields = [
             'id', 'amount', 'method', 'method_display',
-            'details', 'is_paid', 'teacher_name', 'teacher_phone', 'created_at',
+            'details', 'status', 'status_display', 'is_paid',
+            'rejection_reason', 'reviewed_at',
+            'teacher_name', 'teacher_phone', 'created_at',
         ]
-        read_only_fields = ['id', 'is_paid', 'created_at']
+        read_only_fields = [
+            'id', 'status', 'status_display', 'is_paid',
+            'rejection_reason', 'reviewed_at', 'created_at',
+        ]
 
     def get_teacher_name(self, obj):
         u = obj.wallet.teacher.user
@@ -627,6 +634,17 @@ class NotificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Notification
         fields = ['id', 'title', 'message', 'link', 'is_read', 'created_at']
+
+
+class FCMDeviceTokenSerializer(serializers.Serializer):
+    token = serializers.CharField(max_length=512, min_length=20, trim_whitespace=True)
+    installation_id = serializers.CharField(max_length=128, required=False, allow_blank=True, default='')
+    platform = serializers.ChoiceField(
+        choices=[c[0] for c in FCMDeviceToken.PLATFORM_CHOICES],
+        required=False,
+        default='android',
+    )
+    app_version = serializers.CharField(max_length=32, required=False, allow_blank=True, default='')
 
 
 class ManualPaymentSerializer(serializers.ModelSerializer):

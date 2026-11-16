@@ -1,5 +1,13 @@
 from django.contrib import admin
-from .models import ManualPayment, Subject, CurriculumUnit, CurriculumLesson
+from .models import ManualPayment, Subject, CurriculumUnit, CurriculumLesson, FCMDeviceToken
+
+
+@admin.register(FCMDeviceToken)
+class FCMDeviceTokenAdmin(admin.ModelAdmin):
+    list_display = ('user', 'platform', 'app_version', 'is_active', 'last_seen_at')
+    list_filter = ('platform', 'is_active')
+    search_fields = ('user__username', 'user__email', 'installation_id')
+    readonly_fields = ('created_at', 'last_seen_at')
 
 @admin.register(ManualPayment)
 class ManualPaymentAdmin(admin.ModelAdmin):

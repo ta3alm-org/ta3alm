@@ -9,6 +9,7 @@ from django.db.models import Sum
 from students.models import VideoViewTracking, PackageExamResult
 from assistants.models import AssistantJob
 from core.models import SiteSetting, credit_teacher_wallet_for_sale, reconcile_teacher_wallet
+from core.notifications_service import maybe_notify_teacher_subscription_expiry
 from django.utils import timezone
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
@@ -141,6 +142,7 @@ def teacher_dashboard(request):
     # معلومات الاشتراك
     days_left = teacher.days_remaining()
     is_active = teacher.has_active_subscription()
+    maybe_notify_teacher_subscription_expiry(teacher)
 
         # ++++++ كود البحث (جديد) ++++++
     query = request.GET.get('q')
@@ -183,13 +185,6 @@ def group_detail(request, group_id):
             video.group = group
             video.save()
             messages.success(request, "تم نشر المحاضرة بنجاح!")
-            for enroll in group.enrollments.filter(is_active=True):
-                send_notification(
-                    enroll.student.user,
-                    "محاضرة جديدة 📹",
-                    f"تم نشر محاضرة '{video.title}' في مجموعة {group.name}.",
-                    f"/student/group/{group.id}/"
-                )
             return redirect('group_detail', group_id=group.id)
 
     # بحث المحاضرات
@@ -347,12 +342,6 @@ def group_requests(request, group_id):
         if action == 'accept':
             enrollment.is_active = True
             enrollment.save()
-            send_notification(
-        enrollment.student.user,
-        "تم قبول طلبك!",
-        f"وافق المستر على انضمامك لمجموعة {group.name}. ابدأ التعلم الآن.",
-        f"/student/group/{group.id}/"
-    )
             messages.success(request, f"تم قبول الطالب {enrollment.student.user.first_name}")
         elif action == 'reject':
             enrollment.delete()

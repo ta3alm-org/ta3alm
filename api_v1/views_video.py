@@ -33,6 +33,7 @@ from teachers.models import CoursePackage, Lecture, PDFFile, VideoCode
 
 from .device_security_service import (
     check_device_allowed,
+    check_web_ios_only_lecture_access,
     detect_account_sharing,
     record_device_activity,
     record_security_event,
@@ -57,9 +58,12 @@ from .video_security import (
     HEARTBEAT_INTERVAL_SECONDS,
     PLAYBACK_TOKEN_TTL_SECONDS,
     build_watermark_payload,
+    clear_watch_window,
     create_or_rotate_playback_session,
     decode_playback_token,
     detect_and_record_anomaly,
+    get_active_watch_window_expiry,
+    grant_watch_window,
     issue_playback_token,
     log_security_event,
     resolve_signed_playback_source,
@@ -82,23 +86,12 @@ class VideoProgressThrottle(UserRateThrottle):
     rate = '60/min'
 
 
-def _watch_window_cache_key(user_id: int, lecture_id: int) -> str:
-    return f"lecture_watch_window:{user_id}:{lecture_id}"
+def _has_recent_playback_session(user, lecture, window_minutes: int = 20) -> bool:
+    return get_active_watch_window_expiry(user, lecture.id) is not None
 
 
-def _has_recent_playback_session(user, lecture, window_minutes: int = 60) -> bool:
-    if cache.get(_watch_window_cache_key(user.id, lecture.id)):
-        return True
-    cutoff = timezone.now() - timedelta(minutes=window_minutes)
-    return PlaybackSession.objects.filter(
-        user=user,
-        lecture=lecture,
-        created_at__gte=cutoff,
-    ).exists()
-
-
-def _mark_watch_window(user, lecture, window_seconds: int = 3600) -> None:
-    cache.set(_watch_window_cache_key(user.id, lecture.id), True, timeout=window_seconds)
+def _mark_watch_window(user, lecture, window_seconds: int = 1200) -> None:
+    grant_watch_window(user, lecture.id, minutes=max(int(window_seconds // 60), 1))
 
 
 def _user_can_access_lecture_metadata(user, lecture: Lecture) -> bool:
@@ -198,7 +191,12 @@ def _check_user_lecture_entitlement(
         }
 
     student = user.student_profile
-    already_in_watch_window = _has_recent_playback_session(user, lecture, window_minutes=60)
+    watch_window_expiry = get_active_watch_window_expiry(
+        user,
+        lecture.id,
+        package_id=package_id,
+    )
+    already_in_watch_window = watch_window_expiry is not None
 
     # 1. مسار الحزم الأونلاين المدفوعة
     if package_id is not None:
@@ -221,22 +219,23 @@ def _check_user_lecture_entitlement(
             )
             limit_reached = tracker.views_count >= package.view_limit
             can_resume = already_in_watch_window and tracker.views_count <= package.view_limit
-            if consume_view and limit_reached and not can_resume:
+            if limit_reached and not can_resume:
                 return False, {
                     'status_code': status.HTTP_403_FORBIDDEN,
                     'payload': {'error': 'لقد استهلكت عدد مرات مشاهدة هذا الفيديو في الحزمة.'},
                 }
             points_just_awarded = False
-            if consume_view and not already_in_watch_window:
+            if not already_in_watch_window:
                 if not tracker.is_completed:
                     tracker.is_completed = True
                     tracker.points_awarded = 10
                     points_just_awarded = True
                 tracker.views_count += 1
                 tracker.save()
-                _mark_watch_window(user, lecture)
+                watch_window_expiry = grant_watch_window(user, lecture.id)
         return True, {
             'package': package,
+            'watch_window_expires_at': watch_window_expiry,
             'points_just_awarded': points_just_awarded,
             'view_limit': package.view_limit,
             'views_used': tracker.views_count,
@@ -304,14 +303,28 @@ def _check_user_lecture_entitlement(
                 },
             }
 
-        should_consume = consume_view and (bool(submitted_code) or not already_in_watch_window)
+        should_consume = bool(submitted_code) or not already_in_watch_window
         if should_consume:
-            active_code.current_views += 1
-            active_code.save(update_fields=['current_views'])
-            _mark_watch_window(user, lecture)
+            with transaction.atomic():
+                locked_code = VideoCode.objects.select_for_update().get(pk=active_code.pk)
+                if locked_code.current_views >= locked_code.max_views:
+                    return False, {
+                        'status_code': status.HTTP_403_FORBIDDEN,
+                        'payload': {
+                            'is_unlocked': False,
+                            'require_code': True,
+                            'code': 'REQUIRE_CODE',
+                            'error': 'تم استنفاد عدد المشاهدات المتاحة لهذا الكود. يرجى إدخال كود جديد.',
+                        },
+                    }
+                locked_code.current_views += 1
+                locked_code.save(update_fields=['current_views'])
+                active_code = locked_code
+                watch_window_expiry = grant_watch_window(user, lecture.id)
 
         return True, {
             'package': None,
+            'watch_window_expires_at': watch_window_expiry,
             'code_info': {
                 'code': active_code.code,
                 'current_views': active_code.current_views,
@@ -374,6 +387,18 @@ class VideoAuthorizeAPIView(APIView):
         return self._handle(request, lecture_id)
 
     def _handle(self, request, lecture_id):
+        ios_access = check_web_ios_only_lecture_access(request, request.user)
+        if not ios_access.get('allowed'):
+            return Response(
+                {
+                    'error': ios_access.get('error'),
+                    'blocked': True,
+                    'code': ios_access.get('code') or 'WEB_LECTURES_IOS_ONLY',
+                    'device_kind': ios_access.get('device_kind'),
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         if (
             hasattr(request.user, 'requires_email_verification')
             and request.user.requires_email_verification()
@@ -400,9 +425,7 @@ class VideoAuthorizeAPIView(APIView):
         device_fingerprint = str(request.data.get('device_fingerprint') or '').strip()
         client_platform = str(request.data.get('platform') or request.query_params.get('platform') or 'android').strip()
         app_version = str(request.data.get('app_version') or request.META.get('HTTP_X_APP_VERSION') or '').strip()
-        consume_view = str(
-            request.data.get('record_view') or request.query_params.get('record_view') or 'true'
-        ).lower() != 'false'
+        consume_view = True
 
         if detect_and_record_anomaly(request, request.user, lecture, device_id=device_id):
             return Response(
@@ -498,6 +521,7 @@ class VideoAuthorizeAPIView(APIView):
             client_platform=client_platform,
             app_version=app_version,
             integrity_verdict=integrity_verdict,
+            view_window_expires_at=ctx.get('watch_window_expires_at'),
         )
         playback_token, expires_in = issue_playback_token(
             user_id=request.user.id,
@@ -604,6 +628,18 @@ class VideoHeartbeatAPIView(APIView):
     throttle_classes = [VideoHeartbeatThrottle]
 
     def post(self, request, lecture_id):
+        ios_access = check_web_ios_only_lecture_access(request, request.user)
+        if not ios_access.get('allowed'):
+            return Response(
+                {
+                    'error': ios_access.get('error'),
+                    'blocked': True,
+                    'code': ios_access.get('code') or 'WEB_LECTURES_IOS_ONLY',
+                    'device_kind': ios_access.get('device_kind'),
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         raw_token = str(request.data.get('playback_token') or '').strip()
         session_id = str(request.data.get('session_id') or '').strip()
         device_id = str(request.data.get('device_id') or request.META.get('HTTP_X_DEVICE_ID') or '').strip()
@@ -744,6 +780,15 @@ class ContinueWatchingAPIView(APIView):
     permission_classes = [IsAuthenticated, IsNotBanned]
 
     def get(self, request):
+        ios_access = check_web_ios_only_lecture_access(request, request.user)
+        if not ios_access.get('allowed'):
+            return Response({
+                'items': [],
+                'lectures_blocked': True,
+                'lectures_block_reason': ios_access.get('error') or '',
+                'lectures_block_code': ios_access.get('code') or 'WEB_LECTURES_IOS_ONLY',
+            })
+
         rows = (
             VideoProgress.objects.filter(user=request.user, position_seconds__gt=0)
             .select_related('lecture__group', 'lecture__video_asset')
@@ -842,9 +887,12 @@ class VideoSessionRevokeAPIView(APIView):
         if not (is_owner or is_admin or is_teacher):
             return Response({'error': 'غير مصرح لك بإبطال هذه الجلسة.'}, status=status.HTTP_403_FORBIDDEN)
 
+        now = timezone.now()
         session.status = 'ended' if is_owner else 'revoked'
         session.revoked_reason = 'user_closed' if is_owner else 'revoked_by_staff'
-        session.save(update_fields=['status', 'revoked_reason'])
+        session.view_window_expires_at = now
+        session.save(update_fields=['status', 'revoked_reason', 'view_window_expires_at'])
+        clear_watch_window(session.user, lecture_id=session.lecture_id, now=now)
         log_security_event(
             event_type='session_revoked',
             user=request.user,
@@ -882,6 +930,18 @@ class ProtectedVideoStreamProxyAPIView(APIView):
 
         if not session:
             return Response({'error': 'تم إيقاف أو انتهاء جلسة البث.'}, status=status.HTTP_403_FORBIDDEN)
+
+        ios_access = check_web_ios_only_lecture_access(request, session.user)
+        if not ios_access.get('allowed'):
+            return Response(
+                {
+                    'error': ios_access.get('error'),
+                    'blocked': True,
+                    'code': ios_access.get('code') or 'WEB_LECTURES_IOS_ONLY',
+                    'device_kind': ios_access.get('device_kind'),
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         asset = getattr(session.lecture, 'video_asset', None)
         if not asset or not asset.provider_asset_id:

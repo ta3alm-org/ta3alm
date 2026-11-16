@@ -19,6 +19,16 @@ from accounts.models import StudentProfile, OneTimeLoginLink
 from assistants.models import AssistantProfile
 from decimal import Decimal, ROUND_HALF_UP
 from core.models import SiteSetting, ManualPayment, Subject, CurriculumUnit, CurriculumLesson, reconcile_teacher_wallet
+from core.notifications_service import (
+    CUSTOM_TARGET_ALL,
+    get_custom_notification_metadata,
+    maybe_notify_zoho_inbox,
+    notify_user,
+    parse_user_ids_input,
+    preview_custom_notification_audience,
+    search_custom_notification_users,
+    send_custom_notification,
+)
 from dashboard_admin.models import AdminProfile, AdminRole, AuditLog, ZohoMailConfig
 from services.zoho_mail_service import ZohoMailService
 from students.models import PackageEnrollment
@@ -59,7 +69,7 @@ class AdminDashboardAPIView(APIView):
             'total_students': StudentProfile.objects.count(),
             'total_assistants': AssistantProfile.objects.count(),
             'pending_manual_payments': ManualPayment.objects.filter(status='pending').count(),
-            'pending_withdrawals': WithdrawRequest.objects.filter(is_paid=False).count(),
+            'pending_withdrawals': WithdrawRequest.objects.filter(status=WithdrawRequest.STATUS_PENDING).count(),
             'is_maintenance_mode': site_settings.is_maintenance_mode,
             'platform_commission_percentage': site_settings.platform_commission_percentage,
             'app_update': site_settings.build_app_update_payload(request=request),
@@ -268,6 +278,12 @@ class AdminManageUsersAPIView(APIView):
                 else timezone.now() + timedelta(days=30)
             )
             teacher.save()
+            notify_user(
+                target,
+                'تم تجديد اشتراكك من قِبل الإدارة',
+                f"جددت إدارة المنصة اشتراكك لمدة 30 يوماً{f' على باقة {teacher.current_plan.name}' if teacher.current_plan else ''} حتى {teacher.subscription_end_date.strftime('%Y-%m-%d')}.",
+                link='/teacher/subscription/',
+            )
             AuditLog.log(request, AuditLog.ACTION_RENEW_SUB, target_label=target.get_full_name(), target_id=target.id)
             return Response({'message': f'تم تجديد اشتراك {target.get_full_name()} لمدة 30 يوماً.'})
 
@@ -401,9 +417,10 @@ class AdminFinanceAPIView(APIView):
         })
 
     def post(self, request):
-        """تسديد طلب سحب، قبول/رفض طلب دفع يدوي، أو تحديث نسبة عمولة المنصة."""
+        """تسديد/رفض طلب سحب، قبول/رفض طلب دفع يدوي، أو تحديث نسبة عمولة المنصة."""
         item_type = request.data.get('item_type')  # 'withdrawal' | 'manual_payment' | 'commission'
-        if item_type == 'commission' or request.data.get('action') == 'update_commission':
+        action = request.data.get('action')
+        if item_type == 'commission' or action == 'update_commission':
             raw_commission = request.data.get('platform_commission_percentage')
             try:
                 commission = int(raw_commission)
@@ -425,16 +442,54 @@ class AdminFinanceAPIView(APIView):
                 'platform_commission_percentage': site_settings.platform_commission_percentage,
             })
 
-        if item_type == 'withdrawal':
-            req = get_object_or_404(WithdrawRequest, id=request.data.get('id'))
-            req.is_paid = True
-            req.save(update_fields=['is_paid'])
-            AuditLog.log(request, AuditLog.ACTION_PAY_WITHDRAW, target_label=str(req), target_id=req.id)
-            return Response({'message': f'تم تسجيل تحويل {req.amount} EGP.'})
+        if item_type == 'withdrawal' or action in ('pay_withdrawal', 'reject_withdrawal'):
+            from decimal import Decimal
+            from teachers.models import Wallet
+
+            withdrawal_id = request.data.get('id') or request.data.get('withdrawal_id')
+            req_action = str(action or 'approve').strip().lower()
+            reason = str(request.data.get('reason') or request.data.get('rejection_reason') or '').strip()
+
+            with transaction.atomic():
+                req = get_object_or_404(WithdrawRequest.objects.select_for_update(), id=withdrawal_id)
+                if req.status != WithdrawRequest.STATUS_PENDING:
+                    return Response(
+                        {'error': 'تمت معالجة طلب السحب هذا مسبقاً.'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                if req_action in ('reject', 'reject_withdrawal'):
+                    wallet = Wallet.objects.select_for_update().get(pk=req.wallet_id)
+                    wallet.balance = (wallet.balance or Decimal('0.00')) + req.amount
+                    wallet.save(update_fields=['balance'])
+                    req.status = WithdrawRequest.STATUS_REJECTED
+                    req.is_paid = False
+                    req.rejection_reason = reason
+                    req.reviewed_at = timezone.now()
+                    req.save(update_fields=['status', 'is_paid', 'rejection_reason', 'reviewed_at'])
+                    AuditLog.log(
+                        request,
+                        AuditLog.ACTION_REJECT_WITHDRAW,
+                        target_label=f"{req} (مرفوض)",
+                        target_id=req.id,
+                    )
+                    return Response({
+                        'message': f'تم رفض طلب السحب وإعادة {req.amount} EGP إلى محفظة المعلم.',
+                        'withdrawal': WithdrawRequestSerializer(req).data,
+                    })
+
+                req.status = WithdrawRequest.STATUS_PAID
+                req.is_paid = True
+                req.reviewed_at = timezone.now()
+                req.save(update_fields=['status', 'is_paid', 'reviewed_at'])
+                AuditLog.log(request, AuditLog.ACTION_PAY_WITHDRAW, target_label=str(req), target_id=req.id)
+                return Response({
+                    'message': f'تم تسجيل تحويل {req.amount} EGP.',
+                    'withdrawal': WithdrawRequestSerializer(req).data,
+                })
 
         if item_type == 'manual_payment':
             payment = get_object_or_404(ManualPayment, id=request.data.get('id'))
-            action = request.data.get('action')
             if action == 'approve':
                 payment.status = 'approved'
                 payment.save()
@@ -679,6 +734,7 @@ class AdminSupportInboxAPIView(APIView):
             try:
                 res = service.list_messages(limit=25, search_key=q or None)
                 raw = res.get('data', []) if isinstance(res, dict) else []
+                maybe_notify_zoho_inbox(raw)
                 for m in raw:
                     messages_list.append({
                         'messageId': str(m.get('messageId', '')),
@@ -752,3 +808,81 @@ class AdminSupportInboxAPIView(APIView):
             return Response({'message': f'تم إرسال الرسالة إلى {to_address} بنجاح.'})
         except Exception as exc:
             return Response({'error': f'فشل إرسال البريد: {exc}'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+def _extract_admin_notif_params(data, query_params=None) -> dict:
+    """استخراج معاملات استهداف الإشعارات المخصصة بصيغة موحدة من JSON أو QueryParams."""
+    if query_params is not None:
+        raw_user_ids = query_params.getlist('user_ids') or query_params.get('user_ids')
+    else:
+        raw_user_ids = data.get('user_ids')
+
+    raw_exclude = data.get('exclude_banned', True)
+    if isinstance(raw_exclude, bool):
+        exclude_banned = raw_exclude
+    else:
+        exclude_banned = str(raw_exclude).strip().lower() not in ('0', 'false', 'no')
+
+    return {
+        'target_mode': str(data.get('target_mode') or CUSTOM_TARGET_ALL).strip(),
+        'segment': str(data.get('segment') or '').strip(),
+        'user_ids': parse_user_ids_input(raw_user_ids),
+        'grade': str(data.get('grade') or '').strip(),
+        'teacher_id': data.get('teacher_id'),
+        'plan_id': data.get('plan_id'),
+        'subject_id': data.get('subject_id'),
+        'exclude_banned': exclude_banned,
+    }
+
+
+class AdminNotificationsAPIView(APIView):
+    """إرسال إشعارات مخصصة لمستخدمين محددين أو فئة أو جميع المستخدمين + المعاينة وسجل الإرسالات."""
+    permission_classes = [IsAuthenticated, IsPlatformModerator]
+
+    def get(self, request):
+        if 'q' in request.query_params or 'search_users' in request.query_params:
+            query = (request.query_params.get('q') or request.query_params.get('search_users') or '').strip()
+            role = (request.query_params.get('role') or '').strip()
+            return Response({
+                'users': search_custom_notification_users(query=query, role=role, limit=30),
+            })
+
+        if str(request.query_params.get('preview', '')).strip().lower() in ('1', 'true', 'yes'):
+            params = _extract_admin_notif_params(request.query_params, query_params=request.query_params)
+            return Response(preview_custom_notification_audience(**params))
+
+        meta = get_custom_notification_metadata()
+        recent_dispatches = AuditLog.objects.filter(
+            action=AuditLog.ACTION_SEND_NOTIFICATION
+        ).select_related('admin').order_by('-created_at')[:15]
+
+        return Response({
+            **meta,
+            'initial_users': search_custom_notification_users(limit=20),
+            'recent_dispatches': AuditLogSerializer(recent_dispatches, many=True).data,
+        })
+
+    def post(self, request):
+        params = _extract_admin_notif_params(request.data)
+        res = send_custom_notification(
+            title=request.data.get('title', ''),
+            message=request.data.get('message', ''),
+            link=request.data.get('link'),
+            **params,
+        )
+        if not res.get('ok'):
+            return Response(
+                {'error': res.get('error') or 'تعذّر إرسال الإشعار المخصص.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        AuditLog.log_custom_notification(request, res)
+        return Response({
+            'message': f"تم إرسال الإشعار بنجاح إلى {res['recipient_count']} مستخدم ({res['audience_label']}).",
+            'recipient_count': res['recipient_count'],
+            'fcm_user_count': res['fcm_user_count'],
+            'fcm_configured': res['fcm_configured'],
+            'audience_label': res['audience_label'],
+            'title': res['title'],
+            'link': res['link'],
+        })

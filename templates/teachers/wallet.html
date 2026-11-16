@@ -93,8 +93,13 @@
                             <td class="small">{{ req.get_method_display }}</td>
                             <td class="small text-muted">{{ req.created_at|date:"d/m/Y" }}</td>
                             <td>
-                                {% if req.is_paid %}
+                                {% if req.status == 'paid' %}
                                     <span class="badge bg-success">{% trans "تم التحويل" %}</span>
+                                {% elif req.status == 'rejected' %}
+                                    <span class="badge bg-danger">{% trans "مرفوض (أُعيد للمحفظة)" %}</span>
+                                    {% if req.rejection_reason %}
+                                    <div class="small text-danger mt-1">{{ req.rejection_reason }}</div>
+                                    {% endif %}
                                 {% else %}
                                     <span class="badge bg-warning text-dark">{% trans "قيد المراجعة" %}</span>
                                 {% endif %}

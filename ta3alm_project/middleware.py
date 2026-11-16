@@ -318,11 +318,16 @@ class WebDeviceSecurityMiddleware:
                 check_device_allowed,
                 get_or_create_web_installation_id,
                 register_or_update_device,
+                verify_web_device_live_consistency,
             )
             from api_v1.models import DeviceSession
 
             installation_id = get_or_create_web_installation_id(request)
             is_exempt = any(path_no_lang.startswith(p) for p in self.EXEMPT_PATHS)
+            is_json_req = bool(
+                (request.content_type and 'application/json' in request.content_type)
+                or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+            )
 
             if request.session.get('web_device_registered_id') != installation_id:
                 if not request.session.session_key:
@@ -344,14 +349,32 @@ class WebDeviceSecurityMiddleware:
                         request.session.pop('web_device_registered_id', None)
                         request.session.pop('web_device_session_uuid', None)
                         logout(request)
+                        if is_json_req:
+                            from django.http import JsonResponse
+                            return self._apply_security_headers(request, JsonResponse({'ok': False, 'code': code, 'error': result.get('error', '')}, status=403))
                         if not path_no_lang.startswith('/banned/'):
                             return self._apply_security_headers(request, redirect('banned_page'))
+                    elif code == 'WEB_FINGERPRINT_MISMATCH':
+                        request.session.pop('web_device_registered_id', None)
+                        request.session.pop('web_device_session_uuid', None)
+                        logout(request)
+                        if is_json_req:
+                            from django.http import JsonResponse
+                            return self._apply_security_headers(request, JsonResponse({'ok': False, 'code': code, 'error': result.get('error', '')}, status=403))
+                        return self._apply_security_headers(request, redirect('account_login'))
                     else:
                         request.session['web_device_limit_error'] = result.get('error')
+                        if is_json_req:
+                            from django.http import JsonResponse
+                            return self._apply_security_headers(request, JsonResponse({'ok': False, 'code': code, 'error': result.get('error', '')}, status=403))
                         if not is_exempt:
                             return self._apply_security_headers(request, redirect('web_trusted_devices'))
             else:
-                allowed, code, err = check_device_allowed(user, installation_id)
+                live_ok, live_code, live_err = verify_web_device_live_consistency(request, user, installation_id)
+                if not live_ok:
+                    allowed, code, err = False, live_code, live_err
+                else:
+                    allowed, code, err = check_device_allowed(user, installation_id)
                 sess_uuid = request.session.get('web_device_session_uuid')
                 session_revoked_remotely = False
                 if sess_uuid:
@@ -363,10 +386,16 @@ class WebDeviceSecurityMiddleware:
                     except Exception:
                         session_revoked_remotely = False
 
-                if session_revoked_remotely or (not allowed and code == 'DEVICE_REVOKED'):
+                if session_revoked_remotely or (not allowed and code in ('DEVICE_REVOKED', 'WEB_FINGERPRINT_MISMATCH')):
                     request.session.pop('web_device_registered_id', None)
                     request.session.pop('web_device_session_uuid', None)
                     logout(request)
+                    if is_json_req:
+                        from django.http import JsonResponse
+                        return self._apply_security_headers(
+                            request,
+                            JsonResponse({'ok': False, 'code': code or 'SESSION_REVOKED', 'error': err or ''}, status=403),
+                        )
                     return self._apply_security_headers(request, redirect('account_login'))
 
                 if not allowed:
@@ -374,8 +403,14 @@ class WebDeviceSecurityMiddleware:
                         request.session.pop('web_device_registered_id', None)
                         request.session.pop('web_device_session_uuid', None)
                         logout(request)
+                        if is_json_req:
+                            from django.http import JsonResponse
+                            return self._apply_security_headers(request, JsonResponse({'ok': False, 'code': code, 'error': err or ''}, status=403))
                         return self._apply_security_headers(request, redirect('banned_page'))
                     request.session['web_device_limit_error'] = err
+                    if is_json_req:
+                        from django.http import JsonResponse
+                        return self._apply_security_headers(request, JsonResponse({'ok': False, 'code': code, 'error': err or ''}, status=403))
                     if not is_exempt:
                         return self._apply_security_headers(request, redirect('web_trusted_devices'))
 

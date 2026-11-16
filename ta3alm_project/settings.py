@@ -160,6 +160,15 @@ REST_FRAMEWORK = {
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_URLS_REGEX = r'^/api/.*$'
 CORS_ALLOW_CREDENTIALS = True
+from corsheaders.defaults import default_headers
+CORS_ALLOW_HEADERS = (
+    *default_headers,
+    'x-device-id',
+    'x-installation-id',
+    'x-app-build',
+    'x-app-version',
+    'x-client-platform',
+)
 
 # ==========================================================
 # إعدادات الأمان (Security Settings)
@@ -397,5 +406,15 @@ LOGGING = {
         },
     },
 }
+
+# ==========================================================
+# إعدادات Firebase Cloud Messaging (FCM HTTP v1) لإرسال الإشعارات اللحظية
+# يمكن ضبطها بمحتوى ملف Service Account JSON أو مسار الملف على الخادم
+# ==========================================================
+FIREBASE_SERVICE_ACCOUNT_JSON = os.environ.get('FIREBASE_SERVICE_ACCOUNT_JSON', '').strip()
+FIREBASE_SERVICE_ACCOUNT_FILE = (
+    os.environ.get('FIREBASE_SERVICE_ACCOUNT_FILE', '').strip()
+    or os.environ.get('GOOGLE_APPLICATION_CREDENTIALS', '').strip()
+)
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

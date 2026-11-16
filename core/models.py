@@ -187,7 +187,7 @@ def reconcile_teacher_wallet(teacher):
     """مزامنة محفظة المدرس للاشتراكات المدفوعة غير المحتسبة سابقاً."""
     from django.db.models import Sum
     from students.models import PackageEnrollment
-    from teachers.models import Wallet
+    from teachers.models import Wallet, WithdrawRequest
 
     if teacher is None:
         return None
@@ -208,7 +208,11 @@ def reconcile_teacher_wallet(teacher):
                 Decimal('0.01'), rounding=ROUND_HALF_UP
             )
             withdrawn = Decimal(
-                str(wallet.withdrawals.aggregate(total=Sum('amount'))['total'] or 0)
+                str(
+                    wallet.withdrawals.exclude(status=WithdrawRequest.STATUS_REJECTED)
+                    .aggregate(total=Sum('amount'))['total']
+                    or 0
+                )
             ).quantize(Decimal('0.01'))
             wallet.total_earnings = expected_net
             wallet.balance = max(Decimal('0.00'), expected_net - withdrawn)
@@ -234,6 +238,48 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"{self.recipient} - {self.title}"
+
+
+class FCMDeviceToken(models.Model):
+    PLATFORM_CHOICES = (
+        ('android', _('أندرويد')),
+        ('ios', _('آيفون / آيباد')),
+        ('web', _('متصفح الويب')),
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='fcm_tokens',
+        verbose_name=_("المستخدم"),
+    )
+    token = models.CharField(max_length=512, unique=True, verbose_name=_("رمز FCM"))
+    installation_id = models.CharField(
+        max_length=128,
+        blank=True,
+        default='',
+        db_index=True,
+        verbose_name=_("معرف التثبيت"),
+    )
+    platform = models.CharField(
+        max_length=20,
+        choices=PLATFORM_CHOICES,
+        default='android',
+        verbose_name=_("المنصة"),
+    )
+    app_version = models.CharField(max_length=32, blank=True, default='', verbose_name=_("إصدار التطبيق"))
+    is_active = models.BooleanField(default=True, db_index=True, verbose_name=_("نشط"))
+    last_seen_at = models.DateTimeField(auto_now=True, verbose_name=_("آخر نشاط"))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("تاريخ التسجيل"))
+
+    class Meta:
+        verbose_name = _("رمز إشعارات جهاز (FCM)")
+        verbose_name_plural = _("رموز إشعارات الأجهزة (FCM)")
+        indexes = [
+            models.Index(fields=['user', 'is_active']),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} ({self.platform}) - {self.token[:18]}..."
     
 # قائمة الصفوف (للاستخدام في الفلترة)
 GRADE_CHOICES = (

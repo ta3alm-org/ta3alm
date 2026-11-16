@@ -8,4 +8,6 @@ class CoreConfig(AppConfig):
     def ready(self):
         from .mo_compiler import ensure_mo_compiled
         ensure_mo_compiled()
+        from . import signals
+        signals.connect_m2m_signals()
 

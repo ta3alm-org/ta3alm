@@ -125,6 +125,7 @@ class PlaybackSession(models.Model):
     revoked_reason = models.CharField(max_length=120, blank=True)
     last_heartbeat_at = models.DateTimeField(default=timezone.now)
     expires_at = models.DateTimeField()
+    view_window_expires_at = models.DateTimeField(null=True, blank=True)
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     user_agent = models.CharField(max_length=255, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

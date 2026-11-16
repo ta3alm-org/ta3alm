@@ -4,6 +4,42 @@
 {% block content %}
     {% include 'students/includes/student_group_navbar.html' %}
     <div class="container">
+        {% if not web_lectures_allowed %}
+        <div class="card border-0 shadow-sm rounded-4 text-center p-4 p-md-5 my-3">
+            <div class="mx-auto mb-3 d-flex align-items-center justify-content-center rounded-circle bg-danger bg-opacity-10 text-danger"
+                 style="width: 72px; height: 72px;">
+                <i class="bi bi-shield-lock-fill fs-2"></i>
+            </div>
+            <h4 class="fw-bold text-dark mb-2">{% trans "خانة المحاضرات مقفولة على هذا المتصفح" %}</h4>
+            <p class="text-muted mb-3">
+                {{ web_lectures_block_reason|default:"خانة المحاضرات عبر الويب متاحة فقط على أجهزة iPhone و iPad (Safari). باقي التبويبات مثل الامتحانات والملفات متاحة بشكل طبيعي." }}
+            </p>
+            {% if web_lectures_needs_ipad_probe %}
+            <div id="group-ipad-probe-banner" class="alert alert-info border-0 rounded-3 small d-inline-flex align-items-center gap-2 mx-auto mb-3">
+                <div class="spinner-border spinner-border-sm text-info" role="status"></div>
+                <span>{% trans "جاري التحقق من خصائص جهاز Apple..." %}</span>
+            </div>
+            <script>
+            (function() {
+                function checkIpad() {
+                    if (typeof window.ta3almSyncWebDeviceTraits === 'function') {
+                        window.ta3almSyncWebDeviceTraits(true, function(d) {
+                            if (d && d.ios_lecture_allowed === true) {
+                                window.location.reload();
+                                return;
+                            }
+                            var el = document.getElementById('group-ipad-probe-banner');
+                            if (el) el.style.display = 'none';
+                        });
+                    }
+                }
+                if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', checkIpad);
+                else checkIpad();
+            })();
+            </script>
+            {% endif %}
+        </div>
+        {% else %}
         <div class="row g-4">
             {% for lecture in lectures %}
             <div class="col-md-6 col-lg-4">
@@ -28,5 +64,6 @@
             <div class="col-12 text-center text-muted py-5">{% trans "لا توجد محاضرات حالياً." %}</div>
             {% endfor %}
         </div>
+        {% endif %}
     </div>
 {% endblock %}

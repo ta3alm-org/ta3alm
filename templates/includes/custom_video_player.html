@@ -647,6 +647,7 @@
 
         var sessionUuid = '{{ playback_session_uuid|default:""|escapejs }}';
         var heartbeatUrl = '{% if lecture.id %}{% url "web_lecture_heartbeat" lecture.id %}{% endif %}';
+        var endUrl = '{% if lecture.id %}{% url "web_lecture_end" lecture.id %}{% endif %}';
         if (sessionUuid && heartbeatUrl) {
             function getCookie(name) {
                 var value = '; ' + document.cookie;
@@ -654,6 +655,35 @@
                 if (parts.length === 2) return parts.pop().split(';').shift();
                 return '';
             }
+            var endSent = false;
+            function sendWatchExitBeacon() {
+                if (endSent || !endUrl) return;
+                endSent = true;
+                var csrfTok = getCookie('csrftoken') || '{{ csrf_token }}';
+                try {
+                    if (navigator.sendBeacon) {
+                        var fd = new FormData();
+                        fd.append('csrfmiddlewaretoken', csrfTok);
+                        fd.append('session_id', sessionUuid);
+                        navigator.sendBeacon(endUrl, fd);
+                        return;
+                    }
+                } catch (e) {}
+                try {
+                    fetch(endUrl, {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        keepalive: true,
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrfTok
+                        },
+                        body: JSON.stringify({ session_id: sessionUuid })
+                    }).catch(function () {});
+                } catch (e) {}
+            }
+            window.addEventListener('pagehide', sendWatchExitBeacon);
+            window.addEventListener('beforeunload', sendWatchExitBeacon);
             var hbTimer = setInterval(function () {
                 if (lockedPermanently) {
                     clearInterval(hbTimer);

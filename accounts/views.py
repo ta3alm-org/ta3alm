@@ -546,6 +546,7 @@ def web_device_traits_sync(request):
 
     from api_v1.device_security_service import (
         build_web_device_info,
+        check_web_ios_only_lecture_access,
         get_or_create_web_installation_id,
         register_or_update_device,
     )
@@ -569,6 +570,14 @@ def web_device_traits_sync(request):
         'screen_resolution': payload.get('screen_resolution', ''),
         'timezone': payload.get('timezone', ''),
         'webdriver_detected': bool(payload.get('webdriver_detected')),
+        'canvas_hash': payload.get('canvas_hash', ''),
+        'webgl_hash': payload.get('webgl_hash', ''),
+        'audio_hash': payload.get('audio_hash', ''),
+        'navigator_platform': payload.get('navigator_platform', ''),
+        'max_touch_points': payload.get('max_touch_points'),
+        'touch_support': payload.get('touch_support'),
+        'color_depth': payload.get('color_depth', ''),
+        'languages': payload.get('languages', ''),
     }
 
     installation_id = get_or_create_web_installation_id(request)
@@ -588,13 +597,25 @@ def web_device_traits_sync(request):
         request.session.pop('web_device_limit_error', None)
         dev_summary = reg.get('device') or {}
         dev_obj = reg.get('device_obj')
+        ios_res = check_web_ios_only_lecture_access(
+            request,
+            user,
+            client_traits=client_traits,
+            force_web=True,
+        )
         return JsonResponse({
             'ok': True,
             'fingerprint': getattr(dev_obj, 'current_fingerprint', '') if dev_obj else '',
             'trust_status': dev_summary.get('trust_status', ''),
             'risk_score': dev_summary.get('risk_score', 0),
             'risk_level': dev_summary.get('risk_level', 'low'),
+            'ios_lecture_allowed': bool(ios_res.get('allowed')),
+            'device_kind': ios_res.get('device_kind', ''),
         })
+
+    if reg.get('code') == 'WEB_FINGERPRINT_MISMATCH':
+        request.session.pop('web_device_registered_id', None)
+        request.session.pop('web_device_session_uuid', None)
 
     return JsonResponse({
         'ok': False,

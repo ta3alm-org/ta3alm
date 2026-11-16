@@ -555,7 +555,9 @@ class LogoutAPIView(APIView):
                 user=request.user,
                 device_id=inst_id,
                 status='active',
-            ).update(status='ended', revoked_reason='user_logout')
+            ).update(status='ended', revoked_reason='user_logout', view_window_expires_at=now)
+        from .video_security import clear_watch_window
+        clear_watch_window(request.user, now=now)
 
         reg_dev = (
             RegisteredDevice.objects.filter(user=request.user, installation_id=inst_id).first()

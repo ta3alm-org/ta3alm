@@ -908,7 +908,7 @@ class DeviceSecuritySystemTests(APITestCase):
         from .models import PlaybackSession
 
         policy = SecurityPolicyConfig.load()
-        policy.max_devices_per_student = 2
+        policy.student_device_limit = 2
         policy.enforce_device_limits = True
         policy.enforce_single_playback_session = True
         policy.save()
@@ -994,32 +994,95 @@ class DeviceSecuritySystemTests(APITestCase):
         b1_after = b1.get(reverse('student_dashboard'))
         self.assertEqual(b1_after.status_code, 302)
 
-        # 4) تدوير جلسة المشاهدة على الويب ونبض القلب (Heartbeat)
+        # 4) حظر الماك (b2) واللينكس (b3) عن المحاضرات عبر الويب، والسماح لآيفون وآيباد فقط + نبض التزامن 409
         pkg = CoursePackage.objects.create(
             teacher=self.teacher,
             title='Web Security Package',
             grade='3_sec',
             description='Pkg for playback concurrency test',
             price=250,
+            view_limit=5,
             is_active=True,
         )
         pkg.lectures.add(self.lecture)
         PackageEnrollment.objects.create(student=self.student, package=pkg, is_paid=True)
 
         watch_url = reverse('watch_package_lecture', args=[pkg.id, self.lecture.id])
-        w2 = b2.get(watch_url)
-        self.assertEqual(w2.status_code, 200)
-        sess2 = PlaybackSession.objects.filter(user=self.student_user, lecture=self.lecture, status='active').latest('id')
+        # متصفح الماك و اللينكس يُمنعان صراحةً بـ 403 عن فتح المحاضرة
+        self.assertEqual(b2.get(watch_url).status_code, 403)
+        self.assertEqual(b3.get(watch_url).status_code, 403)
 
-        w3 = b3.get(watch_url)
-        self.assertEqual(w3.status_code, 200)
-        sess2.refresh_from_db()
-        self.assertEqual(sess2.status, 'revoked')
+        # رفع حد الأجهزة مؤقتاً لاختبار تزامن التشغيل بين متصفحي iPhone و iPad حقيقيين
+        policy.student_device_limit = 4
+        policy.save()
+
+        ios1 = Client(
+            HTTP_USER_AGENT='Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+        )
+        ios1.force_login(self.student_user)
+        self.assertEqual(ios1.get(reverse('student_dashboard')).status_code, 200)
+        self.assertEqual(
+            ios1.post(
+                reverse('web_device_traits_sync'),
+                data=json.dumps({
+                    'canvas_hash': 'ios1_canvas',
+                    'webgl_hash': 'ios1_webgl',
+                    'audio_hash': 'ios1_audio',
+                    'webgl_vendor': 'Apple Inc.',
+                    'webgl_renderer': 'Apple GPU',
+                    'navigator_platform': 'iPhone',
+                    'max_touch_points': 5,
+                    'touch_support': True,
+                    'color_depth': 24,
+                    'languages': 'ar-EG,ar',
+                    'screen_resolution': '390x844',
+                }),
+                content_type='application/json',
+            ).status_code,
+            200,
+        )
+
+        ios2 = Client(
+            HTTP_USER_AGENT='Mozilla/5.0 (iPad; CPU OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+        )
+        ios2.force_login(self.student_user)
+        self.assertEqual(ios2.get(reverse('student_dashboard')).status_code, 200)
+        self.assertEqual(
+            ios2.post(
+                reverse('web_device_traits_sync'),
+                data=json.dumps({
+                    'canvas_hash': 'ios2_canvas',
+                    'webgl_hash': 'ios2_webgl',
+                    'audio_hash': 'ios2_audio',
+                    'webgl_vendor': 'Apple Inc.',
+                    'webgl_renderer': 'Apple GPU',
+                    'navigator_platform': 'iPad',
+                    'max_touch_points': 5,
+                    'touch_support': True,
+                    'color_depth': 24,
+                    'languages': 'ar-EG,ar',
+                    'screen_resolution': '820x1180',
+                }),
+                content_type='application/json',
+            ).status_code,
+            200,
+        )
+
+        w_ios1 = ios1.get(watch_url)
+        self.assertEqual(w_ios1.status_code, 200)
+        sess_ios1 = PlaybackSession.objects.filter(
+            user=self.student_user, lecture=self.lecture, status='active'
+        ).latest('id')
+
+        w_ios2 = ios2.get(watch_url)
+        self.assertEqual(w_ios2.status_code, 200)
+        sess_ios1.refresh_from_db()
+        self.assertEqual(sess_ios1.status, 'revoked')
 
         # نبض الجلسة القديمة يُرفض بـ 409
-        hb_old = b2.post(
+        hb_old = ios1.post(
             reverse('web_lecture_heartbeat', args=[self.lecture.id]),
-            data=json.dumps({'session_id': str(sess2.session_id)}),
+            data=json.dumps({'session_id': str(sess_ios1.session_id)}),
             content_type='application/json',
         )
         self.assertEqual(hb_old.status_code, 409)
@@ -1295,6 +1358,317 @@ class DeviceSecuritySystemTests(APITestCase):
                 site_settings.refresh_from_db()
                 self.assertEqual(site_settings.android_apk_url, api_post_url)
                 self.assertEqual(site_settings.android_latest_version_code, 4)
+
+    def test_24_strict_web_fingerprint_cookie_hijack_and_trait_drift(self):
+        from django.test import Client
+        from .device_security_service import check_device_allowed
+        from .models import PlaybackSession
+
+        policy = SecurityPolicyConfig.load()
+        policy.student_device_limit = 2
+        policy.enforce_device_limits = True
+        policy.save()
+
+        win_chrome = Client(
+            HTTP_USER_AGENT='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/129.0.0.0 Safari/537.36',
+            HTTP_ACCEPT_LANGUAGE='ar-EG,ar;q=0.9',
+        )
+        win_chrome.force_login(self.student_user)
+        self.assertEqual(win_chrome.get(reverse('student_dashboard')).status_code, 200)
+
+        # مزامنة بصمة عتاد حقيقية أولية للمتصفح (تثري الجهاز ببيانات Canvas/WebGL/Audio)
+        traits_payload = {
+            'canvas_hash': 'win_canvas_abc123',
+            'webgl_hash': 'win_webgl_xyz789',
+            'audio_hash': 'win_audio_def456',
+            'webgl_vendor': 'NVIDIA Corporation',
+            'webgl_renderer': 'ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0)',
+            'navigator_platform': 'Win32',
+            'max_touch_points': 0,
+            'touch_support': False,
+            'color_depth': 24,
+            'languages': 'ar-EG,ar',
+            'screen_resolution': '1920x1080',
+            'hardware_concurrency': '12',
+            'device_memory': '16',
+        }
+        sync_ok = win_chrome.post(
+            reverse('web_device_traits_sync'),
+            data=json.dumps(traits_payload),
+            content_type='application/json',
+        )
+        self.assertEqual(sync_ok.status_code, 200)
+        dev = RegisteredDevice.objects.get(user=self.student_user, is_active=True)
+
+        # استنساخ الكوكيز (Session + ta3alm_web_did) على متصفح مختلف تماماً (Linux Firefox)
+        hijack = Client(
+            HTTP_USER_AGENT='Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0',
+            HTTP_ACCEPT_LANGUAGE='en-US,en;q=0.5',
+        )
+        for cname, morsel in win_chrome.cookies.items():
+            hijack.cookies[cname] = morsel.value
+
+        hijack_resp = hijack.get(reverse('student_dashboard'))
+        self.assertEqual(hijack_resp.status_code, 302)
+        self.assertIn(reverse('account_login'), hijack_resp['Location'])
+
+        dev.refresh_from_db()
+        self.assertEqual(dev.trust_status, DeviceTrustStatus.RESTRICTED)
+        self.assertFalse(check_device_allowed(self.student_user, dev.installation_id)[0])
+        self.assertFalse(DeviceSession.objects.filter(device=dev, status='active').exists())
+
+        # متصفح ثانٍ: إثراء البصمة ثم تغيير قيم Canvas/WebGL فجأة يؤدي لتجميد الجلسة فوراً (403)
+        RegisteredDevice.objects.filter(user=self.student_user).delete()
+        win2 = Client(
+            HTTP_USER_AGENT='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/129.0.0.0 Safari/537.36',
+        )
+        win2.force_login(self.student_user)
+        self.assertEqual(win2.get(reverse('student_dashboard')).status_code, 200)
+        self.assertEqual(
+            win2.post(
+                reverse('web_device_traits_sync'),
+                data=json.dumps(traits_payload),
+                content_type='application/json',
+            ).status_code,
+            200,
+        )
+        dev2 = RegisteredDevice.objects.get(user=self.student_user, is_active=True)
+
+        pb_active = PlaybackSession.objects.create(
+            user=self.student_user,
+            lecture=self.lecture,
+            device_id=dev2.installation_id,
+            status='active',
+            expires_at=timezone.now() + timedelta(minutes=20),
+        )
+
+        tampered = dict(traits_payload)
+        tampered['canvas_hash'] = 'tampered_canvas_999'
+        tampered['webgl_renderer'] = 'Mesa SwiftShader LLVM'
+        tampered_resp = win2.post(
+            reverse('web_device_traits_sync'),
+            data=json.dumps(tampered),
+            content_type='application/json',
+        )
+        self.assertEqual(tampered_resp.status_code, 403)
+        self.assertEqual(tampered_resp.json().get('code'), 'WEB_FINGERPRINT_MISMATCH')
+
+        dev2.refresh_from_db()
+        pb_active.refresh_from_db()
+        self.assertEqual(dev2.trust_status, DeviceTrustStatus.RESTRICTED)
+        self.assertFalse(check_device_allowed(self.student_user, dev2.installation_id)[0])
+        self.assertFalse(DeviceSession.objects.filter(device=dev2, status='active').exists())
+        self.assertEqual(pb_active.status, 'revoked')
+
+    def test_25_web_lectures_strict_iphone_ipad_only_and_anti_f12(self):
+        from django.test import Client
+        from teachers.models import CoursePackage, VideoCode
+        from students.models import PackageEnrollment
+
+        policy = SecurityPolicyConfig.load()
+        policy.student_device_limit = 10
+        policy.save()
+
+        pkg = CoursePackage.objects.create(
+            teacher=self.teacher,
+            title='iOS Only Web Pkg',
+            grade='3_sec',
+            description='Strict iOS-only web gate test',
+            price=300,
+            view_limit=5,
+            is_active=True,
+        )
+        pkg.lectures.add(self.lecture)
+        PackageEnrollment.objects.create(student=self.student, package=pkg, is_paid=True)
+        VideoCode.objects.create(lecture=self.lecture, code='IOSGATE1', max_views=5)
+
+        group_watch_html = reverse('student_watch_lecture', args=[self.lecture.id])
+        pkg_watch_html = reverse('watch_package_lecture', args=[pkg.id, self.lecture.id])
+        pkg_content_html = reverse('my_package_content', args=[pkg.id])
+        group_content_html = reverse('student_group_content', args=[self.group.id])
+
+        # 1) متصفحات ممنوعة: Windows Chrome، Mac Safari، Mac Chrome، Android Chrome، ومحاكاة F12 لـ iPhone
+        blocked_clients = [
+            (
+                'windows_chrome',
+                {
+                    'HTTP_USER_AGENT': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/129.0.0.0 Safari/537.36',
+                },
+                None,
+            ),
+            (
+                'mac_safari',
+                {
+                    'HTTP_USER_AGENT': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15',
+                },
+                {
+                    'navigator_platform': 'MacIntel',
+                    'max_touch_points': 0,
+                    'touch_support': False,
+                    'webgl_vendor': 'Apple',
+                    'webgl_renderer': 'Apple M2',
+                },
+            ),
+            (
+                'mac_chrome',
+                {
+                    'HTTP_USER_AGENT': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/129.0.0.0 Safari/537.36',
+                },
+                None,
+            ),
+            (
+                'android_web',
+                {
+                    'HTTP_USER_AGENT': 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/129.0.0.0 Mobile Safari/537.36',
+                },
+                None,
+            ),
+            (
+                'f12_devtools_spoof',
+                {
+                    'HTTP_USER_AGENT': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1',
+                    'HTTP_SEC_CH_UA_PLATFORM': '"Windows"',
+                },
+                None,
+            ),
+        ]
+
+        for label, hdrs, sync_traits in blocked_clients:
+            c = Client(**hdrs)
+            c.force_login(self.student_user)
+            dash_resp = c.get(reverse('student_dashboard'))
+            if label == 'f12_devtools_spoof':
+                # تزييف Sec-CH-UA-Platform مع UA آيفون يُرفض فوراً عند التسجيل نفسه (302/403)
+                self.assertIn(dash_resp.status_code, (302, 403), label)
+                self.assertIn(c.get(group_watch_html).status_code, (302, 403), f'{label} group_watch')
+                self.assertIn(c.get(pkg_watch_html).status_code, (302, 403), f'{label} pkg_watch')
+            else:
+                self.assertEqual(dash_resp.status_code, 200, label)
+                if sync_traits:
+                    c.post(
+                        reverse('web_device_traits_sync'),
+                        data=json.dumps(sync_traits),
+                        content_type='application/json',
+                    )
+                self.assertEqual(c.get(group_watch_html).status_code, 403, f'{label} group_watch')
+                self.assertEqual(c.get(pkg_watch_html).status_code, 403, f'{label} pkg_watch')
+                gc = c.get(group_content_html)
+                self.assertEqual(gc.status_code, 200, label)
+                self.assertFalse(gc.context['web_lectures_allowed'], label)
+                self.assertEqual(list(gc.context['lectures']), [], label)
+                pc = c.get(pkg_content_html)
+                self.assertEqual(pc.status_code, 200, label)
+                self.assertFalse(pc.context['web_lectures_allowed'], label)
+                self.assertEqual(list(pc.context['lectures']), [], label)
+
+            # التحقق أيضاً على DRF API عند إرسال X-Client-Platform: web
+            self.client.force_authenticate(user=self.student_user)
+            api_auth = self.client.post(
+                reverse('api_v1_video_authorize', args=[self.lecture.id]),
+                {'package_id': pkg.id, 'platform': 'web'},
+                HTTP_X_CLIENT_PLATFORM='web',
+                **hdrs,
+            )
+            self.assertEqual(api_auth.status_code, 403, f'{label} api_authorize')
+            self.assertTrue(api_auth.data.get('blocked'), label)
+            api_gc = self.client.get(
+                reverse('api_v1_student_group_content', args=[self.group.id]),
+                HTTP_X_CLIENT_PLATFORM='web',
+                **hdrs,
+            )
+            self.assertEqual(api_gc.status_code, 200, label)
+            self.assertTrue(api_gc.data.get('lectures_blocked'), label)
+            self.assertEqual(api_gc.data.get('lectures'), [], label)
+            api_cw = self.client.get(
+                reverse('api_v1_video_continue_watching'),
+                HTTP_X_CLIENT_PLATFORM='web',
+                **hdrs,
+            )
+            self.assertEqual(api_cw.status_code, 200, label)
+            self.assertTrue(api_cw.data.get('lectures_blocked'), label)
+            self.assertEqual(api_cw.data.get('items'), [], label)
+
+        # 2) محاكاة F12 لـ iPhone مع إرسال بصمة GPU ويندوز -> يُرفض بـ 403
+        self.client.force_authenticate(user=self.student_user)
+        RegisteredDevice.objects.filter(user=self.student_user).update(is_active=False)
+        spoof_web = Client(
+            HTTP_USER_AGENT='Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1',
+        )
+        spoof_web.force_login(self.student_user)
+        spoof_web.get(reverse('student_dashboard'))
+        spoof_sync = spoof_web.post(
+            reverse('web_device_traits_sync'),
+            data=json.dumps({
+                'navigator_platform': 'Win32',
+                'max_touch_points': 5,
+                'touch_support': True,
+                'webgl_renderer': 'ANGLE (NVIDIA GeForce Direct3D11)',
+            }),
+            content_type='application/json',
+        )
+        self.assertEqual(spoof_sync.status_code, 403)
+        self.assertIn(spoof_web.get(pkg_watch_html).status_code, (302, 403))
+
+        # 3) أجهزة مسموحة على الويب: iPhone حقيقي و iPadOS Desktop Safari الحقيقي
+        iphone = Client(
+            HTTP_USER_AGENT='Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+        )
+        iphone.force_login(self.student_user)
+        iphone.get(reverse('student_dashboard'))
+        sync_iphone = iphone.post(
+            reverse('web_device_traits_sync'),
+            data=json.dumps({
+                'navigator_platform': 'iPhone',
+                'max_touch_points': 5,
+                'touch_support': True,
+                'webgl_vendor': 'Apple Inc.',
+                'webgl_renderer': 'Apple GPU',
+                'canvas_hash': 'iphone_c1',
+                'webgl_hash': 'iphone_w1',
+                'audio_hash': 'iphone_a1',
+            }),
+            content_type='application/json',
+        )
+        self.assertTrue(sync_iphone.json().get('ios_lecture_allowed'))
+        self.assertEqual(iphone.get(pkg_watch_html).status_code, 200)
+
+        ipad_desktop = Client(
+            HTTP_USER_AGENT='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15',
+        )
+        ipad_desktop.force_login(self.student_user)
+        ipad_desktop.get(reverse('student_dashboard'))
+        sync_ipad = ipad_desktop.post(
+            reverse('web_device_traits_sync'),
+            data=json.dumps({
+                'navigator_platform': 'MacIntel',
+                'max_touch_points': 5,
+                'touch_support': True,
+                'webgl_vendor': 'Apple Inc.',
+                'webgl_renderer': 'Apple GPU',
+                'canvas_hash': 'ipad_c1',
+                'webgl_hash': 'ipad_w1',
+                'audio_hash': 'ipad_a1',
+            }),
+            content_type='application/json',
+        )
+        self.assertTrue(sync_ipad.json().get('ios_lecture_allowed'))
+        self.assertEqual(ipad_desktop.get(pkg_watch_html).status_code, 200)
+
+        # 4) تطبيق الأندرويد الأصلي يعمل بشكل طبيعي
+        inst_android = 'inst_android_native_gate_0001'
+        login_res = self._login_with_device(installation_id=inst_android)
+        self.assertEqual(login_res.status_code, 200)
+        android_token = login_res.data['access']
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {android_token}')
+        native_gc = self.client.get(
+            reverse('api_v1_student_group_content', args=[self.group.id]),
+            HTTP_X_DEVICE_ID=inst_android,
+            HTTP_USER_AGENT='Dart/3.5 (dart:io)',
+        )
+        self.assertEqual(native_gc.status_code, 200)
+        self.assertFalse(native_gc.data.get('lectures_blocked'))
+        self.assertEqual(len(native_gc.data.get('lectures')), 1)
+
 
 
 

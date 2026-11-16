@@ -101,8 +101,9 @@ class AuditLog(models.Model):
     ACTION_ADD_PLAN      = 'add_plan'
     ACTION_EDIT_PLAN     = 'edit_plan'
     ACTION_DELETE_PLAN   = 'delete_plan'
-    ACTION_PAY_WITHDRAW  = 'pay_withdrawal'
-    ACTION_TOGGLE_MAINT  = 'toggle_maintenance'
+    ACTION_PAY_WITHDRAW    = 'pay_withdrawal'
+    ACTION_REJECT_WITHDRAW = 'reject_withdrawal'
+    ACTION_TOGGLE_MAINT    = 'toggle_maintenance'
     ACTION_TOGGLE_AI     = 'toggle_ai'
     ACTION_APPOINT_ADMIN = 'appoint_admin'
     ACTION_REMOVE_ADMIN  = 'remove_admin'
@@ -112,6 +113,7 @@ class AuditLog(models.Model):
     ACTION_UNBLOCK_DEVICE = 'unblock_device'
     ACTION_REVOKE_SESSION = 'revoke_session'
     ACTION_SECURITY_POLICY = 'security_policy'
+    ACTION_SEND_NOTIFICATION = 'send_notification'
 
     ACTION_CHOICES = [
         (ACTION_BAN,           _('حظر مستخدم')),
@@ -122,8 +124,9 @@ class AuditLog(models.Model):
         (ACTION_ADD_PLAN,      _('إضافة باقة')),
         (ACTION_EDIT_PLAN,     _('تعديل باقة')),
         (ACTION_DELETE_PLAN,   _('حذف باقة')),
-        (ACTION_PAY_WITHDRAW,  _('تسديد طلب سحب')),
-        (ACTION_TOGGLE_MAINT,  _('تغيير وضع الصيانة')),
+        (ACTION_PAY_WITHDRAW,    _('تسديد طلب سحب')),
+        (ACTION_REJECT_WITHDRAW, _('رفض طلب سحب')),
+        (ACTION_TOGGLE_MAINT,    _('تغيير وضع الصيانة')),
         (ACTION_TOGGLE_AI,     _('تشغيل/إيقاف الذكاء الاصطناعي')),
         (ACTION_APPOINT_ADMIN, _('تعيين مسؤول')),
         (ACTION_REMOVE_ADMIN,  _('إزالة مسؤول')),
@@ -133,6 +136,7 @@ class AuditLog(models.Model):
         (ACTION_UNBLOCK_DEVICE,_('فك حظر جهاز')),
         (ACTION_REVOKE_SESSION,_('إنهاء جلسة جهاز')),
         (ACTION_SECURITY_POLICY,_('تحديث سياسات الأمان')),
+        (ACTION_SEND_NOTIFICATION, _('إرسال إشعار مخصص')),
     ]
 
     admin = models.ForeignKey(
@@ -197,6 +201,23 @@ class AuditLog(models.Model):
             target_id=target_id,
             details=details or {},
             ip_address=ip or None,
+        )
+
+    @classmethod
+    def log_custom_notification(cls, request, result: dict):
+        """يسجل عملية إرسال إشعار إداري مخصص بشكل موحّد بين الويب والـ API."""
+        return cls.log(
+            request,
+            cls.ACTION_SEND_NOTIFICATION,
+            target_label=result.get('audience_label', ''),
+            details={
+                'target_mode': result.get('target_mode', ''),
+                'segment': result.get('segment', ''),
+                'recipient_count': result.get('recipient_count', 0),
+                'fcm_user_count': result.get('fcm_user_count', 0),
+                'title': result.get('title', ''),
+                'link': result.get('link', ''),
+            },
         )
 
 

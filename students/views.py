@@ -19,16 +19,34 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.conf import settings
+from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponse
 from core.utils import send_notification
 from core.models import Subject
+
+
+def _clear_student_web_watch_state(request) -> None:
+    """يمسح نوافذ المشاهدة النشطة عند العودة للقوائم أو الخروج من صفحة المحاضرة."""
+    if not getattr(request, 'user', None) or not request.user.is_authenticated:
+        return
+    from api_v1.video_security import clear_watch_window
+    clear_watch_window(request.user)
+    session = getattr(request, 'session', None)
+    if session is not None:
+        stale_keys = [
+            k for k in list(session.keys())
+            if isinstance(k, str) and (k.startswith('viewed_lec_') or k.startswith('viewed_pkg_lec_'))
+        ]
+        for k in stale_keys:
+            session.pop(k, None)
 # 1. لوحة تحكم الطالب (سنعرض فيها المجموعات المشترك بها)
 @login_required
 def student_dashboard(request):
     if request.user.role != 'student':
         return redirect('home')
 
+    _clear_student_web_watch_state(request)
     try:
         student = request.user.student_profile
     except StudentProfile.DoesNotExist:
@@ -141,12 +159,6 @@ def join_group(request, group_id):
         return redirect('student_dashboard')
     if not existing:
         Enrollment.objects.create(student=student, group=group, is_active=False)
-        send_notification(
-    group.teacher.user,
-    "طلب انضمام جديد",
-    f"الطالب {student.user.first_name} طلب الانضمام لمجموعة {group.name}",
-    f"/teacher/group/{group.id}/requests/"
-)
         messages.success(request, f"تم إرسال طلب الانضمام لمجموعة '{group.name}' بنجاح، في انتظار موافقة المعلم.")
     else:
         messages.warning(request, "أنت بالفعل عضو في هذه المجموعة أو الطلب قيد الانتظار.")
@@ -206,6 +218,7 @@ def check_student_access(user, group_id):
 # ==========================================
 @login_required
 def student_group_content(request, group_id):
+    _clear_student_web_watch_state(request)
     group, status = check_student_access(request.user, group_id)
     
     if status == "teacher_expired":
@@ -223,10 +236,17 @@ def student_group_content(request, group_id):
         lecture__group=group
     ).values_list('lecture_id', flat=True)
 
+    from api_v1.device_security_service import check_web_ios_only_lecture_access
+    ios_access = check_web_ios_only_lecture_access(request, request.user, force_web=True)
+    web_lectures_allowed = bool(ios_access.get('allowed'))
+
     context = {
         'group': group,
-        'lectures': lectures,
-        'unlocked_ids': unlocked_lectures,
+        'lectures': lectures if web_lectures_allowed else [],
+        'unlocked_ids': unlocked_lectures if web_lectures_allowed else [],
+        'web_lectures_allowed': web_lectures_allowed,
+        'web_lectures_block_reason': '' if web_lectures_allowed else (ios_access.get('error') or ''),
+        'web_lectures_needs_ipad_probe': bool(ios_access.get('needs_ipad_probe')) if not web_lectures_allowed else False,
         'active_tab': 'content'
     }
     return render(request, 'students/group_content.html', context)
@@ -241,22 +261,36 @@ def student_watch_lecture(request, lecture_id):
     
     if status != "ok": return redirect('student_dashboard')
 
+    from api_v1.device_security_service import check_web_ios_only_lecture_access
+    ios_access = check_web_ios_only_lecture_access(request, request.user, force_web=True)
+    if not ios_access.get('allowed'):
+        return render(
+            request,
+            'students/web_lectures_blocked.html',
+            {
+                'group': group,
+                'block_reason': ios_access.get('error') or '',
+                'needs_ipad_probe': bool(ios_access.get('needs_ipad_probe')),
+            },
+            status=403,
+        )
+
     student = request.user.student_profile
     
     # جلب الكود المستخدم (إن وجد) الأحدث
     active_code = VideoCode.objects.filter(lecture=lecture, used_by=student).order_by('-used_at').first()
     
     # 1. التحقق من السماح بالمشاهدة
+    from api_v1.video_security import (
+        get_active_watch_window_expiry,
+        grant_watch_window,
+    )
+    watch_window_exp = get_active_watch_window_expiry(request.user, lecture.id)
+    is_currently_viewing = watch_window_exp is not None
     is_unlocked = False
     if active_code:
-        session_key = f"viewed_lec_{lecture.id}_{active_code.id}"
-        now_ts = time.time()
-        last_view_ts = request.session.get(session_key)
-        is_currently_viewing = (
-            isinstance(last_view_ts, (int, float)) and (now_ts - float(last_view_ts) < 3600)
-        )
-
-        # إذا لم يكن في جلسة المشاهدة الحالية، وتجاوز الحد المسموح
+        request.session.pop(f"viewed_lec_{lecture.id}_{active_code.id}", None)
+        # إذا لم يكن في نافذة المشاهدة الحالية، وتجاوز الحد المسموح
         if active_code.current_views >= active_code.max_views and not (
             is_currently_viewing and active_code.current_views <= active_code.max_views
         ):
@@ -264,11 +298,6 @@ def student_watch_lecture(request, lecture_id):
             is_unlocked = False
         else:
             is_unlocked = True
-            # إذا كانت أول مرة يفتح فيها الفيديو خلال نافذة الساعة الحالية
-            if request.method == 'GET' and not is_currently_viewing:
-                active_code.current_views += 1
-                active_code.save()
-                request.session[session_key] = now_ts
 
     # 2. معالجة إدخال كود جديد (POST)
     if request.method == 'POST':
@@ -298,10 +327,26 @@ def student_watch_lecture(request, lecture_id):
     if is_unlocked:
         from django.utils.translation import gettext as _
         from api_v1.device_security_service import enforce_web_lecture_playback
+        from api_v1.models import PlaybackSession
         playback_res = enforce_web_lecture_playback(request, request.user, lecture)
         if not playback_res.get('allowed'):
             messages.error(request, playback_res.get('error') or _("هذا المتصفح غير مخوّل لتشغيل المحاضرة."))
             return redirect('web_trusted_devices')
+        if request.method == 'GET' and active_code and not is_currently_viewing:
+            with transaction.atomic():
+                locked_code = VideoCode.objects.select_for_update().get(pk=active_code.pk)
+                if locked_code.current_views >= locked_code.max_views:
+                    messages.error(request, "لقد استهلكت عدد مرات مشاهدة هذا الفيديو. يرجى شراء كود جديد.")
+                    is_unlocked = False
+                else:
+                    locked_code.current_views += 1
+                    locked_code.save(update_fields=['current_views'])
+                    active_code = locked_code
+                    watch_window_exp = grant_watch_window(request.user, lecture.id)
+        if is_unlocked and playback_res.get('playback_session_uuid') and watch_window_exp is not None:
+            PlaybackSession.objects.filter(
+                session_id=playback_res.get('playback_session_uuid')
+            ).update(view_window_expires_at=watch_window_exp)
         playback_ctx = {
             'playback_session_uuid': playback_res.get('playback_session_uuid', ''),
             'web_installation_id': playback_res.get('installation_id', ''),
@@ -329,6 +374,17 @@ def web_lecture_heartbeat(request, lecture_id):
     نبض جلسة المشاهدة على الويب: يتحقق من بقاء المتصفح مخوّلاً ومن عدم فتح نفس المحاضرة
     من جهاز أو متصفح آخر، ويمدّد صلاحية الجلسة النشطة.
     """
+    from api_v1.device_security_service import check_web_ios_only_lecture_access
+    ios_access = check_web_ios_only_lecture_access(request, request.user, force_web=True)
+    if not ios_access.get('allowed'):
+        return _JsonResponse(
+            {
+                'ok': False,
+                'error': ios_access.get('error') or 'المحاضرات عبر الويب متاحة فقط على iPhone و iPad.',
+                'code': ios_access.get('code') or 'WEB_LECTURES_IOS_ONLY',
+            },
+            status=403,
+        )
     from datetime import timedelta as _td
     from django.utils import timezone as _tz
     from django.utils.translation import gettext as _
@@ -395,6 +451,39 @@ def web_lecture_heartbeat(request, lecture_id):
         playback_session.save(update_fields=['last_heartbeat_at'])
 
     return _JsonResponse({'ok': True, 'status': 'active'})
+
+
+@login_required
+def web_lecture_end(request, lecture_id):
+    """إنهاء نافذة وجلسة المشاهدة على الويب فوراً عند إغلاق الصفحة أو الرجوع للخلف."""
+    if request.method != 'POST':
+        return _JsonResponse({'ok': False}, status=405)
+
+    from api_v1.models import PlaybackSession
+    from api_v1.video_security import clear_watch_window
+
+    session_id = ''
+    if request.content_type and 'application/json' in request.content_type:
+        try:
+            data = _json.loads((request.body or b'{}').decode('utf-8'))
+            if isinstance(data, dict):
+                session_id = str(data.get('session_id') or '').strip()
+        except Exception:
+            session_id = ''
+    if not session_id:
+        session_id = str(request.POST.get('session_id') or '').strip()
+
+    now = timezone.now()
+    if session_id:
+        PlaybackSession.objects.filter(
+            session_id=session_id,
+            user=request.user,
+            lecture_id=lecture_id,
+            status='active',
+        ).update(status='ended', revoked_reason='web_page_exit', view_window_expires_at=now)
+
+    clear_watch_window(request.user, lecture_id=lecture_id, now=now)
+    return _JsonResponse({'ok': True})
 
 # ==========================================
 # 3. قائمة الامتحانات
@@ -596,6 +685,7 @@ def package_detail(request, package_id):
 
 @login_required
 def my_package_content(request, package_id):
+    _clear_student_web_watch_state(request)
     student = request.user.student_profile
     package = get_object_or_404(CoursePackage, id=package_id)
     
@@ -611,11 +701,18 @@ def my_package_content(request, package_id):
     progress = VideoViewTracking.objects.filter(student=student, package=package)
     watched_ids = progress.values_list('lecture_id', flat=True)
 
+    from api_v1.device_security_service import check_web_ios_only_lecture_access
+    ios_access = check_web_ios_only_lecture_access(request, request.user, force_web=True)
+    web_lectures_allowed = bool(ios_access.get('allowed'))
+
     return render(request, 'students/my_package_content.html', {
         'package': package,
-        'lectures': lectures,
+        'lectures': lectures if web_lectures_allowed else [],
         'exams': exams,
-        'watched_ids': watched_ids
+        'watched_ids': watched_ids if web_lectures_allowed else [],
+        'web_lectures_allowed': web_lectures_allowed,
+        'web_lectures_block_reason': '' if web_lectures_allowed else (ios_access.get('error') or ''),
+        'web_lectures_needs_ipad_probe': bool(ios_access.get('needs_ipad_probe')) if not web_lectures_allowed else False,
     })
 
 # نفس منطق الدفع، لكن نمرر package_id في الـ Session أو كـ order item
@@ -718,17 +815,34 @@ def watch_package_lecture(request, package_id, lecture_id):
         messages.error(request, "هذه المحاضرة غير متاحة ضمن هذه الباقة.")
         return redirect('my_package_content', package_id=package.id)
 
+    from api_v1.device_security_service import check_web_ios_only_lecture_access
+    ios_access = check_web_ios_only_lecture_access(request, request.user, force_web=True)
+    if not ios_access.get('allowed'):
+        return render(
+            request,
+            'students/web_lectures_blocked.html',
+            {
+                'package': package,
+                'block_reason': ios_access.get('error') or '',
+                'needs_ipad_probe': bool(ios_access.get('needs_ipad_probe')),
+            },
+            status=403,
+        )
+
     # 2. تتبع المشاهدة
     tracker, created = VideoViewTracking.objects.get_or_create(
         student=student, package=package, lecture=lecture
     )
 
-    session_key = f"viewed_pkg_lec_{package.id}_{lecture.id}"
-    now_ts = time.time()
-    last_view_ts = request.session.get(session_key)
-    is_currently_viewing = (
-        isinstance(last_view_ts, (int, float)) and (now_ts - float(last_view_ts) < 3600)
+    from api_v1.video_security import (
+        get_active_watch_window_expiry,
+        grant_watch_window,
     )
+    request.session.pop(f"viewed_pkg_lec_{package.id}_{lecture.id}", None)
+    watch_window_exp = get_active_watch_window_expiry(
+        request.user, lecture.id, package_id=package.id
+    )
+    is_currently_viewing = watch_window_exp is not None
 
     # التحقق من حد المشاهدات
     if tracker.views_count >= package.view_limit and not (
@@ -737,25 +851,34 @@ def watch_package_lecture(request, package_id, lecture_id):
         messages.error(request, "لقد استهلكت عدد مرات مشاهدة هذا الفيديو في الباقة.")
         return redirect('my_package_content', package_id=package.id)
 
-    # 3. احتساب الـ 10 درجات (أول مرة فقط)
-    if not tracker.is_completed:
-        tracker.is_completed = True
-        tracker.points_awarded = 10
-        tracker.save() # حفظ النقاط
-        messages.success(request, "تم احتساب 10 درجات مشاهدة!")
-
-    # زيادة العداد مرة واحدة فقط خلال نافذة الساعة الحالية
-    if not is_currently_viewing:
-        tracker.views_count += 1
-        tracker.save()
-        request.session[session_key] = now_ts
-
     from django.utils.translation import gettext as _
     from api_v1.device_security_service import enforce_web_lecture_playback
+    from api_v1.models import PlaybackSession
     playback_res = enforce_web_lecture_playback(request, request.user, lecture, course_package=package)
     if not playback_res.get('allowed'):
         messages.error(request, playback_res.get('error') or _("هذا المتصفح غير مخوّل لتشغيل المحاضرة."))
         return redirect('web_trusted_devices')
+
+    # 3. احتساب النقاط والمشاهدة ذرياً بعد التحقق الأمني من الجهاز
+    with transaction.atomic():
+        locked_tracker = VideoViewTracking.objects.select_for_update().get(pk=tracker.pk)
+        if not is_currently_viewing:
+            if locked_tracker.views_count >= package.view_limit:
+                messages.error(request, "لقد استهلكت عدد مرات مشاهدة هذا الفيديو في الباقة.")
+                return redirect('my_package_content', package_id=package.id)
+            if not locked_tracker.is_completed:
+                locked_tracker.is_completed = True
+                locked_tracker.points_awarded = 10
+                messages.success(request, "تم احتساب 10 درجات مشاهدة!")
+            locked_tracker.views_count += 1
+            locked_tracker.save()
+            watch_window_exp = grant_watch_window(request.user, lecture.id)
+        tracker = locked_tracker
+
+    if playback_res.get('playback_session_uuid') and watch_window_exp is not None:
+        PlaybackSession.objects.filter(
+            session_id=playback_res.get('playback_session_uuid')
+        ).update(view_window_expires_at=watch_window_exp)
 
     return render(request, 'students/watch_package_lecture.html', {
         'lecture': lecture,

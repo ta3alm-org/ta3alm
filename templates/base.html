@@ -611,8 +611,50 @@
         </div>
     </footer>
 
-    <!-- Smart Android App Banner (يظهر تلقائياً على متصفحات أندرويد لفتح الرابط داخل التطبيق فوراً أو تنزيل APK) -->
-    <div id="ta3almAndroidAppBanner" class="d-none position-fixed bottom-0 start-0 end-0 p-2 px-3 shadow-lg" style="z-index:1060; background:linear-gradient(135deg,#520000,#170000); border-top:2px solid #FFD700; color:#fff;">
+    <!-- نافذة تحميل تطبيق أندرويد المنبثقة الدائمة (تظهر تلقائياً عند التصفح من أي متصفح أندرويد بالرابط المعتمد في الإدارة) -->
+    {% with app_dl_url=android_app_release.download_url|default:'/api/v1/public/app-update/download/' %}
+    <div class="modal fade" id="ta3almAndroidDownloadModal" tabindex="-1" aria-labelledby="ta3almAndroidDownloadModalLabel" aria-hidden="true" data-apk-url="{{ app_dl_url|escape }}">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden" style="border-top:4px solid #FFD700 !important;">
+                <div class="modal-header border-0 text-white py-3 px-4" style="background:linear-gradient(135deg,#7B0000,#2a0000);">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="rounded-3 d-inline-flex align-items-center justify-content-center" style="width:42px;height:42px;background:rgba(255,215,0,0.18);border:1px solid rgba(255,215,0,0.45);">
+                            <i class="bi bi-android2 text-warning fs-4"></i>
+                        </span>
+                        <div>
+                            <h5 class="modal-title fw-bold mb-0 fs-6" id="ta3almAndroidDownloadModalLabel">{% trans "حمّل تطبيق تعلّم للأندرويد" %}</h5>
+                            {% if android_app_release.version_name %}
+                            <span class="badge bg-warning text-dark rounded-pill mt-1" style="font-size:0.7rem;">v{{ android_app_release.version_name }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="modal" aria-label="{% trans 'إغلاق' %}"></button>
+                </div>
+                <div class="modal-body p-4 text-center bg-white text-dark">
+                    <p class="text-secondary mb-4" style="line-height:1.8;">
+                        {% trans "تم رصد فتح المنصة من متصفح أندرويد. لتحميل التحديث الأخير ومتابعة المحاضرات المحمية واستلام الإشعارات لحظياً، قم بتحميل التطبيق مباشرة من الرابط الرسمي." %}
+                    </p>
+                    <div class="d-grid gap-2">
+                        <a id="ta3almModalDownloadBtn"
+                           href="{{ app_dl_url }}"
+                           {% if android_app_release.is_external_url %}target="_blank" rel="noopener noreferrer"{% endif %}
+                           class="btn btn-warning btn-lg fw-bold rounded-pill text-dark shadow-sm">
+                            <i class="bi bi-download me-2"></i>{% trans "تحميل تطبيق تعلّم (APK)" %}
+                        </a>
+                        <a id="ta3almModalOpenInAppBtn" href="#" class="btn btn-outline-danger rounded-pill fw-semibold">
+                            <i class="bi bi-box-arrow-up-right me-1"></i>{% trans "فتح داخل التطبيق المثبّت" %}
+                        </a>
+                        <button type="button" class="btn btn-link btn-sm text-muted text-decoration-none mt-1" data-bs-dismiss="modal">
+                            {% trans "متابعة التصفح مؤقتاً" %}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Smart Android App Banner (شريط سفلي سريع متاح دائماً على متصفحات أندرويد) -->
+    <div id="ta3almAndroidAppBanner" class="d-none position-fixed bottom-0 start-0 end-0 p-2 px-3 shadow-lg" style="z-index:1040; background:linear-gradient(135deg,#520000,#170000); border-top:2px solid #FFD700; color:#fff;">
         <div class="container d-flex align-items-center justify-content-between gap-2 flex-wrap">
             <div class="d-flex align-items-center gap-2">
                 <button type="button" id="ta3almDismissBanner" class="btn btn-sm btn-link text-white-50 p-0 text-decoration-none" aria-label="إغلاق">
@@ -630,8 +672,11 @@
                 <a id="ta3almOpenInAppBtn" href="#" class="btn btn-warning btn-sm fw-bold rounded-pill px-3 text-dark">
                     <i class="bi bi-box-arrow-up-right me-1"></i>{% trans "فتح في التطبيق" %}
                 </a>
-                <a href="/api/v1/public/app-update/download/" class="btn btn-outline-light btn-sm rounded-pill px-2">
-                    <i class="bi bi-download"></i>
+                <a id="ta3almBannerDownloadBtn"
+                   href="{{ app_dl_url }}"
+                   {% if android_app_release.is_external_url %}target="_blank" rel="noopener noreferrer"{% endif %}
+                   class="btn btn-outline-light btn-sm rounded-pill px-3 fw-semibold">
+                    <i class="bi bi-download me-1"></i>{% trans "تحميل APK" %}
                 </a>
             </div>
         </div>
@@ -643,32 +688,47 @@
         (function () {
             try {
                 var ua = navigator.userAgent || '';
-                var isAndroid = /Android/i.test(ua);
+                var chPlatform = (navigator.userAgentData && navigator.userAgentData.platform) ? String(navigator.userAgentData.platform) : '';
+                var isAndroid = /Android/i.test(ua) || /Android/i.test(chPlatform);
                 var isWebView = /;\s*wv\)|Ta3almApp/i.test(ua);
+                if (!isAndroid || isWebView) return;
+
+                var modalEl = document.getElementById('ta3almAndroidDownloadModal');
                 var banner = document.getElementById('ta3almAndroidAppBanner');
                 var openBtn = document.getElementById('ta3almOpenInAppBtn');
+                var modalOpenBtn = document.getElementById('ta3almModalOpenInAppBtn');
                 var dismissBtn = document.getElementById('ta3almDismissBanner');
-                if (!banner || !openBtn || !isAndroid || isWebView) return;
-                if (window.sessionStorage && sessionStorage.getItem('ta3alm_app_banner_dismissed') === '1') return;
 
                 var host = window.location.host || 'www.ta3alm.online';
                 var path = (window.location.pathname || '/') + (window.location.search || '');
                 var scheme = (window.location.protocol || 'https:').replace(':', '');
-                var fallbackUrl = window.location.origin + '/api/v1/public/app-update/download/';
-                openBtn.href = 'intent://' + host + path + '#Intent;scheme=' + scheme + ';package=online.ta3alm.ta3alm_flutter;S.browser_fallback_url=' + encodeURIComponent(fallbackUrl) + ';end';
+                var rawApkUrl = (modalEl && modalEl.getAttribute('data-apk-url')) || '/api/v1/public/app-update/download/';
+                var fallbackUrl = /^https?:\/\//i.test(rawApkUrl)
+                    ? rawApkUrl
+                    : (window.location.origin + (rawApkUrl.charAt(0) === '/' ? rawApkUrl : ('/' + rawApkUrl)));
+                var intentHref = 'intent://' + host + path + '#Intent;scheme=' + scheme + ';package=online.ta3alm.ta3alm_flutter;S.browser_fallback_url=' + encodeURIComponent(fallbackUrl) + ';end';
 
-                banner.classList.remove('d-none');
-                if (dismissBtn) {
-                    dismissBtn.addEventListener('click', function () {
-                        banner.classList.add('d-none');
-                        try {
-                            sessionStorage.setItem('ta3alm_app_banner_dismissed', '1');
-                        } catch (e) {}
-                    });
+                if (openBtn) openBtn.href = intentHref;
+                if (modalOpenBtn) modalOpenBtn.href = intentHref;
+
+                if (banner) {
+                    banner.classList.remove('d-none');
+                    if (dismissBtn) {
+                        dismissBtn.addEventListener('click', function () {
+                            banner.classList.add('d-none');
+                        });
+                    }
+                }
+
+                // إظهار البوب أب دائماً عند كل فتح للموقع من متصفح أندرويد بدون حفظ الإغلاق
+                if (modalEl && typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                    var modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl);
+                    modalInstance.show();
                 }
             } catch (e) {}
         })();
     </script>
+    {% endwith %}
     <script>
         const toggleBtn = document.getElementById('darkModeSidebar');
         const body = document.body;
@@ -710,62 +770,198 @@
     {% if user.is_authenticated %}
     <script>
         (function () {
-            try {
-                if (window.sessionStorage && sessionStorage.getItem('ta3alm_web_traits_synced') === '1') {
-                    return;
+            function hashString(str) {
+                var h1 = 0xdeadbeef ^ 0, h2 = 0x41c6ce57 ^ 0;
+                for (var i = 0, ch; i < str.length; i++) {
+                    ch = str.charCodeAt(i);
+                    h1 = Math.imul(h1 ^ ch, 2654435761);
+                    h2 = Math.imul(h2 ^ ch, 1597334677);
                 }
-                function getCookie(name) {
-                    var value = '; ' + document.cookie;
-                    var parts = value.split('; ' + name + '=');
-                    if (parts.length === 2) return parts.pop().split(';').shift();
+                h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+                h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+                return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16);
+            }
+            function getCookie(name) {
+                var value = '; ' + document.cookie;
+                var parts = value.split('; ' + name + '=');
+                if (parts.length === 2) return parts.pop().split(';').shift();
+                return '';
+            }
+            function collectCanvasHash() {
+                try {
+                    var c = document.createElement('canvas');
+                    c.width = 240;
+                    c.height = 60;
+                    var ctx = c.getContext('2d');
+                    if (!ctx) return '';
+                    ctx.textBaseline = 'top';
+                    ctx.font = '14px Arial, sans-serif';
+                    ctx.fillStyle = '#f60';
+                    ctx.fillRect(10, 10, 62, 20);
+                    ctx.fillStyle = '#069';
+                    ctx.fillText('Ta3almFP-2026!', 2, 15);
+                    ctx.fillStyle = 'rgba(102, 204, 0, 0.7)';
+                    ctx.fillText('Ta3almFP-2026!', 4, 17);
+                    return hashString(c.toDataURL());
+                } catch (e) {
                     return '';
                 }
+            }
+            function collectWebglSignals() {
                 var gpuRenderer = '';
                 var gpuVendor = '';
+                var webglSig = '';
                 try {
                     var canvas = document.createElement('canvas');
-                    var gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                    var gl = canvas.getContext('webgl2') || canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
                     if (gl) {
                         var dbg = gl.getExtension('WEBGL_debug_renderer_info');
                         if (dbg) {
                             gpuVendor = String(gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL) || '').slice(0, 128);
                             gpuRenderer = String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || '').slice(0, 128);
                         }
+                        var exts = (gl.getSupportedExtensions() || []).slice().sort().join(',');
+                        var params = [
+                            gpuVendor,
+                            gpuRenderer,
+                            gl.getParameter(gl.VENDOR),
+                            gl.getParameter(gl.RENDERER),
+                            gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
+                            gl.getParameter(gl.MAX_TEXTURE_SIZE),
+                            gl.getParameter(gl.MAX_VIEWPORT_DIMS),
+                            exts
+                        ].join('|');
+                        webglSig = hashString(params);
                     }
                 } catch (e) {}
-
-                var tz = '';
+                return { gpuRenderer: gpuRenderer, gpuVendor: gpuVendor, webglHash: webglSig };
+            }
+            function collectAudioSignature(cb) {
                 try {
-                    tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
-                } catch (e) {}
-
-                var payload = {
-                    cpu_arch: String(navigator.platform || '').slice(0, 64),
-                    cpu_info: navigator.hardwareConcurrency ? (String(navigator.hardwareConcurrency) + ' cores') : '',
-                    gpu_renderer: gpuRenderer,
-                    gpu_vendor: gpuVendor,
-                    screen_resolution: (window.screen && window.screen.width && window.screen.height)
-                        ? (String(window.screen.width) + 'x' + String(window.screen.height))
-                        : '',
-                    timezone: String(tz).slice(0, 64),
-                    webdriver_detected: Boolean(navigator.webdriver)
-                };
-
-                var csrf = getCookie('csrftoken') || '{{ csrf_token }}';
-                fetch("{% url 'web_device_traits_sync' %}", {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': csrf
-                    },
-                    body: JSON.stringify(payload)
-                }).then(function (resp) {
-                    if (resp && resp.ok && window.sessionStorage) {
-                        sessionStorage.setItem('ta3alm_web_traits_synced', '1');
+                    var Ctx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+                    if (!Ctx) {
+                        cb('');
+                        return;
                     }
-                }).catch(function () {});
-            } catch (e) {}
+                    var ac = new Ctx(1, 2048, 44100);
+                    var osc = ac.createOscillator();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(10000, ac.currentTime);
+                    var comp = ac.createDynamicsCompressor();
+                    comp.threshold.setValueAtTime(-50, ac.currentTime);
+                    comp.knee.setValueAtTime(40, ac.currentTime);
+                    comp.ratio.setValueAtTime(12, ac.currentTime);
+                    comp.attack.setValueAtTime(0, ac.currentTime);
+                    comp.release.setValueAtTime(0.25, ac.currentTime);
+                    osc.connect(comp);
+                    comp.connect(ac.destination);
+                    osc.start(0);
+                    var timer = setTimeout(function () { cb(''); }, 400);
+                    var prom = ac.startRendering();
+                    if (prom && typeof prom.then === 'function') {
+                        prom.then(function (buf) {
+                            clearTimeout(timer);
+                            var data = buf.getChannelData(0);
+                            var sum = '';
+                            for (var i = 450; i < 650 && i < data.length; i += 4) {
+                                sum += Math.round(Math.abs(data[i]) * 1e6).toString(36);
+                            }
+                            cb(hashString(sum || String(ac.sampleRate)));
+                        }).catch(function () {
+                            clearTimeout(timer);
+                            cb('');
+                        });
+                    } else {
+                        clearTimeout(timer);
+                        cb('');
+                    }
+                } catch (e) {
+                    cb('');
+                }
+            }
+
+            window.ta3almSyncWebDeviceTraits = function (forceSync, onDone) {
+                try {
+                    collectAudioSignature(function (audioHash) {
+                        try {
+                            var glInfo = collectWebglSignals();
+                            var canvasHash = collectCanvasHash();
+                            var tz = '';
+                            try {
+                                tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+                            } catch (e) {}
+                            var touchSupport = ('ontouchstart' in window) || ((navigator.maxTouchPoints || 0) > 0);
+                            var webdriverFlag = Boolean(
+                                navigator.webdriver || window.__nightmare || window._phantom || window.callPhantom
+                            );
+                            var cpuParts = [];
+                            if (navigator.hardwareConcurrency) cpuParts.push(String(navigator.hardwareConcurrency) + ' cores');
+                            if (navigator.deviceMemory) cpuParts.push(String(navigator.deviceMemory) + 'GB');
+
+                            var payload = {
+                                cpu_arch: String(navigator.platform || '').slice(0, 64),
+                                navigator_platform: String(navigator.platform || '').slice(0, 64),
+                                cpu_info: cpuParts.join(' / '),
+                                gpu_renderer: glInfo.gpuRenderer,
+                                gpu_vendor: glInfo.gpuVendor,
+                                canvas_hash: canvasHash,
+                                webgl_hash: glInfo.webglHash,
+                                audio_hash: audioHash,
+                                max_touch_points: typeof navigator.maxTouchPoints === 'number' ? navigator.maxTouchPoints : 0,
+                                touch_support: Boolean(touchSupport),
+                                color_depth: (window.screen && window.screen.colorDepth) ? String(window.screen.colorDepth) : '',
+                                languages: Array.isArray(navigator.languages) ? navigator.languages.join(',').slice(0, 120) : String(navigator.language || ''),
+                                screen_resolution: (window.screen && window.screen.width && window.screen.height)
+                                    ? (String(window.screen.width) + 'x' + String(window.screen.height))
+                                    : '',
+                                timezone: String(tz).slice(0, 64),
+                                webdriver_detected: webdriverFlag
+                            };
+
+                            var sig = hashString(JSON.stringify(payload));
+                            var lastSig = window.sessionStorage ? sessionStorage.getItem('ta3alm_web_traits_sig') : '';
+                            var lastAt = window.sessionStorage ? Number(sessionStorage.getItem('ta3alm_web_traits_at') || '0') : 0;
+                            if (!forceSync && lastSig === sig && (Date.now() - lastAt) < 240000) {
+                                if (typeof onDone === 'function') onDone({ ok: true, cached: true });
+                                return;
+                            }
+
+                            var csrf = getCookie('csrftoken') || '{{ csrf_token }}';
+                            fetch("{% url 'web_device_traits_sync' %}", {
+                                method: 'POST',
+                                credentials: 'same-origin',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-CSRFToken': csrf
+                                },
+                                body: JSON.stringify(payload)
+                            }).then(function (resp) {
+                                return resp.json().catch(function () { return {}; }).then(function (data) {
+                                    if (resp && resp.ok && data && data.ok !== false) {
+                                        if (window.sessionStorage) {
+                                            sessionStorage.setItem('ta3alm_web_traits_synced', '1');
+                                            sessionStorage.setItem('ta3alm_web_traits_sig', sig);
+                                            sessionStorage.setItem('ta3alm_web_traits_at', String(Date.now()));
+                                        }
+                                        if (typeof onDone === 'function') onDone(data);
+                                    } else if (resp && resp.status === 403) {
+                                        if (typeof onDone === 'function') onDone(data || { ok: false });
+                                        if (!window.location.pathname.includes('/devices/')) {
+                                            window.location.href = "{% url 'web_trusted_devices' %}";
+                                        }
+                                    }
+                                });
+                            }).catch(function () {
+                                if (typeof onDone === 'function') onDone({ ok: false });
+                            });
+                        } catch (e) {
+                            if (typeof onDone === 'function') onDone({ ok: false });
+                        }
+                    });
+                } catch (e) {}
+            };
+
+            window.ta3almSyncWebDeviceTraits(false);
         })();
     </script>
     {% endif %}

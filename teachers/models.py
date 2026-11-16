@@ -218,12 +218,48 @@ class WithdrawRequest(models.Model):
         ('instapay', 'InstaPay'),
         ('bank', 'Bank Transfer'),
     )
+    STATUS_PENDING = 'pending'
+    STATUS_PAID = 'paid'
+    STATUS_REJECTED = 'rejected'
+    STATUS_CHOICES = (
+        (STATUS_PENDING, 'قيد المراجعة'),
+        (STATUS_PAID, 'تم التحويل'),
+        (STATUS_REJECTED, 'مرفوض'),
+    )
     wallet = models.ForeignKey(Wallet, on_delete=models.CASCADE, related_name='withdrawals')
     amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="╪º┘ä┘à╪¿┘ä╪║ ╪º┘ä┘à╪╖┘ä┘ê╪¿")
     method = models.CharField(max_length=20, choices=METHODS, verbose_name="╪╖╪▒┘è┘é╪⌐ ╪º┘ä╪│╪¡╪¿")
     details = models.TextField(verbose_name="╪¿┘è╪º┘å╪º╪¬ ╪º┘ä╪¬╪¡┘ê┘è┘ä (╪▒┘é┘à/╪¡╪│╪º╪¿)")
     is_paid = models.BooleanField(default=False, verbose_name="╪¬┘à ╪º┘ä╪¬╪¡┘ê┘è┘ä")
     created_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING,
+        db_index=True,
+        verbose_name="حالة الطلب",
+    )
+    rejection_reason = models.TextField(blank=True, default='', verbose_name="سبب الرفض")
+    reviewed_at = models.DateTimeField(null=True, blank=True, verbose_name="تاريخ المراجعة")
+
+    def save(self, *args, **kwargs):
+        if self.is_paid and self.status == self.STATUS_PENDING:
+            self.status = self.STATUS_PAID
+        if self.status == self.STATUS_PAID:
+            self.is_paid = True
+        else:
+            self.is_paid = False
+
+        if self.status in (self.STATUS_PAID, self.STATUS_REJECTED) and self.reviewed_at is None:
+            self.reviewed_at = timezone.now()
+
+        update_fields = kwargs.get('update_fields')
+        if update_fields is not None:
+            fields_set = set(update_fields)
+            if fields_set & {'status', 'is_paid'}:
+                fields_set.update({'status', 'is_paid', 'reviewed_at'})
+                kwargs['update_fields'] = list(fields_set)
+        super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.amount} - {self.get_method_display()}"
+        return f"{self.amount} - {self.get_method_display()} ({self.get_status_display()})"

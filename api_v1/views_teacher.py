@@ -17,7 +17,7 @@ from rest_framework.views import APIView
 from accounts.models import StudentProfile
 from assistants.models import AssistantProfile, AssistantJob
 from core.models import SiteSetting, reconcile_teacher_wallet
-from core.utils import send_notification
+from core.notifications_service import maybe_notify_teacher_subscription_expiry
 from exams.models import Exam, Question, ExamResult
 from students.models import Enrollment, PerformanceLog, PackageEnrollment, VideoViewTracking, PackageExamResult
 from teachers.models import (
@@ -77,6 +77,7 @@ class TeacherDashboardAPIView(APIView):
         allowed_ids = list(teacher.get_allowed_group_ids())
         wallet = reconcile_teacher_wallet(teacher) or Wallet.objects.get_or_create(teacher=teacher)[0]
         site_setting = SiteSetting.load()
+        maybe_notify_teacher_subscription_expiry(teacher)
 
         return Response({
             'teacher': TeacherCardSerializer(teacher, context={'request': request}).data,
@@ -210,13 +211,6 @@ class TeacherGroupLecturesAPIView(APIView):
             description=description,
             lesson_id=lesson_id if str(lesson_id).isdigit() else None,
         )
-        for enroll in group.enrollments.filter(is_active=True).select_related('student__user'):
-            send_notification(
-                enroll.student.user,
-                'محاضرة جديدة 📹',
-                f"تم نشر محاضرة '{lecture.title}' في مجموعة {group.name}.",
-                f'/student/group/{group.id}/',
-            )
         return Response({
             'message': 'تم نشر المحاضرة بنجاح!',
             'lecture': LectureSerializer(lecture).data,
@@ -619,12 +613,6 @@ class TeacherGroupStudentsAPIView(APIView):
             if action_type == 'accept':
                 enrollment.is_active = True
                 enrollment.save(update_fields=['is_active'])
-                send_notification(
-                    enrollment.student.user,
-                    'تم قبول طلبك!',
-                    f'وافق المستر على انضمامك لمجموعة {group.name}. ابدأ التعلم الآن.',
-                    f'/student/group/{group.id}/',
-                )
                 return Response({'message': f'تم قبول الطالب {enrollment.student.user.first_name}.'})
             else:
                 enrollment.delete()

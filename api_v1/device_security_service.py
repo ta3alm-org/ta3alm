@@ -70,6 +70,21 @@ BENIGN_DRIFT_FIELDS = {
     'gpu_vendor',
     'cpu_info',
 }
+WEB_STRICT_CORE_FIELDS = (
+    'manufacturer',
+    'model',
+    'cpu_arch',
+    'cpu_info',
+    'gpu_renderer',
+    'gpu_vendor',
+    'web_canvas_hash',
+    'web_webgl_hash',
+    'web_audio_hash',
+    'web_hw_sig',
+    'web_max_touch_points',
+    'web_color_depth',
+    'web_navigator_platform',
+)
 
 
 def _fingerprint_secret() -> bytes:
@@ -137,6 +152,13 @@ def normalize_device_info(raw: dict[str, Any] | None) -> dict[str, Any]:
         'package_name': _s('package_name', 128),
         'signing_cert_sha256': cert[:128],
         'installer_source': _s('installer_source', 128) or _s('installer_package', 128),
+        'web_canvas_hash': _s('web_canvas_hash', 128, lower=True),
+        'web_webgl_hash': _s('web_webgl_hash', 128, lower=True),
+        'web_audio_hash': _s('web_audio_hash', 128, lower=True),
+        'web_hw_sig': _s('web_hw_sig', 128, lower=True),
+        'web_max_touch_points': _s('web_max_touch_points', 16, lower=True),
+        'web_color_depth': _s('web_color_depth', 16, lower=True),
+        'web_navigator_platform': _s('web_navigator_platform', 64, lower=True),
         'integrity_signals': dict(raw_signals),
     }
 
@@ -152,6 +174,7 @@ def generate_versioned_fingerprint(
     مع التمييز بين التحديثات الطبيعية (OS / App update) وتبدل خصائص العتاد الأساسية.
     """
     secret = _fingerprint_secret()
+    is_web_device = str(traits.get('package_name') or '').strip() == WEB_PACKAGE_NAME
     core_payload = '|'.join(
         [
             algorithm_version,
@@ -160,6 +183,11 @@ def generate_versioned_fingerprint(
             str(traits.get('model', '')).lower(),
             str(traits.get('cpu_arch', '')).lower(),
             str(traits.get('package_name', '')).lower(),
+            str(traits.get('web_hw_sig', '')).lower() if is_web_device else '',
+            str(traits.get('web_canvas_hash', '')).lower() if is_web_device else '',
+            str(traits.get('web_webgl_hash', '')).lower() if is_web_device else '',
+            str(traits.get('web_audio_hash', '')).lower() if is_web_device else '',
+            str(traits.get('web_navigator_platform', '')).lower() if is_web_device else '',
         ]
     )
     supporting_payload = '|'.join(
@@ -174,6 +202,8 @@ def generate_versioned_fingerprint(
             str(traits.get('app_build_number', '')).lower(),
             str(traits.get('signing_cert_sha256', '')).lower(),
             str(traits.get('installer_source', '')).lower(),
+            str(traits.get('web_max_touch_points', '')).lower() if is_web_device else '',
+            str(traits.get('web_color_depth', '')).lower() if is_web_device else '',
         ]
     )
     core_hash = hmac.new(secret, core_payload.encode('utf-8'), hashlib.sha256).hexdigest()
@@ -191,22 +221,46 @@ def generate_versioned_fingerprint(
 
     if previous_fingerprint and isinstance(previous_fingerprint.normalized_traits, dict):
         prev = previous_fingerprint.normalized_traits
-        for field in (*CORE_FINGERPRINT_FIELDS, *SUPPORTING_FINGERPRINT_FIELDS):
+        fields_to_check = list(dict.fromkeys((*CORE_FINGERPRINT_FIELDS, *SUPPORTING_FINGERPRINT_FIELDS, *(WEB_STRICT_CORE_FIELDS if is_web_device else ()))))
+        for field in fields_to_check:
             old_val = str(prev.get(field, '') or '').strip().lower()
             new_val = str(traits.get(field, '') or '').strip().lower()
             if old_val and new_val and old_val != new_val:
                 changed_fields.append(field)
 
-        core_changed = [f for f in changed_fields if f in ('manufacturer', 'model', 'cpu_arch')]
-        if core_changed:
-            core_mismatch = True
-            drift_score += 55
-        if 'package_name' in changed_fields:
+        # الترقية الأولى من macOS Safari (قبل مزامنة سمات اللمس) إلى iPadOS عند إثبات تعدد اللمس مسموحة لمرة واحدة
+        prev_had_web_hw = bool(str(prev.get('web_hw_sig', '') or '').strip() or str(prev.get('gpu_renderer', '') or '').strip())
+        ipad_mode_promotion = (
+            is_web_device
+            and not prev_had_web_hw
+            and str(prev.get('cpu_arch', '') or '').lower() == 'macos'
+            and str(traits.get('cpu_arch', '') or '').lower() == 'ipados'
+            and 'manufacturer' not in changed_fields
+        )
+        effective_changed = [
+            f for f in changed_fields
+            if not (ipad_mode_promotion and f in ('cpu_arch', 'model'))
+        ]
+
+        if is_web_device:
+            strict_changed = [f for f in effective_changed if f in WEB_STRICT_CORE_FIELDS]
+            if strict_changed:
+                core_mismatch = True
+                drift_score += 90
+        else:
+            core_changed = [f for f in effective_changed if f in ('manufacturer', 'model', 'cpu_arch')]
+            if core_changed:
+                core_mismatch = True
+                drift_score += 55
+        if 'package_name' in effective_changed:
             drift_score += 40
-        if 'signing_cert_sha256' in changed_fields:
+        if 'signing_cert_sha256' in effective_changed:
             drift_score += 45
-        benign_changed = [f for f in changed_fields if f in BENIGN_DRIFT_FIELDS]
-        if benign_changed and not core_changed:
+        benign_changed = [
+            f for f in effective_changed
+            if f in BENIGN_DRIFT_FIELDS and (not is_web_device or f not in WEB_STRICT_CORE_FIELDS)
+        ]
+        if benign_changed and not core_mismatch:
             drift_score += min(len(benign_changed) * 3, 10)
 
     return {
@@ -449,6 +503,7 @@ def record_security_event(
                 recipient=resolved_user,
                 title=notify_title or 'تنبيه أمني لحسابك',
                 message=notify_message,
+                link='/devices/',
             )
         except Exception:
             pass
@@ -573,11 +628,18 @@ def evaluate_and_apply_risk(
     if app_checks.get('webdriver_detected'):
         score += 20
         indicators.append('automated_browser_webdriver')
+    if tamper_signals.get('web_spoof_reasons'):
+        score += 95
+        indicators.append('web_fingerprint_spoof_detected')
 
     # 2. تغير البصمة (تمييز التحديث الطبيعي عن تغير العتاد الجوهري)
     if fp_info.get('core_mismatch'):
-        score += 45
-        indicators.append('core_hardware_fingerprint_mismatch')
+        if device.package_name == WEB_PACKAGE_NAME:
+            score += 90
+            indicators.append('web_core_hardware_fingerprint_mismatch')
+        else:
+            score += 45
+            indicators.append('core_hardware_fingerprint_mismatch')
 
     # 3. الشبكة والتحركات الجغرافية السريعة
     if ip_info.get('rapid_geo_transition'):
@@ -853,6 +915,24 @@ def register_or_update_device(
 
     traits = normalize_device_info(device_info)
     tamper_signals = traits.get('integrity_signals') or {}
+    if request is not None and (
+        clean_id.startswith('web-') or traits.get('package_name') == WEB_PACKAGE_NAME
+    ):
+        existing_wt = tamper_signals.get('web_traits') if isinstance(tamper_signals.get('web_traits'), dict) else {}
+        merged_for_spoof = {
+            **existing_wt,
+            'gpu_renderer': traits.get('gpu_renderer') or existing_wt.get('gpu_renderer', ''),
+            'gpu_vendor': traits.get('gpu_vendor') or existing_wt.get('gpu_vendor', ''),
+            'navigator_platform': traits.get('web_navigator_platform') or existing_wt.get('navigator_platform', ''),
+            'max_touch_points': traits.get('web_max_touch_points') if traits.get('web_max_touch_points') != '' else existing_wt.get('max_touch_points'),
+        }
+        detected_spoofs = detect_web_fingerprint_spoofing(request, client_traits=merged_for_spoof)
+        if detected_spoofs:
+            prior_spoofs = list(tamper_signals.get('web_spoof_reasons') or [])
+            tamper_signals = {
+                **tamper_signals,
+                'web_spoof_reasons': list(dict.fromkeys([*prior_spoofs, *detected_spoofs])),
+            }
     net_ctx = extract_network_context(request, integrity_signals=tamper_signals)
 
     active_block = get_active_device_block(clean_id)
@@ -968,6 +1048,38 @@ def register_or_update_device(
         is_new_device = False
 
     prev_fp = device.fingerprints.order_by('-created_at').first()
+    if (
+        prev_fp
+        and isinstance(prev_fp.normalized_traits, dict)
+        and traits.get('package_name') == WEB_PACKAGE_NAME
+    ):
+        prev_traits = prev_fp.normalized_traits
+        # إذا كان الجهاز مُتحققاً مسبقاً كـ iPadOS في وضع سطح المكتب والطلب الحالي خالٍ من client_traits
+        if (
+            prev_traits.get('cpu_arch') == 'ipados'
+            and traits.get('cpu_arch') == 'macos'
+            and not traits.get('web_max_touch_points')
+            and traits.get('manufacturer') == 'Apple Safari'
+        ):
+            traits['cpu_arch'] = 'ipados'
+            traits['os_name'] = 'Web (iPadOS)'
+            traits['model'] = f"{traits.get('manufacturer', 'Apple Safari')} on iPadOS"
+            traits['device_name'] = f"متصفح {traits.get('manufacturer', 'Apple Safari')} (iPadOS)"
+        for _wkey in (
+            'cpu_info',
+            'gpu_renderer',
+            'gpu_vendor',
+            'screen_resolution',
+            'web_canvas_hash',
+            'web_webgl_hash',
+            'web_audio_hash',
+            'web_hw_sig',
+            'web_max_touch_points',
+            'web_color_depth',
+            'web_navigator_platform',
+        ):
+            if not traits.get(_wkey) and prev_traits.get(_wkey):
+                traits[_wkey] = prev_traits[_wkey]
     fp_info = generate_versioned_fingerprint(clean_id, traits, previous_fingerprint=prev_fp)
     ip_info = analyze_ip_transition(device, net_ctx)
 
@@ -1001,7 +1113,12 @@ def register_or_update_device(
     device.last_isp = net_ctx.get('isp_name') or device.last_isp
     device.ip_history = ip_info['updated_ip_history']
     if tamper_signals:
-        device.integrity_signals = tamper_signals
+        existing_signals = device.integrity_signals if isinstance(device.integrity_signals, dict) else {}
+        merged_signals = dict(existing_signals)
+        merged_signals.update(tamper_signals)
+        if 'web_traits' not in tamper_signals and 'web_traits' in existing_signals:
+            merged_signals['web_traits'] = existing_signals['web_traits']
+        device.integrity_signals = merged_signals
     device.is_active = True
     if device.trust_status == DeviceTrustStatus.REVOKED:
         device.trust_status = DeviceTrustStatus.TRUSTED
@@ -1103,6 +1220,30 @@ def register_or_update_device(
             'allowed': False,
             'code': 'APP_INTEGRITY_FAILED',
             'error': 'تم رفض تشغيل هذه النسخة لعدم اجتياز التحقق من سلامة التطبيق أو التوقيع الرسمي.',
+            'device': serialize_device_summary(device, clean_id),
+            'risk': risk_result,
+        }
+
+    if risk_result['risk_level'] == 'critical' and (
+        device.package_name == WEB_PACKAGE_NAME
+        and (fp_info.get('core_mismatch') or tamper_signals.get('web_spoof_reasons'))
+    ):
+        DeviceSession.objects.filter(device=device, status='active').update(
+            status='revoked',
+            ended_at=now,
+            revoked_reason='critical_web_fingerprint_mismatch',
+        )
+        PlaybackSession.objects.filter(
+            user=user,
+            device_id=clean_id,
+            status='active',
+        ).update(status='revoked', revoked_reason='critical_web_fingerprint_mismatch', view_window_expires_at=now)
+        from .video_security import clear_watch_window
+        clear_watch_window(user, now=now)
+        return {
+            'allowed': False,
+            'code': 'WEB_FINGERPRINT_MISMATCH',
+            'error': 'تم رصد اختلاف صارم في بصمة المتصفح أو محاولة تلاعب بالبيئة، وتم إيقاف الجلسة لحماية الحساب.',
             'device': serialize_device_summary(device, clean_id),
             'risk': risk_result,
         }
@@ -1419,25 +1560,264 @@ def parse_web_user_agent(user_agent: str) -> dict[str, str]:
     }
 
 
+_DESKTOP_OR_EMULATED_GPU_TOKENS = (
+    'direct3d',
+    'd3d11',
+    'd3d9',
+    'nvidia',
+    'geforce',
+    'quadro',
+    'rtx ',
+    'gtx ',
+    'radeon',
+    'amd ',
+    'amd/',
+    'intel(r)',
+    'intel iris',
+    'uhd graphics',
+    'hd graphics',
+    'swiftshader',
+    'mesa',
+    'llvmpipe',
+    'softpipe',
+    'virgl',
+    'vmware',
+    'virtualbox',
+    'google inc.',
+    'angle (',
+    'microsoft basic',
+)
+
+_BROWSER_UA_MARKERS = (
+    'mozilla/',
+    'applewebkit/',
+    'chrome/',
+    'safari/',
+    'firefox/',
+    'edg/',
+    'opr/',
+    'opera/',
+    'crios/',
+    'fxios/',
+    'edgios/',
+)
+
+
+def _has_desktop_or_emulated_gpu(gpu_vendor: str, gpu_renderer: str) -> bool:
+    combined = f"{gpu_vendor or ''} {gpu_renderer or ''}".lower()
+    if not combined.strip():
+        return False
+    return any(tok in combined for tok in _DESKTOP_OR_EMULATED_GPU_TOKENS)
+
+
+def is_web_client_request(request) -> bool:
+    """يميز طلبات المتصفح (الويب) عن طلبات تطبيق الأندرويد الأصلي وعملاء الاختبار المجردين."""
+    if request is None:
+        return False
+    meta = getattr(request, 'META', {}) or {}
+    ua = str(meta.get('HTTP_USER_AGENT') or '')
+    ua_low = ua.lower()
+
+    if 'dart/' in ua_low:
+        return False
+
+    explicit_platform = str(meta.get('HTTP_X_CLIENT_PLATFORM') or '').strip().lower()
+    if not explicit_platform and hasattr(request, 'GET'):
+        explicit_platform = str(request.GET.get('platform') or '').strip().lower()
+    if explicit_platform == 'web':
+        return True
+
+    raw_dev = str(meta.get('HTTP_X_DEVICE_ID') or '').strip().lower()
+    if raw_dev.startswith('web-'):
+        return True
+
+    cookies = getattr(request, 'COOKIES', None) or {}
+    if cookies.get(WEB_COOKIE_NAME):
+        return True
+
+    if meta.get('HTTP_ORIGIN') or meta.get('HTTP_SEC_FETCH_MODE') or meta.get('HTTP_SEC_FETCH_SITE'):
+        return True
+
+    return any(marker in ua_low for marker in _BROWSER_UA_MARKERS)
+
+
+def _extract_web_or_device_id_from_request(request) -> str:
+    if request is None:
+        return ''
+    meta = getattr(request, 'META', {}) or {}
+    raw_dev = str(meta.get('HTTP_X_DEVICE_ID') or '').strip()
+    if raw_dev:
+        return raw_dev[:128]
+    if hasattr(request, 'get_signed_cookie'):
+        try:
+            loaded = request.get_signed_cookie(WEB_COOKIE_NAME, default='', salt=WEB_COOKIE_SALT)
+            if loaded:
+                return str(loaded).strip()[:128]
+        except Exception:
+            pass
+    if hasattr(request, 'session'):
+        sess_val = str(request.session.get('web_installation_id') or '').strip()
+        if sess_val:
+            return sess_val[:128]
+    return ''
+
+
+def detect_web_fingerprint_spoofing(request, client_traits: dict[str, Any] | None = None) -> list[str]:
+    """يكشف التناقضات الصريحة بين ترويسات المتصفح وخصائص JavaScript/WebGL/اللمس (تزييف F12 أو نسخ الجلسة)."""
+    meta = getattr(request, 'META', {}) if request is not None else {}
+    ua = str(meta.get('HTTP_USER_AGENT') or '')
+    ua_low = ua.lower()
+    parsed = parse_web_user_agent(ua)
+    src = client_traits if isinstance(client_traits, dict) else {}
+
+    sec_platform = str(meta.get('HTTP_SEC_CH_UA_PLATFORM') or '').strip().strip('"').lower()
+    sec_ch_ua = str(meta.get('HTTP_SEC_CH_UA') or '').lower()
+    is_ios_ua = parsed['os_label'] == 'iOS'
+    is_mac_safari_ua = (
+        ('macintosh' in ua_low or 'mac os x' in ua_low)
+        and 'safari/' in ua_low
+        and 'chrome/' not in ua_low
+        and 'chromium/' not in ua_low
+        and 'firefox/' not in ua_low
+        and 'edg/' not in ua_low
+        and 'opr/' not in ua_low
+    )
+
+    reasons: list[str] = []
+    if is_ios_ua:
+        if sec_platform and sec_platform not in ('ios', 'iphoneos', 'ipados'):
+            reasons.append('sec_ch_platform_mismatch')
+        if sec_ch_ua and any(b in sec_ch_ua for b in ('chromium', 'google chrome', 'microsoft edge', 'opera')):
+            reasons.append('sec_ch_browser_spoof')
+    elif parsed['os_label'] == 'Windows' and sec_platform and sec_platform != 'windows':
+        reasons.append('sec_ch_platform_mismatch')
+    elif parsed['os_label'] == 'macOS' and sec_platform and sec_platform not in ('macos', 'mac os x'):
+        reasons.append('sec_ch_platform_mismatch')
+
+    nav_platform = str(src.get('navigator_platform') or '').strip().lower()
+    gpu_renderer = str(src.get('gpu_renderer') or '').strip()
+    gpu_vendor = str(src.get('gpu_vendor') or '').strip()
+    touch_raw = src.get('max_touch_points')
+    touch_support = src.get('touch_support')
+
+    if is_ios_ua:
+        if nav_platform and any(
+            nav_platform.startswith(p) for p in ('win', 'linux', 'mac', 'x11', 'cros', 'freebsd')
+        ):
+            reasons.append('navigator_platform_mismatch')
+        if _has_desktop_or_emulated_gpu(gpu_vendor, gpu_renderer):
+            reasons.append('desktop_or_emulated_gpu_on_ios')
+        if touch_raw is not None and str(touch_raw).strip() != '':
+            try:
+                if int(touch_raw) <= 0:
+                    reasons.append('no_touch_hardware_on_ios_ua')
+            except (TypeError, ValueError):
+                pass
+        if touch_support is False:
+            reasons.append('no_touch_hardware_on_ios_ua')
+    elif is_mac_safari_ua:
+        if nav_platform and any(nav_platform.startswith(p) for p in ('win', 'linux', 'x11', 'cros')):
+            reasons.append('navigator_platform_mismatch')
+    else:
+        if nav_platform.startswith('win') and parsed['os_label'] in ('Linux', 'macOS', 'Android'):
+            reasons.append('navigator_platform_mismatch')
+        elif nav_platform.startswith('mac') and parsed['os_label'] in ('Windows', 'Linux', 'Android'):
+            reasons.append('navigator_platform_mismatch')
+
+    return reasons
+
+
 def build_web_device_info(request, client_traits: dict[str, Any] | None = None) -> dict[str, Any]:
     """
     يبني قاموس خصائص متصفح الويب (Device Info) عبر الدمج بين الترويسات التي يلاحظها الخادم
-    والخصائص المسموح بها التي يرسلها المتصفح لتوليد بصمة fp_v1 موثوقة.
+    والخصائص الصارمة التي يرسلها المتصفح لتوليد بصمة fp_v1 موثوقة ومقاومة للتزييف.
     """
     meta = getattr(request, 'META', {}) if request is not None else {}
     ua = str(meta.get('HTTP_USER_AGENT') or '')
     parsed = parse_web_user_agent(ua)
     src = client_traits if isinstance(client_traits, dict) else {}
 
-    sec_platform = str(meta.get('HTTP_SEC_CH_UA_PLATFORM') or '').strip().strip('"')
-    os_label = sec_platform or parsed['os_label']
-    accept_lang = str(meta.get('HTTP_ACCEPT_LANGUAGE') or '').split(',')[0].strip()[:32]
-
-    browser_name = parsed['browser_name']
-    browser_vendor = parsed['browser_vendor']
-
     def _clean(val: Any, max_len: int = 128) -> str:
         return re.sub(r'\s+', ' ', str(val or '').strip())[:max_len]
+
+    sec_platform = str(meta.get('HTTP_SEC_CH_UA_PLATFORM') or '').strip().strip('"')
+    gpu_renderer = _clean(src.get('gpu_renderer'), 255)
+    gpu_vendor = _clean(src.get('gpu_vendor'), 255)
+    canvas_hash = _clean(src.get('canvas_hash'), 128).lower()
+    webgl_hash = _clean(src.get('webgl_hash'), 128).lower()
+    audio_hash = _clean(src.get('audio_hash'), 128).lower()
+    nav_platform = _clean(src.get('navigator_platform'), 64)
+    color_depth = _clean(src.get('color_depth'), 16)
+    timezone_str = _clean(src.get('timezone'), 64)
+    languages = _clean(src.get('languages'), 128)
+    raw_touch = src.get('max_touch_points')
+    touch_points_int = None
+    if raw_touch is not None and str(raw_touch).strip() != '':
+        try:
+            touch_points_int = max(int(raw_touch), 0)
+        except (TypeError, ValueError):
+            touch_points_int = None
+    touch_support = src.get('touch_support')
+    if touch_support is not None:
+        touch_support = bool(touch_support)
+
+    # التمييز الصارم بين Mac و iPad في وضع سطح المكتب (Desktop Safari): كلاهما يرسل Macintosh لكن iPad متعدد اللمس
+    os_label = sec_platform or parsed['os_label']
+    is_ipad_desktop_mode = False
+    if (
+        parsed['os_label'] == 'macOS'
+        and parsed['browser_name'] == 'Apple Safari'
+        and not sec_platform
+        and touch_points_int is not None
+        and touch_points_int >= 2
+        and touch_support is True
+        and not _has_desktop_or_emulated_gpu(gpu_vendor, gpu_renderer)
+        and not bool(src.get('webdriver_detected'))
+    ):
+        os_label = 'iPadOS'
+        is_ipad_desktop_mode = True
+
+    accept_lang = str(meta.get('HTTP_ACCEPT_LANGUAGE') or '').split(',')[0].strip()[:32]
+    browser_name = parsed['browser_name']
+    browser_vendor = parsed['browser_vendor']
+    spoof_reasons = detect_web_fingerprint_spoofing(request, client_traits=src)
+
+    hw_sig_parts = [
+        canvas_hash,
+        webgl_hash,
+        audio_hash,
+        gpu_renderer.lower(),
+        gpu_vendor.lower(),
+        nav_platform.lower(),
+        color_depth,
+        str(touch_points_int) if touch_points_int is not None else '',
+    ]
+    web_hw_sig = (
+        hashlib.sha256('|'.join(hw_sig_parts).encode('utf-8')).hexdigest()
+        if any([canvas_hash, webgl_hash, audio_hash, gpu_renderer])
+        else ''
+    )
+
+    web_traits_snapshot = {
+        'canvas_hash': canvas_hash,
+        'webgl_hash': webgl_hash,
+        'audio_hash': audio_hash,
+        'gpu_renderer': gpu_renderer,
+        'gpu_vendor': gpu_vendor,
+        'cpu_arch': _clean(src.get('cpu_arch'), 64),
+        'cpu_info': _clean(src.get('cpu_info'), 180),
+        'navigator_platform': nav_platform,
+        'max_touch_points': touch_points_int,
+        'touch_support': touch_support,
+        'color_depth': color_depth,
+        'timezone': timezone_str,
+        'languages': languages,
+        'screen_resolution': _clean(src.get('screen_resolution'), 64),
+        'webdriver_detected': bool(src.get('webdriver_detected')),
+        'is_ipad_desktop_mode': is_ipad_desktop_mode,
+        'web_hw_sig': web_hw_sig,
+    }
+    web_traits_snapshot = {k: v for k, v in web_traits_snapshot.items() if v not in ('', None)}
 
     return {
         'device_name': f"متصفح {browser_name} ({os_label})",
@@ -1451,21 +1831,30 @@ def build_web_device_info(request, client_traits: dict[str, Any] | None = None) 
             ' | '.join(filter(None, [_clean(src.get('cpu_arch'), 64), _clean(src.get('cpu_info'), 180)])),
             255,
         ),
-        'gpu_renderer': _clean(src.get('gpu_renderer'), 255),
-        'gpu_vendor': _clean(src.get('gpu_vendor'), 255),
+        'gpu_renderer': gpu_renderer,
+        'gpu_vendor': gpu_vendor,
         'screen_resolution': _clean(src.get('screen_resolution'), 64).lower(),
         'app_version': parsed['browser_version'] or 'web-1.0',
         'app_build_number': 'web',
         'package_name': WEB_PACKAGE_NAME,
         'signing_cert_sha256': '',
         'installer_source': 'web_browser',
+        'web_canvas_hash': canvas_hash,
+        'web_webgl_hash': webgl_hash,
+        'web_audio_hash': audio_hash,
+        'web_hw_sig': web_hw_sig,
+        'web_max_touch_points': str(touch_points_int) if touch_points_int is not None else '',
+        'web_color_depth': color_depth,
+        'web_navigator_platform': nav_platform.lower(),
         'integrity_signals': {
             'is_web_browser': True,
             'webdriver_detected': bool(src.get('webdriver_detected')),
-            'timezone': _clean(src.get('timezone'), 64),
+            'timezone': timezone_str,
             'accept_language': accept_lang,
             'sec_ch_ua': _clean(meta.get('HTTP_SEC_CH_UA'), 255),
             'sec_ch_platform': sec_platform[:64],
+            'web_spoof_reasons': spoof_reasons,
+            'web_traits': web_traits_snapshot,
         },
     }
 
@@ -1522,14 +1911,310 @@ def get_or_create_web_installation_id(request) -> str:
     return candidate
 
 
+WEB_IOS_ONLY_ERROR = (
+    'عرض وتشغيل المحاضرات عبر المتصفح متاح فقط لأجهزة iPhone و iPad (ومحظور على أجهزة Mac والكمبيوتر وأندرويد) '
+    'لحماية روابط المحاضرات. يرجى استخدام تطبيق تعلّم أو متصفح iPhone/iPad رسمي.'
+)
+
+
+def check_web_ios_only_lecture_access(
+    request,
+    user=None,
+    *,
+    client_traits: dict[str, Any] | None = None,
+    force_web: bool = False,
+) -> dict[str, Any]:
+    """
+    يتحقق من قاعدة الويب الصارمة: قسم وتشغيل المحاضرات عبر المتصفح مسموح فقط على iPhone و iPad الحقيقيين،
+    وممنوع منعاً باتاً على أجهزة Mac و Windows و Linux وأندرويد ومحاكيات F12 و WebDriver.
+    """
+    if not force_web and not is_web_client_request(request):
+        return {'allowed': True, 'is_web': False, 'device_kind': 'native_app', 'needs_ipad_probe': False}
+
+    meta = getattr(request, 'META', {}) if request is not None else {}
+    ua = str(meta.get('HTTP_USER_AGENT') or '')
+    ua_low = ua.lower()
+    sec_platform = str(meta.get('HTTP_SEC_CH_UA_PLATFORM') or '').strip().strip('"').lower()
+    sec_ch_ua = str(meta.get('HTTP_SEC_CH_UA') or '').lower()
+
+    # حظر فوري لأدوات الأتمتة والأنظمة غير المسموح بها
+    blocked_ua_tokens = (
+        'windows',
+        'win32',
+        'win64',
+        'android',
+        'linux',
+        'x11',
+        'cros',
+        'ubuntu',
+        'headlesschrome',
+        'phantomjs',
+        'selenium',
+        'playwright',
+        'puppeteer',
+    )
+    if any(tok in ua_low for tok in blocked_ua_tokens):
+        return {
+            'allowed': False,
+            'is_web': True,
+            'code': 'WEB_IOS_ONLY_REQUIRED',
+            'error': WEB_IOS_ONLY_ERROR,
+            'device_kind': 'blocked_web_os',
+            'needs_ipad_probe': False,
+        }
+
+    if sec_platform and sec_platform not in ('ios', 'iphoneos', 'ipados'):
+        return {
+            'allowed': False,
+            'is_web': True,
+            'code': 'WEB_IOS_ONLY_REQUIRED',
+            'error': WEB_IOS_ONLY_ERROR,
+            'device_kind': 'blocked_sec_platform',
+            'needs_ipad_probe': False,
+        }
+
+    merged_traits: dict[str, Any] = {}
+    device = None
+    if user is not None and getattr(user, 'is_authenticated', False):
+        inst_id = _extract_web_or_device_id_from_request(request)
+        if inst_id:
+            device = RegisteredDevice.objects.filter(user=user, installation_id=inst_id).first()
+            if device and isinstance(device.integrity_signals, dict):
+                stored_wt = device.integrity_signals.get('web_traits')
+                if isinstance(stored_wt, dict):
+                    merged_traits.update(stored_wt)
+                if device.integrity_signals.get('webdriver_detected'):
+                    merged_traits['webdriver_detected'] = True
+    if isinstance(client_traits, dict):
+        merged_traits.update({k: v for k, v in client_traits.items() if v is not None})
+
+    if merged_traits.get('webdriver_detected'):
+        return {
+            'allowed': False,
+            'is_web': True,
+            'code': 'WEB_AUTOMATION_BLOCKED',
+            'error': 'تم حظر تشغيل المحاضرات عبر المتصفحات الآلية أو أدوات الفحص.',
+            'device_kind': 'webdriver',
+            'needs_ipad_probe': False,
+        }
+
+    spoof_reasons = detect_web_fingerprint_spoofing(request, client_traits=merged_traits)
+    if spoof_reasons:
+        return {
+            'allowed': False,
+            'is_web': True,
+            'code': 'WEB_FINGERPRINT_MISMATCH',
+            'error': 'تم رصد تلاعب في بصمة المتصفح أو محاولة انتحال هوية iPhone/iPad عبر F12.',
+            'device_kind': 'spoofed_web',
+            'needs_ipad_probe': False,
+            'spoof_reasons': spoof_reasons,
+        }
+
+    if any(tok in ua_low for tok in ('iphone', 'ipad', 'ipod')) and 'applewebkit' in ua_low:
+        if sec_ch_ua and any(b in sec_ch_ua for b in ('chromium', 'google chrome', 'microsoft edge')):
+            return {
+                'allowed': False,
+                'is_web': True,
+                'code': 'WEB_IOS_ONLY_REQUIRED',
+                'error': WEB_IOS_ONLY_ERROR,
+                'device_kind': 'spoofed_ch_ios',
+                'needs_ipad_probe': False,
+            }
+        return {
+            'allowed': True,
+            'is_web': True,
+            'code': None,
+            'error': '',
+            'device_kind': 'iphone_or_ipad',
+            'needs_ipad_probe': False,
+        }
+
+    # وضع سطح المكتب في iPadOS Safari يرسل Macintosh + Safari/ فقط دون Chrome/Firefox/Edge
+    is_mac_safari_candidate = (
+        ('macintosh' in ua_low or 'mac os x' in ua_low)
+        and 'safari/' in ua_low
+        and 'chrome/' not in ua_low
+        and 'chromium/' not in ua_low
+        and 'firefox/' not in ua_low
+        and 'edg/' not in ua_low
+        and 'opr/' not in ua_low
+    )
+    if is_mac_safari_candidate:
+        raw_touch = merged_traits.get('max_touch_points')
+        try:
+            touch_points = int(raw_touch) if raw_touch is not None and str(raw_touch).strip() != '' else None
+        except (TypeError, ValueError):
+            touch_points = None
+        touch_support = merged_traits.get('touch_support')
+        gpu_ok = not _has_desktop_or_emulated_gpu(
+            str(merged_traits.get('gpu_vendor') or ''),
+            str(merged_traits.get('gpu_renderer') or ''),
+        )
+        if touch_points is not None and touch_points >= 2 and touch_support is True and gpu_ok:
+            return {
+                'allowed': True,
+                'is_web': True,
+                'code': None,
+                'error': '',
+                'device_kind': 'ipados_desktop_safari',
+                'needs_ipad_probe': False,
+            }
+        has_touch_probe = touch_points is not None
+        return {
+            'allowed': False,
+            'is_web': True,
+            'code': 'WEB_IOS_ONLY_REQUIRED',
+            'error': WEB_IOS_ONLY_ERROR,
+            'device_kind': 'mac_or_unverified_safari',
+            'needs_ipad_probe': not has_touch_probe,
+        }
+
+    return {
+        'allowed': False,
+        'is_web': True,
+        'code': 'WEB_IOS_ONLY_REQUIRED',
+        'error': WEB_IOS_ONLY_ERROR,
+        'device_kind': 'blocked_web_browser',
+        'needs_ipad_probe': False,
+    }
+
+
+def verify_web_device_live_consistency(request, user, installation_id: str) -> tuple[bool, str | None, str | None]:
+    """
+    يفحص تطابق الترويسات الحية للطلب مع بصمة المتصفح المسجّلة في كل طلب لاحق
+    لكشف سرقة الكوكي أو تشغيل نفس الجلسة من متصفح أو جهاز مختلف فوراً.
+    """
+    if request is None or not user or not getattr(user, 'is_authenticated', False) or not installation_id:
+        return True, None, None
+
+    device = RegisteredDevice.objects.filter(
+        user=user,
+        installation_id=installation_id,
+        package_name=WEB_PACKAGE_NAME,
+    ).first()
+    if device is None:
+        return True, None, None
+
+    meta = getattr(request, 'META', {}) or {}
+    ua = str(meta.get('HTTP_USER_AGENT') or '')
+    if not ua:
+        return True, None, None
+
+    parsed = parse_web_user_agent(ua)
+    sec_platform = str(meta.get('HTTP_SEC_CH_UA_PLATFORM') or '').strip().strip('"')
+    live_os = (sec_platform or parsed['os_label']).lower()
+    live_browser = parsed['browser_name'].lower()
+
+    existing_traits = {}
+    if isinstance(device.integrity_signals, dict) and isinstance(device.integrity_signals.get('web_traits'), dict):
+        existing_traits = device.integrity_signals.get('web_traits') or {}
+    spoof_reasons = detect_web_fingerprint_spoofing(request, client_traits=existing_traits)
+
+    stored_browser = str(device.manufacturer or '').strip().lower()
+    stored_os = str(device.cpu_arch or '').strip().lower()
+
+    ipad_compatible = (
+        stored_os == 'ipados'
+        and live_os == 'macos'
+        and not sec_platform
+        and parsed['browser_name'] == 'Apple Safari'
+    )
+    browser_mismatch = bool(stored_browser and live_browser and stored_browser != live_browser)
+    os_mismatch = bool(stored_os and live_os and stored_os != live_os and not ipad_compatible)
+
+    if spoof_reasons or browser_mismatch or os_mismatch:
+        now = timezone.now()
+        if device.trust_status != DeviceTrustStatus.BLOCKED:
+            device.trust_status = DeviceTrustStatus.RESTRICTED
+        device.requires_reauth = True
+        device.risk_score = 95
+        device.risk_level = 'critical'
+        device.save(update_fields=['trust_status', 'requires_reauth', 'risk_score', 'risk_level'])
+
+        DeviceSession.objects.filter(device=device, status='active').update(
+            status='revoked',
+            ended_at=now,
+            revoked_reason='web_cookie_hijack_mismatch',
+        )
+        PlaybackSession.objects.filter(
+            user=user,
+            device_id=installation_id,
+            status='active',
+        ).update(status='revoked', revoked_reason='web_cookie_hijack_mismatch', view_window_expires_at=now)
+        from .video_security import clear_watch_window
+        clear_watch_window(user, now=now)
+
+        record_security_event(
+            event_type='web_cookie_hijack_mismatch' if (browser_mismatch or os_mismatch) else 'web_fingerprint_spoof_detected',
+            severity='critical',
+            risk_score=95,
+            user=user,
+            device=device,
+            installation_id=installation_id,
+            request=request,
+            action_taken='session_revoked_and_restricted',
+            details={
+                'stored_browser': stored_browser,
+                'live_browser': live_browser,
+                'stored_os': stored_os,
+                'live_os': live_os,
+                'spoof_reasons': spoof_reasons,
+            },
+            notify_user=True,
+            notify_title='تنبيه أمني: محاولة استخدام جلستك من متصفح مختلف',
+            notify_message='تم إيقاف جلسة التصفح فوراً لاكتشاف تغير صارم في بصمة المتصفح أو نظام التشغيل.',
+        )
+        return (
+            False,
+            'WEB_FINGERPRINT_MISMATCH',
+            'تم إيقاف الجلسة لاكتشاف تغير في بصمة المتصفح أو محاولة نسخ الجلسة.',
+        )
+
+    return True, None, None
+
+
 def enforce_web_lecture_playback(request, user, lecture, *, course_package=None) -> dict[str, Any]:
     """
-    يفحص صلاحية جهاز الويب وحد الأجهزة ومشاركة الحساب والتشغيل المتزامن قبل عرض مشغّل الفيديو
-    على الموقع، وينشئ أو يدوّر جلسة PlaybackSession نشطة لهذا المتصفح.
+    يفحص صلاحية جهاز الويب (iPhone/iPad فقط وبصمة مطابقة) وحد الأجهزة ومشاركة الحساب والتشغيل المتزامن
+    قبل عرض مشغّل الفيديو على الموقع، وينشئ أو يدوّر جلسة PlaybackSession نشطة لهذا المتصفح.
     """
     from .video_security import build_watermark_payload, create_or_rotate_playback_session
 
     installation_id = get_or_create_web_installation_id(request)
+    ios_check = check_web_ios_only_lecture_access(request, user, force_web=True)
+    if not ios_check.get('allowed'):
+        record_security_event(
+            event_type='web_non_ios_lecture_blocked',
+            severity='medium',
+            risk_score=40,
+            user=user,
+            installation_id=installation_id,
+            request=request,
+            action_taken='blocked_web_lecture_non_ios',
+            details={
+                'lecture_id': getattr(lecture, 'id', None),
+                'device_kind': ios_check.get('device_kind'),
+                'code': ios_check.get('code'),
+                'spoof_reasons': ios_check.get('spoof_reasons', []),
+            },
+        )
+        return {
+            'allowed': False,
+            'code': ios_check.get('code') or 'WEB_IOS_ONLY_REQUIRED',
+            'error': ios_check.get('error') or WEB_IOS_ONLY_ERROR,
+            'installation_id': installation_id,
+            'needs_ipad_probe': bool(ios_check.get('needs_ipad_probe')),
+        }
+
+    live_ok, live_code, live_err = verify_web_device_live_consistency(request, user, installation_id)
+    if not live_ok:
+        return {
+            'allowed': False,
+            'code': live_code or 'WEB_FINGERPRINT_MISMATCH',
+            'error': live_err or 'تم إيقاف الجلسة بسبب اختلاف بصمة المتصفح.',
+            'installation_id': installation_id,
+        }
+
     allowed, code, err = check_device_allowed(user, installation_id)
     if not allowed:
         return {
@@ -1561,6 +2246,14 @@ def enforce_web_lecture_playback(request, user, lecture, *, course_package=None)
                 'installation_id': installation_id,
             }
         device = reg.get('device_obj')
+
+    if device and isinstance(device.integrity_signals, dict) and device.integrity_signals.get('webdriver_detected'):
+        return {
+            'allowed': False,
+            'code': 'WEB_AUTOMATION_BLOCKED',
+            'error': 'تم حظر تشغيل المحاضرات عبر المتصفحات الآلية أو أدوات الفحص.',
+            'installation_id': installation_id,
+        }
 
     sharing = detect_account_sharing(request, user, lecture=lecture, installation_id=installation_id)
     session, revoked_count = create_or_rotate_playback_session(

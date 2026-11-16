@@ -14,6 +14,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import PlaybackSession
+from .device_security_service import check_web_ios_only_lecture_access
+from .video_security import (
+    clear_watch_window,
+    grant_watch_window,
+    has_active_watch_window,
+)
 
 from core.models import Subject
 from core.utils import send_notification
@@ -159,12 +165,6 @@ class StudentJoinGroupAPIView(APIView):
             )
 
         enroll = Enrollment.objects.create(student=student, group=group, is_active=False)
-        send_notification(
-            group.teacher.user,
-            'طلب انضمام جديد',
-            f'الطالب {student.user.first_name} طلب الانضمام لمجموعة {group.name}',
-            f'/teacher/group/{group.id}/requests/',
-        )
         return Response({
             'message': f"تم إرسال طلب الانضمام لمجموعة '{group.name}' بنجاح، في انتظار موافقة المعلم.",
             'enrollment': EnrollmentSerializer(enroll, context={'request': request}).data,
@@ -183,16 +183,13 @@ class StudentGroupContentAPIView(APIView):
         student = request.user.student_profile
         lectures = group.lectures.filter(is_active=True).order_by('-created_at')
         # نتحقق بدقة من عدم انتهاء صلاحية الكود أو وجود نافذة مشاهدة نشطة
+        if request.query_params.get('clear_watch') == '1' or request.query_params.get('exited_player') == '1':
+            clear_watch_window(request.user)
+
         valid_unlocked_ids = set()
         now = timezone.now()
-        cutoff = now - timedelta(minutes=60)
         for vc in VideoCode.objects.filter(used_by=student, lecture__group=group):
-            in_watch_window = bool(
-                cache.get(f"lecture_watch_window:{request.user.id}:{vc.lecture_id}")
-                or PlaybackSession.objects.filter(
-                    user=request.user, lecture_id=vc.lecture_id, created_at__gte=cutoff
-                ).exists()
-            )
+            in_watch_window = has_active_watch_window(request.user, vc.lecture_id, now=now)
             if vc.current_views < vc.max_views or (in_watch_window and vc.current_views <= vc.max_views):
                 valid_unlocked_ids.add(vc.lecture_id)
 
@@ -203,29 +200,32 @@ class StudentGroupContentAPIView(APIView):
         }
         pdfs = group.pdfs.all().order_by('-created_at')
 
+        ios_access = check_web_ios_only_lecture_access(request, request.user)
+        web_lectures_allowed = bool(ios_access.get('allowed'))
+
         return Response({
             'group': GroupSerializer(group, context={'request': request}).data,
-            'lectures': LectureStudentListSerializer(
-                lectures, many=True, context={'unlocked_ids': valid_unlocked_ids}
-            ).data,
+            'lectures': (
+                LectureStudentListSerializer(
+                    lectures, many=True, context={'unlocked_ids': valid_unlocked_ids}
+                ).data
+                if web_lectures_allowed
+                else []
+            ),
+            'lectures_blocked': not web_lectures_allowed,
+            'lectures_block_reason': '' if web_lectures_allowed else (ios_access.get('error') or ''),
+            'lectures_block_code': '' if web_lectures_allowed else (ios_access.get('code') or 'WEB_LECTURES_IOS_ONLY'),
             'exams': ExamSerializer(exams, many=True, context={'taken_map': taken_map}).data,
             'pdfs': PDFFileSerializer(pdfs, many=True, context={'request': request}).data,
         })
 
 
-def _is_in_student_watch_window(user, lecture, window_minutes: int = 60) -> bool:
-    if cache.get(f"lecture_watch_window:{user.id}:{lecture.id}"):
-        return True
-    cutoff = timezone.now() - timedelta(minutes=window_minutes)
-    return PlaybackSession.objects.filter(
-        user=user,
-        lecture=lecture,
-        created_at__gte=cutoff,
-    ).exists()
+def _is_in_student_watch_window(user, lecture, window_minutes: int = 20) -> bool:
+    return has_active_watch_window(user, lecture.id)
 
 
 def _mark_student_watch_window(user, lecture) -> None:
-    cache.set(f"lecture_watch_window:{user.id}:{lecture.id}", True, timeout=3600)
+    grant_watch_window(user, lecture.id)
 
 
 class StudentWatchGroupLectureAPIView(APIView):
@@ -234,6 +234,18 @@ class StudentWatchGroupLectureAPIView(APIView):
 
     @transaction.atomic
     def get(self, request, lecture_id):
+        ios_access = check_web_ios_only_lecture_access(request, request.user)
+        if not ios_access.get('allowed'):
+            return Response(
+                {
+                    'error': ios_access.get('error'),
+                    'blocked': True,
+                    'code': ios_access.get('code') or 'WEB_LECTURES_IOS_ONLY',
+                    'device_kind': ios_access.get('device_kind'),
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         lecture = get_object_or_404(Lecture, id=lecture_id, is_active=True)
         if not lecture.group:
             return Response({'error': 'هذه المحاضرة لا تتبع مجموعة.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -263,8 +275,8 @@ class StudentWatchGroupLectureAPIView(APIView):
                 'message': 'يرجى إدخال كود المشاهدة لفتح الفيديو.' if not active_code else 'لقد استهلكت عدد مرات مشاهدة هذا الكود. يرجى إدخال كود جديد.',
             })
 
-        # زيادة عداد المشاهدة مرة واحدة فقط خلال نافذة المشاهدة (60 دقيقة)
-        if request.query_params.get('record_view', 'true').lower() == 'true' and not in_window:
+        # زيادة عداد المشاهدة مرة واحدة فقط خلال نافذة المشاهدة النشطة (إلزامي دون تجاوز)
+        if not in_window:
             active_code.current_views += 1
             active_code.save(update_fields=['current_views'])
             _mark_student_watch_window(request.user, lecture)
@@ -283,6 +295,18 @@ class StudentWatchGroupLectureAPIView(APIView):
     @transaction.atomic
     def post(self, request, lecture_id):
         """تفعيل كود مشاهدة جديد للمحاضرة."""
+        ios_access = check_web_ios_only_lecture_access(request, request.user)
+        if not ios_access.get('allowed'):
+            return Response(
+                {
+                    'error': ios_access.get('error'),
+                    'blocked': True,
+                    'code': ios_access.get('code') or 'WEB_LECTURES_IOS_ONLY',
+                    'device_kind': ios_access.get('device_kind'),
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         lecture = get_object_or_404(Lecture, id=lecture_id, is_active=True)
         if not lecture.group:
             return Response({'error': 'هذه المحاضرة لا تتبع مجموعة.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -502,6 +526,8 @@ class StudentMyPackageContentAPIView(APIView):
     permission_classes = [IsAuthenticated, IsStudentRole]
 
     def get(self, request, package_id):
+        if request.query_params.get('clear_watch') == '1' or request.query_params.get('exited_player') == '1':
+            clear_watch_window(request.user)
         student = request.user.student_profile
         package = get_object_or_404(CoursePackage, id=package_id)
 
@@ -537,9 +563,15 @@ class StudentMyPackageContentAPIView(APIView):
                 'created_at': lec.created_at,
             })
 
+        ios_access = check_web_ios_only_lecture_access(request, request.user)
+        web_lectures_allowed = bool(ios_access.get('allowed'))
+
         return Response({
             'package': CoursePackageSerializer(package, context={'request': request}).data,
-            'lectures': lectures_data,
+            'lectures': lectures_data if web_lectures_allowed else [],
+            'lectures_blocked': not web_lectures_allowed,
+            'lectures_block_reason': '' if web_lectures_allowed else (ios_access.get('error') or ''),
+            'lectures_block_code': '' if web_lectures_allowed else (ios_access.get('code') or 'WEB_LECTURES_IOS_ONLY'),
             'exams': ExamSerializer(exams, many=True, context={'taken_map': taken_map}).data,
             'pdfs': PDFFileSerializer(pdfs, many=True, context={'request': request}).data,
         })
@@ -551,6 +583,18 @@ class StudentWatchPackageLectureAPIView(APIView):
 
     @transaction.atomic
     def post(self, request, package_id, lecture_id):
+        ios_access = check_web_ios_only_lecture_access(request, request.user)
+        if not ios_access.get('allowed'):
+            return Response(
+                {
+                    'error': ios_access.get('error'),
+                    'blocked': True,
+                    'code': ios_access.get('code') or 'WEB_LECTURES_IOS_ONLY',
+                    'device_kind': ios_access.get('device_kind'),
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         student = request.user.student_profile
         package = get_object_or_404(CoursePackage, id=package_id)
         lecture = get_object_or_404(Lecture, id=lecture_id)
@@ -656,6 +700,8 @@ class StudentPackageMarksAndRankingAPIView(APIView):
     permission_classes = [IsAuthenticated, IsStudentRole]
 
     def get(self, request, package_id):
+        if request.query_params.get('clear_watch') == '1' or request.query_params.get('exited_player') == '1':
+            clear_watch_window(request.user)
         student = request.user.student_profile
         package = get_object_or_404(CoursePackage, id=package_id)
 

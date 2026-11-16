@@ -14,6 +14,7 @@ from accounts.models import StudentProfile
 from assistants.models import AssistantProfile
 from students.models import PackageEnrollment
 from core.models import SiteSetting
+from core.notifications_service import maybe_notify_zoho_inbox, notify_user
 
 from .models import AdminProfile, AdminRole, AuditLog
 from .decorators import admin_required, owner_required, finance_required, moderator_required
@@ -384,6 +385,12 @@ def user_action(request):
                 else timezone.now() + timedelta(days=30)
             )
             teacher.save()
+            notify_user(
+                target,
+                'تم تجديد اشتراكك من قِبل الإدارة',
+                f"جددت إدارة المنصة اشتراكك لمدة 30 يوماً{f' على باقة {teacher.current_plan.name}' if teacher.current_plan else ''} حتى {teacher.subscription_end_date.strftime('%Y-%m-%d')}.",
+                link='/teacher/subscription/',
+            )
             AuditLog.log(request, AuditLog.ACTION_RENEW_SUB,
                          target_label=target.get_full_name(),
                          target_id=target.id,
@@ -512,6 +519,10 @@ def finance_report(request):
 # ==========================================================
 @finance_required
 def withdrawals(request):
+    from decimal import Decimal
+    from django.db import transaction
+    from teachers.models import Wallet
+
     ctx = _base_context(request)
 
     withdraw_requests = WithdrawRequest.objects.select_related(
@@ -520,13 +531,45 @@ def withdrawals(request):
 
     if request.method == 'POST':
         req_id = request.POST.get('req_id')
-        req = get_object_or_404(WithdrawRequest, id=req_id)
-        req.is_paid = True
-        req.save()
-        AuditLog.log(request, AuditLog.ACTION_PAY_WITHDRAW,
-                     target_label=str(req), target_id=req.id,
-                     details={'amount': str(req.amount)})
-        messages.success(request, f"تم تسجيل تحويل {req.amount} EGP.")
+        req_action = (request.POST.get('action') or 'approve').strip().lower()
+        reason = (request.POST.get('rejection_reason') or '').strip()
+
+        with transaction.atomic():
+            req = get_object_or_404(WithdrawRequest.objects.select_for_update(), id=req_id)
+            if req.status != WithdrawRequest.STATUS_PENDING:
+                messages.warning(request, "تمت معالجة طلب السحب هذا مسبقاً.")
+                return redirect('admin_panel:withdrawals')
+
+            if req_action == 'reject':
+                wallet = Wallet.objects.select_for_update().get(pk=req.wallet_id)
+                wallet.balance = (wallet.balance or Decimal('0.00')) + req.amount
+                wallet.save(update_fields=['balance'])
+                req.status = WithdrawRequest.STATUS_REJECTED
+                req.is_paid = False
+                req.rejection_reason = reason
+                req.reviewed_at = timezone.now()
+                req.save(update_fields=['status', 'is_paid', 'rejection_reason', 'reviewed_at'])
+                AuditLog.log(
+                    request,
+                    AuditLog.ACTION_REJECT_WITHDRAW,
+                    target_label=f"{req} (مرفوض)",
+                    target_id=req.id,
+                    details={'amount': str(req.amount), 'reason': reason},
+                )
+                messages.info(request, f"تم رفض طلب السحب وإعادة {req.amount} EGP إلى محفظة المعلم.")
+            else:
+                req.status = WithdrawRequest.STATUS_PAID
+                req.is_paid = True
+                req.reviewed_at = timezone.now()
+                req.save(update_fields=['status', 'is_paid', 'reviewed_at'])
+                AuditLog.log(
+                    request,
+                    AuditLog.ACTION_PAY_WITHDRAW,
+                    target_label=str(req),
+                    target_id=req.id,
+                    details={'amount': str(req.amount)},
+                )
+                messages.success(request, f"تم تسجيل تحويل {req.amount} EGP.")
         return redirect('admin_panel:withdrawals')
 
     ctx['requests'] = withdraw_requests
@@ -877,6 +920,7 @@ def support_inbox(request):
             res = service.list_messages(limit=30, search_key=ctx['search_query'] or None)
             raw_data = res.get('data', []) if isinstance(res, dict) else []
             ctx['messages_list'] = raw_data
+            maybe_notify_zoho_inbox(raw_data)
         except Exception as e:
             ctx['error_message'] = str(e)
             logger.error("Zoho list messages view error: %s", e)
@@ -1447,5 +1491,165 @@ def security_admin_action(request):
         )
 
     return redirect(next_url)
+
+
+# ==========================================================
+# 15. إرسال الإشعارات المخصصة (لمستخدمين معينين / فئة / الكل)
+# ==========================================================
+@moderator_required
+def send_notifications(request):
+    """صفحة إرسال إشعار مخصص لمستخدمين محددين أو فئة أو جميع المستخدمين."""
+    from core.notifications_service import (
+        CUSTOM_TARGET_ALL,
+        CUSTOM_TARGET_USERS,
+        get_custom_notification_metadata,
+        parse_user_ids_input,
+        preview_custom_notification_audience,
+        search_custom_notification_users,
+        send_custom_notification,
+    )
+
+    ctx = _base_context(request)
+    metadata = get_custom_notification_metadata()
+
+    target_mode = (request.GET.get('mode') or CUSTOM_TARGET_ALL).strip()
+    segment = (request.GET.get('segment') or 'students').strip()
+    grade = (request.GET.get('grade') or '').strip()
+    teacher_id = (request.GET.get('teacher_id') or '').strip()
+    plan_id = (request.GET.get('plan_id') or '').strip()
+    subject_id = (request.GET.get('subject_id') or '').strip()
+    exclude_banned = True
+    title_val = ''
+    message_val = ''
+    link_val = ''
+
+    preselected_ids = parse_user_ids_input(
+        request.GET.getlist('user_id') or request.GET.get('user_ids')
+    )
+    if preselected_ids and not request.GET.get('mode'):
+        target_mode = CUSTOM_TARGET_USERS
+
+    if request.method == 'POST':
+        target_mode = (request.POST.get('target_mode') or CUSTOM_TARGET_ALL).strip()
+        segment = (request.POST.get('segment') or '').strip()
+        grade = (request.POST.get('grade') or '').strip()
+        teacher_id = (request.POST.get('teacher_id') or '').strip()
+        plan_id = (request.POST.get('plan_id') or '').strip()
+        subject_id = (request.POST.get('subject_id') or '').strip()
+        exclude_banned = request.POST.get('exclude_banned') == '1'
+        title_val = (request.POST.get('title') or '').strip()
+        message_val = (request.POST.get('message') or '').strip()
+        link_val = (request.POST.get('link') or '').strip()
+        preselected_ids = parse_user_ids_input(request.POST.getlist('user_ids'))
+
+        res = send_custom_notification(
+            title=title_val,
+            message=message_val,
+            link=link_val,
+            target_mode=target_mode,
+            segment=segment,
+            user_ids=preselected_ids,
+            grade=grade,
+            teacher_id=teacher_id,
+            plan_id=plan_id,
+            subject_id=subject_id,
+            exclude_banned=exclude_banned,
+        )
+        if res.get('ok'):
+            AuditLog.log_custom_notification(request, res)
+            fcm_note = (
+                f" (منهم {res['fcm_user_count']} لديهم إشعارات فورية FCM مفعّلة)"
+                if res.get('fcm_configured')
+                else " (ملاحظة: إشعارات FCM الفورية غير مهيأة على الخادم حالياً)"
+            )
+            messages.success(
+                request,
+                f"تم إرسال الإشعار بنجاح إلى {res['recipient_count']} مستخدم ضمن «{res['audience_label']}»{fcm_note}.",
+            )
+            return redirect('admin_panel:send_notifications')
+        messages.error(request, res.get('error') or 'تعذّر إرسال الإشعار.')
+
+    selected_users = []
+    if preselected_ids:
+        selected_qs = User.objects.filter(id__in=preselected_ids).order_by('-id')
+        fcm_ids = set(
+            selected_qs.filter(fcm_tokens__is_active=True).values_list('id', flat=True)
+        )
+        for u in selected_qs:
+            selected_users.append({
+                'id': u.pk,
+                'full_name': (u.get_full_name() or '').strip() or u.username or u.email,
+                'email': u.email or '',
+                'phone': getattr(u, 'phone', '') or '',
+                'custom_id': getattr(u, 'custom_id', '') or '',
+                'role': u.role,
+                'role_display': u.get_role_display(),
+                'has_fcm': u.pk in fcm_ids,
+            })
+
+    preview = preview_custom_notification_audience(
+        target_mode=target_mode,
+        segment=segment,
+        user_ids=preselected_ids,
+        grade=grade,
+        teacher_id=teacher_id,
+        plan_id=plan_id,
+        subject_id=subject_id,
+        exclude_banned=exclude_banned,
+    )
+    recent_dispatches = AuditLog.objects.filter(
+        action=AuditLog.ACTION_SEND_NOTIFICATION
+    ).select_related('admin').order_by('-created_at')[:15]
+
+    ctx.update({
+        'notif_meta': metadata,
+        'target_mode': target_mode,
+        'segment': segment,
+        'grade': grade,
+        'teacher_id': teacher_id,
+        'plan_id': plan_id,
+        'subject_id': subject_id,
+        'exclude_banned': exclude_banned,
+        'title_val': title_val,
+        'message_val': message_val,
+        'link_val': link_val,
+        'selected_users': selected_users,
+        'initial_users': search_custom_notification_users(limit=15),
+        'preview': preview,
+        'recent_dispatches': recent_dispatches,
+    })
+    return render(request, 'admin_panel/send_notifications.html', ctx)
+
+
+@moderator_required
+def notifications_recipient_preview(request):
+    """نقطة JSON للمعاينة الحية والبحث عن المستخدمين في صفحة إرسال الإشعارات."""
+    from django.http import JsonResponse
+    from core.notifications_service import (
+        CUSTOM_TARGET_ALL,
+        preview_custom_notification_audience,
+        search_custom_notification_users,
+    )
+
+    if 'q' in request.GET or request.GET.get('action') == 'search_users':
+        q = (request.GET.get('q') or '').strip()
+        role = (request.GET.get('role') or '').strip()
+        return JsonResponse({
+            'users': search_custom_notification_users(query=q, role=role, limit=25),
+        })
+
+    user_ids = request.GET.getlist('user_ids') or request.GET.get('user_ids', '')
+    exclude_banned = str(request.GET.get('exclude_banned', '1')).lower() not in ('0', 'false', 'no')
+    preview = preview_custom_notification_audience(
+        target_mode=(request.GET.get('target_mode') or CUSTOM_TARGET_ALL).strip(),
+        segment=(request.GET.get('segment') or '').strip(),
+        user_ids=user_ids,
+        grade=(request.GET.get('grade') or '').strip(),
+        teacher_id=(request.GET.get('teacher_id') or '').strip(),
+        plan_id=(request.GET.get('plan_id') or '').strip(),
+        subject_id=(request.GET.get('subject_id') or '').strip(),
+        exclude_banned=exclude_banned,
+    )
+    return JsonResponse(preview)
 
 

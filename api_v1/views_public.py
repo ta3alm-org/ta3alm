@@ -17,9 +17,15 @@ from core.models import (
     SiteSetting,
     Subject,
     Notification,
+    FCMDeviceToken,
     ManualPayment,
     CurriculumUnit,
     TERM_CHOICES,
+)
+from core.fcm_service import is_fcm_configured
+from core.notifications_service import (
+    generate_notif_pull_token,
+    verify_notif_pull_token,
 )
 from teachers.models import TeacherProfile, SubscriptionPlan, CoursePackage
 
@@ -30,6 +36,7 @@ from .serializers import (
     SubscriptionPlanSerializer,
     CoursePackageSerializer,
     NotificationSerializer,
+    FCMDeviceTokenSerializer,
     ManualPaymentSerializer,
     CurriculumUnitSerializer,
 )
@@ -247,15 +254,73 @@ class CurriculumLookupAPIView(APIView):
 
 
 class NotificationsAPIView(APIView):
-    """جلب الإشعارات وعدد غير المقروء."""
+    """جلب الإشعارات وعدد غير المقروء، مع دعم السحب التدريجي عبر since_id وإصدار رمز المزامنة بالخلفية."""
     permission_classes = [IsAuthenticated, IsNotBanned]
 
     def get(self, request):
-        notifs = Notification.objects.filter(recipient=request.user).order_by('-created_at')
-        unread_count = notifs.filter(is_read=False).count()
+        base_qs = Notification.objects.filter(recipient=request.user)
+        unread_count = base_qs.filter(is_read=False).count()
+        latest_id = base_qs.order_by('-id').values_list('id', flat=True).first() or 0
+
+        raw_since = (request.query_params.get('since_id') or '').strip()
+        unread_only = str(request.query_params.get('unread_only', '')).lower() in ('1', 'true', 'yes')
+        try:
+            limit = min(max(int(request.query_params.get('limit') or 100), 1), 200)
+        except (TypeError, ValueError):
+            limit = 100
+
+        qs = base_qs
+        if unread_only:
+            qs = qs.filter(is_read=False)
+        if raw_since.isdigit():
+            qs = qs.filter(id__gt=int(raw_since)).order_by('id')
+        else:
+            qs = qs.order_by('-created_at', '-id')
+
         return Response({
             'unread_count': unread_count,
-            'notifications': NotificationSerializer(notifs[:100], many=True).data,
+            'latest_id': latest_id,
+            'notif_sync_token': generate_notif_pull_token(request.user),
+            'fcm_configured': is_fcm_configured(),
+            'notifications': NotificationSerializer(qs[:limit], many=True).data,
+        })
+
+
+class NotificationBackgroundPullAPIView(APIView):
+    """
+    نقطة سحب الإشعارات للقراءة فقط لخدمة JobScheduler بالخلفية على الأندرويد.
+    تعتمد رمز سحب موقّعاً ومقيداً بالمستخدم دون إتاحة أي عمليات كتابة أو وصول لباقي البيانات.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        token = (
+            request.META.get('HTTP_X_TA3ALM_NOTIF_TOKEN')
+            or request.query_params.get('token')
+            or ''
+        ).strip()
+        user = verify_notif_pull_token(token)
+        if not user:
+            return Response(
+                {'error': 'رمز مزامنة الإشعارات غير صالح أو منتهي.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        base_qs = Notification.objects.filter(recipient=user)
+        unread_count = base_qs.filter(is_read=False).count()
+        latest_id = base_qs.order_by('-id').values_list('id', flat=True).first() or 0
+
+        raw_since = (request.query_params.get('since_id') or '').strip()
+        qs = base_qs.filter(is_read=False)
+        if raw_since.isdigit():
+            qs = qs.filter(id__gt=int(raw_since)).order_by('id')
+        else:
+            qs = qs.order_by('-id')
+
+        return Response({
+            'unread_count': unread_count,
+            'latest_id': latest_id,
+            'notifications': NotificationSerializer(qs[:20], many=True).data,
         })
 
 
@@ -273,6 +338,86 @@ class MarkNotificationReadAPIView(APIView):
 
         unread_count = Notification.objects.filter(recipient=request.user, is_read=False).count()
         return Response({'message': 'تم تحديث حالة الإشعارات.', 'unread_count': unread_count})
+
+
+class FCMDeviceTokenAPIView(APIView):
+    """تسجيل وإلغاء رمز إشعارات Firebase Cloud Messaging (FCM) لجهاز المستخدم الحالي."""
+    permission_classes = [IsAuthenticated, IsNotBanned]
+
+    def post(self, request):
+        serializer = FCMDeviceTokenSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        token = data['token'].strip()
+        installation_id = (
+            data.get('installation_id')
+            or request.META.get('HTTP_X_DEVICE_ID')
+            or ''
+        ).strip()[:128]
+        platform = data.get('platform') or 'android'
+        app_version = (
+            data.get('app_version')
+            or request.META.get('HTTP_X_APP_VERSION')
+            or ''
+        ).strip()[:32]
+
+        FCMDeviceToken.objects.update_or_create(
+            token=token,
+            defaults={
+                'user': request.user,
+                'installation_id': installation_id,
+                'platform': platform,
+                'app_version': app_version,
+                'is_active': True,
+            },
+        )
+        if installation_id:
+            FCMDeviceToken.objects.filter(
+                user=request.user,
+                installation_id=installation_id,
+                is_active=True,
+            ).exclude(token=token).update(is_active=False)
+
+        return Response(
+            {
+                'message': 'تم تسجيل رمز الإشعارات بنجاح.',
+                'fcm_configured': is_fcm_configured(),
+                'platform': platform,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def delete(self, request):
+        token = str(
+            request.data.get('token')
+            or request.query_params.get('token')
+            or ''
+        ).strip()
+        installation_id = str(
+            request.data.get('installation_id')
+            or request.query_params.get('installation_id')
+            or request.META.get('HTTP_X_DEVICE_ID')
+            or ''
+        ).strip()
+        deactivate_all = str(
+            request.data.get('all')
+            or request.query_params.get('all')
+            or ''
+        ).lower() in ('1', 'true', 'yes')
+
+        qs = FCMDeviceToken.objects.filter(user=request.user, is_active=True)
+        if token and installation_id:
+            qs = qs.filter(Q(token=token) | Q(installation_id=installation_id))
+        elif token:
+            qs = qs.filter(token=token)
+        elif installation_id:
+            qs = qs.filter(installation_id=installation_id)
+        elif not deactivate_all:
+            return Response({'deactivated': 0}, status=status.HTTP_200_OK)
+
+        updated = qs.update(is_active=False)
+        return Response({'deactivated': updated}, status=status.HTTP_200_OK)
 
 
 class ManualCheckoutAPIView(APIView):

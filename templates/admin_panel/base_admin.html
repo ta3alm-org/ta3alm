@@ -263,6 +263,7 @@
             cursor: pointer; transition: all 0.2s; font-size: 0.9rem;
         }
         .action-btn-edit   { background: #e8f4fd; color: #0d6efd; }
+        .action-btn-notify { background: #f3e8fd; color: #6f42c1; }
         .action-btn-ban    { background: #fff3e0; color: #f57c00; }
         .action-btn-delete { background: #fde8ea; color: #e94560; }
         .action-btn-renew  { background: #e8fdf4; color: #0f9b58; }
@@ -365,6 +366,10 @@
         <a href="{% url 'admin_panel:manage_users' %}"
            class="sidebar-link {% block nav_users %}{% endblock %}">
             <i class="bi bi-people-fill"></i> إدارة المستخدمين
+        </a>
+        <a href="{% url 'admin_panel:send_notifications' %}"
+           class="sidebar-link {% block nav_notifications %}{% endblock %}">
+            <i class="bi bi-bell-fill"></i> إرسال إشعارات
         </a>
         <a href="{% url 'admin_panel:security_dashboard' %}"
            class="sidebar-link {% block nav_security %}{% endblock %}">

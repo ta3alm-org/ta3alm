@@ -473,9 +473,13 @@ class SecurityEventReportAPIView(APIView):
             net_ctx=net_ctx,
             action_taken=action_taken,
             details=details,
-            notify_user=severity in ('high', 'critical'),
+            notify_user=severity in ('medium', 'high', 'critical'),
             notify_title='تنبيه حماية المحتوى',
-            notify_message='تم رصد محاولة التقاط أو تسجيل شاشة أو نشاط غير معتاد أثناء استعراض محتوى محمي.',
+            notify_message=(
+                'تم رصد محاولة التقاط لقطة شاشة أو تسجيل محتوى محمي على حسابك.'
+                if raw_type in ('screenshot_attempt', 'screen_recording_detected', 'display_capture_detected')
+                else 'تم رصد نشاط غير معتاد أو محاولة عبث على جهازك أثناء استخدام المنصة.'
+            ),
         )
 
         policy = SecurityPolicyConfig.load()

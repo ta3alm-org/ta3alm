@@ -20,6 +20,10 @@ urlpatterns = [
     path('users/action/',       views.user_action,        name='user_action'),
     path('users/edit/<int:user_id>/', views.edit_user,   name='edit_user'),
 
+    # الإشعارات المخصصة
+    path('notifications/',         views.send_notifications,            name='send_notifications'),
+    path('notifications/preview/', views.notifications_recipient_preview, name='notifications_recipient_preview'),
+
     # المالية
     path('finance/',            views.finance_report,     name='finance_report'),
     path('finance/withdrawals/',views.withdrawals,        name='withdrawals'),

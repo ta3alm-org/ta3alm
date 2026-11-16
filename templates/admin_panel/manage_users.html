@@ -113,6 +113,11 @@
                                        class="action-btn action-btn-edit" title="تعديل">
                                         <i class="bi bi-pencil-fill"></i>
                                     </a>
+                                    <!-- إرسال إشعار -->
+                                    <a href="{% url 'admin_panel:send_notifications' %}?mode=users&user_id={{ t.user.id }}"
+                                       class="action-btn action-btn-notify" title="إرسال إشعار مخصص">
+                                        <i class="bi bi-bell-fill"></i>
+                                    </a>
                                     <!-- حظر / رفع -->
                                     <form method="POST" action="{% url 'admin_panel:user_action' %}" class="d-inline">
                                         {% csrf_token %}
@@ -232,6 +237,10 @@
                                        class="action-btn action-btn-edit" title="تعديل">
                                         <i class="bi bi-pencil-fill"></i>
                                     </a>
+                                    <a href="{% url 'admin_panel:send_notifications' %}?mode=users&user_id={{ s.user.id }}"
+                                       class="action-btn action-btn-notify" title="إرسال إشعار مخصص">
+                                        <i class="bi bi-bell-fill"></i>
+                                    </a>
                                     <form method="POST" action="{% url 'admin_panel:user_action' %}" class="d-inline">
                                         {% csrf_token %}
                                         <input type="hidden" name="user_id" value="{{ s.user.id }}">
@@ -305,6 +314,10 @@
                                     <a href="{% url 'admin_panel:edit_user' a.user.id %}"
                                        class="action-btn action-btn-edit" title="تعديل">
                                         <i class="bi bi-pencil-fill"></i>
+                                    </a>
+                                    <a href="{% url 'admin_panel:send_notifications' %}?mode=users&user_id={{ a.user.id }}"
+                                       class="action-btn action-btn-notify" title="إرسال إشعار مخصص">
+                                        <i class="bi bi-bell-fill"></i>
                                     </a>
                                     <form method="POST" action="{% url 'admin_panel:user_action' %}" class="d-inline">
                                         {% csrf_token %}

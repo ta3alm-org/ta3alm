@@ -1,0 +1,90 @@
+{% extends 'base.html' %}
+{% load i18n %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card border-0 shadow-lg rounded-4 text-center p-4 p-md-5">
+                <div class="mx-auto mb-3 d-flex align-items-center justify-content-center rounded-circle bg-danger bg-opacity-10 text-danger"
+                     style="width: 84px; height: 84px;">
+                    <i class="bi bi-shield-lock-fill fs-1"></i>
+                </div>
+
+                <h3 class="fw-bold text-dark mb-2">
+                    {% trans "تشغيل المحاضرات عبر الويب مقصور على iPhone و iPad فقط" %}
+                </h3>
+
+                <p class="text-muted mb-3">
+                    {{ block_reason|default:"لحماية المحتوى التعليمي، عرض ومشاهدة المحاضرات عبر المتصفح مسموح فقط على أجهزة iPhone و iPad (Safari)، ومغلق على أجهزة الكمبيوتر (Mac / Windows / Linux) ومتصفحات أندرويد." }}
+                </p>
+
+                {% if needs_ipad_probe %}
+                <div id="ipad-probe-banner" class="alert alert-info border-0 rounded-3 small d-flex align-items-center justify-content-center gap-2 mb-4">
+                    <div class="spinner-border spinner-border-sm text-info" role="status"></div>
+                    <span>{% trans "جاري التحقق من خصائص الجهاز للتأكد من عدم استخدام iPadOS..." %}</span>
+                </div>
+                {% endif %}
+
+                <div class="alert alert-light border rounded-3 text-end small mb-4">
+                    <div class="fw-bold text-dark mb-1">
+                        <i class="bi bi-info-circle-fill text-primary me-1"></i>
+                        {% trans "كيف تشاهد المحاضرات؟" %}
+                    </div>
+                    <ul class="mb-0 ps-3 text-muted">
+                        <li>{% trans "إذا كنت تستخدم هاتف أو تابلت أندرويد: استخدم تطبيق تعلّم الرسمي للأندرويد." %}</li>
+                        <li>{% trans "إذا كنت تستخدم iPhone أو iPad: افتح المنصة من متصفح Safari على الجهاز." %}</li>
+                        <li>{% trans "باقي أقسام المنصة مثل الامتحانات وملفات PDF والواجبات متاحة بشكل طبيعي." %}</li>
+                    </ul>
+                </div>
+
+                <div class="d-flex flex-wrap justify-content-center gap-2">
+                    {% if group %}
+                    <a href="{% url 'student_group_content' group.id %}" class="btn btn-outline-primary rounded-pill px-4">
+                        <i class="bi bi-arrow-right me-1"></i> {% trans "العودة للمجموعة" %}
+                    </a>
+                    {% endif %}
+                    {% if package %}
+                    <a href="{% url 'my_package_content' package.id %}" class="btn btn-outline-primary rounded-pill px-4">
+                        <i class="bi bi-arrow-right me-1"></i> {% trans "العودة للباقة" %}
+                    </a>
+                    {% endif %}
+                    <a href="{% url 'student_dashboard' %}" class="btn btn-primary rounded-pill px-4">
+                        <i class="bi bi-house-fill me-1"></i> {% trans "لوحة التحكم" %}
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if needs_ipad_probe %}
+<script>
+(function() {
+    function runIpadProbe() {
+        var banner = document.getElementById('ipad-probe-banner');
+        if (typeof window.ta3almSyncWebDeviceTraits === 'function') {
+            window.ta3almSyncWebDeviceTraits(true, function(data) {
+                if (data && data.ios_lecture_allowed === true) {
+                    window.location.reload();
+                    return;
+                }
+                if (banner) {
+                    banner.className = 'alert alert-secondary border-0 rounded-3 small mb-4';
+                    banner.innerHTML = '<i class="bi bi-x-circle me-1"></i> {% trans "تم التحقق: هذا المتصفح ليس جهاز iPhone أو iPad معتمد." %}';
+                }
+            });
+        } else if (banner) {
+            banner.style.display = 'none';
+        }
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', runIpadProbe);
+    } else {
+        runIpadProbe();
+    }
+})();
+</script>
+{% endif %}
+{% endblock %}
+

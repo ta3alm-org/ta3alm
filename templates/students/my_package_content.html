@@ -29,6 +29,33 @@
         <!-- المحاضرات -->
         <div class="col-md-8">
             <h4 class="fw-bold text-primary mb-3"><i class="bi bi-youtube me-2"></i> {% trans "المحاضرات" %}</h4>
+            {% if not web_lectures_allowed %}
+            <div class="card border-0 shadow-sm rounded-4 text-center p-4">
+                <div class="mx-auto mb-2 d-flex align-items-center justify-content-center rounded-circle bg-danger bg-opacity-10 text-danger"
+                     style="width: 56px; height: 56px;">
+                    <i class="bi bi-shield-lock-fill fs-4"></i>
+                </div>
+                <h6 class="fw-bold text-dark mb-1">{% trans "المحاضرات متاحة على iPhone و iPad فقط عبر الويب" %}</h6>
+                <p class="text-muted small mb-0">
+                    {{ web_lectures_block_reason|default:"لحماية المحتوى، لا يمكن فتح قائمة المحاضرات أو تشغيلها على هذا المتصفح." }}
+                </p>
+                {% if web_lectures_needs_ipad_probe %}
+                <script>
+                (function() {
+                    function checkPkgIpad() {
+                        if (typeof window.ta3almSyncWebDeviceTraits === 'function') {
+                            window.ta3almSyncWebDeviceTraits(true, function(d) {
+                                if (d && d.ios_lecture_allowed === true) window.location.reload();
+                            });
+                        }
+                    }
+                    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', checkPkgIpad);
+                    else checkPkgIpad();
+                })();
+                </script>
+                {% endif %}
+            </div>
+            {% else %}
             <div class="list-group shadow-sm border-0">
                 {% for lec in lectures %}
                 <div class="list-group-item p-3 d-flex justify-content-between align-items-center hover-bg">
@@ -51,6 +78,7 @@
                 <div class="text-center py-4 text-muted">{% trans "لا توجد محاضرات." %}</div>
                 {% endfor %}
             </div>
+            {% endif %}
         </div>
 
         <!-- الامتحانات -->

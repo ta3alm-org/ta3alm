@@ -622,3 +622,203 @@ class PlatformFinancialAndContentFixesTests(APITestCase):
             self.assertEqual(q_resp.status_code, 201)
             self.assertTrue(bool(q_resp.data['question']['image']))
             self.assertTrue(self.client.get(exam_url).data['allow_images'])
+
+    def test_view_exhaustion_on_exit_non_sliding_window_and_record_view_false_blocked(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        from api_v1.models import PlaybackSession
+        from api_v1.video_security import watch_window_cache_key
+        from students.models import PackageEnrollment, VideoViewTracking
+        from teachers.models import VideoCode
+
+        vc = VideoCode.objects.create(lecture=self.lecture, code='LIMIT2VIEW', max_views=2)
+        self.client.force_authenticate(user=self.student_user)
+
+        auth_url = reverse('api_v1_video_authorize', args=[self.lecture.id])
+        group_content_url = reverse('api_v1_student_group_content', args=[self.group.id])
+
+        # 1) الدخول الأول حتى مع محاولة تمرير record_view=false يخصم المشاهدة الأولى
+        first = self.client.post(
+            auth_url,
+            {'code': 'LIMIT2VIEW', 'device_id': 'dev-exhaust-1', 'record_view': False},
+        )
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first.data['code_info']['current_views'], 1)
+        sess1_id = first.data['session_id']
+
+        # التحقق أن view_window_expires_at ثابت ومضبوط على جلسة التشغيل ولا يتمدد بالطلبات المتكررة
+        sess1 = PlaybackSession.objects.get(session_id=sess1_id)
+        initial_exp = sess1.view_window_expires_at
+        self.assertIsNotNone(initial_exp)
+
+        # إعادة التشغيل داخل نفس الجلسة قبل الخروج لا تخصم ثانيةً ولا تمدد نافذة المشاهدة
+        same_win = self.client.post(auth_url, {'device_id': 'dev-exhaust-1', 'record_view': False})
+        self.assertEqual(same_win.status_code, 200)
+        self.assertEqual(same_win.data['code_info']['current_views'], 1)
+        sess1.refresh_from_db()
+        self.assertLessEqual(abs((sess1.view_window_expires_at - initial_exp).total_seconds()), 1)
+
+        # 2) الخروج الصريح من المشغل يُنهي الجلسة ويمسح النافذة، فيُخصم دخول ثانٍ وتصل للحد (2/2)
+        revoke_resp = self.client.post(reverse('api_v1_video_session_revoke', args=[sess1_id]))
+        self.assertEqual(revoke_resp.status_code, 200)
+        sess1.refresh_from_db()
+        self.assertEqual(sess1.status, 'ended')
+        self.assertIsNone(cache.get(watch_window_cache_key(self.student_user.id, self.lecture.id)))
+
+        second = self.client.post(auth_url, {'device_id': 'dev-exhaust-1'})
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(second.data['code_info']['current_views'], 2)
+
+        # الخروج ثم الرجوع لقائمة المجموعة مع clear_watch=1 -> المحاولة الثالثة تُرفض لانتهاء المشاهدات
+        self.client.get(group_content_url, {'clear_watch': '1'})
+        third = self.client.post(auth_url, {'device_id': 'dev-exhaust-1'})
+        self.assertEqual(third.status_code, 403)
+        self.assertTrue(third.data.get('require_code'))
+
+        # 3) اختبار انتهاء نافذة 20 دقيقة بدون تمديد على الحزمة المدفوعة
+        self.package.view_limit = 1
+        self.package.save(update_fields=['view_limit'])
+        PackageEnrollment.objects.create(student=self.student, package=self.package, is_paid=True)
+        pkg_first = self.client.post(
+            auth_url,
+            {'package_id': self.package.id, 'device_id': 'dev-exhaust-1'},
+        )
+        self.assertEqual(pkg_first.status_code, 200)
+        tracker = VideoViewTracking.objects.get(
+            student=self.student, package=self.package, lecture=self.lecture
+        )
+        self.assertEqual(tracker.views_count, 1)
+
+        # محاكاة مرور 21 دقيقة (انتهاء نافذة الكاش + view_window_expires_at في قاعدة البيانات) يحرم فتح مشاهدة ثانية مع حد = 1
+        cache.delete(watch_window_cache_key(self.student_user.id, self.lecture.id))
+        PlaybackSession.objects.filter(
+            user=self.student_user, lecture=self.lecture, course_package=self.package
+        ).update(view_window_expires_at=timezone.now() - timedelta(minutes=1))
+        pkg_second = self.client.post(
+            auth_url,
+            {'package_id': self.package.id, 'device_id': 'dev-exhaust-1'},
+        )
+        self.assertEqual(pkg_second.status_code, 403)
+
+    def test_withdraw_request_three_state_approve_reject_refund_and_reconcile(self):
+        from core.models import ManualPayment, Notification, SiteSetting
+        from dashboard_admin.models import AuditLog
+        from teachers.models import Wallet, WithdrawRequest
+        from teachers.views import reconcile_teacher_wallet
+
+        site_cfg = SiteSetting.load()
+        site_cfg.platform_commission_percentage = 0
+        site_cfg.save(update_fields=['platform_commission_percentage'])
+
+        self.package.price = Decimal('500.00')
+        self.package.save(update_fields=['price'])
+
+        finance_url = reverse('api_v1_admin_finance')
+        self.client.force_authenticate(user=self.admin_user)
+        mp = ManualPayment.objects.create(
+            user=self.student_user,
+            amount=500,
+            payment_type='student_package',
+            target_id=self.package.id,
+            phone_number='01022223333',
+            receipt_image='receipts/withdraw_test.png',
+        )
+        self.assertEqual(
+            self.client.post(
+                finance_url,
+                {'item_type': 'manual_payment', 'id': mp.id, 'action': 'approve'},
+            ).status_code,
+            200,
+        )
+        wallet = Wallet.objects.get(teacher=self.teacher)
+        self.assertEqual(wallet.balance, Decimal('500.00'))
+
+        # 1) إنشاء طلب سحب عبر API المعلم يبدأ كـ pending و is_paid=False
+        self.client.force_authenticate(user=self.teacher_user)
+        wr_create = self.client.post(
+            reverse('api_v1_teacher_wallet'),
+            {'amount': '150.00', 'method': 'vodafone', 'details': '01099887766 فودافون كاش'},
+        )
+        self.assertEqual(wr_create.status_code, 201)
+        wr1 = WithdrawRequest.objects.get(id=wr_create.data['withdrawal']['id'])
+        self.assertEqual(wr1.status, 'pending')
+        self.assertFalse(wr1.is_paid)
+        self.assertEqual(wr_create.data['withdrawal']['status'], 'pending')
+
+        wallet.refresh_from_db()
+        self.assertEqual(wallet.balance, Decimal('350.00'))
+
+        # 2) لوحة الأدمن ترى status='pending' ورفض الطلب يُعيد الرصيد ويُرسل إشعاراً للمعلم
+        self.client.force_authenticate(user=self.admin_user)
+        fin_list = self.client.get(finance_url)
+        self.assertEqual(fin_list.status_code, 200)
+        pending_row = next(w for w in fin_list.data['withdraw_requests'] if w['id'] == wr1.id)
+        self.assertEqual(pending_row['status'], 'pending')
+        self.assertFalse(pending_row['is_paid'])
+
+        rej_resp = self.client.post(
+            finance_url,
+            {
+                'item_type': 'withdrawal',
+                'id': wr1.id,
+                'action': 'reject',
+                'rejection_reason': 'بيانات المحفظة غير صحيحة',
+            },
+        )
+        self.assertEqual(rej_resp.status_code, 200)
+        wr1.refresh_from_db()
+        wallet.refresh_from_db()
+        self.assertEqual(wr1.status, 'rejected')
+        self.assertFalse(wr1.is_paid)
+        self.assertIsNotNone(wr1.reviewed_at)
+        self.assertEqual(wr1.rejection_reason, 'بيانات المحفظة غير صحيحة')
+        self.assertEqual(wallet.balance, Decimal('500.00'))
+        self.assertTrue(
+            Notification.objects.filter(
+                recipient=self.teacher_user,
+                title__contains='رفض',
+            ).exists()
+        )
+        self.assertTrue(
+            AuditLog.objects.filter(action=AuditLog.ACTION_REJECT_WITHDRAW).exists()
+        )
+
+        # منع مراجعة نفس الطلب مرة أخرى
+        dup_resp = self.client.post(
+            finance_url,
+            {'item_type': 'withdrawal', 'id': wr1.id, 'action': 'approve'},
+        )
+        self.assertEqual(dup_resp.status_code, 400)
+
+        # 3) الموافقة على طلب ثانٍ تعتمده كـ paid، وتسوية المحفظة تستبعد الطلب المرفوض وتُبقي 400.00
+        self.client.force_authenticate(user=self.teacher_user)
+        wr2_create = self.client.post(
+            reverse('api_v1_teacher_wallet'),
+            {'amount': '100.00', 'method': 'instapay', 'details': '01122334455 إنستاباي'},
+        )
+        self.assertEqual(wr2_create.status_code, 201)
+        wr2 = WithdrawRequest.objects.get(id=wr2_create.data['withdrawal']['id'])
+
+        self.client.force_authenticate(user=self.admin_user)
+        app_resp = self.client.post(
+            finance_url,
+            {'item_type': 'withdrawal', 'id': wr2.id, 'action': 'approve'},
+        )
+        self.assertEqual(app_resp.status_code, 200)
+        wr2.refresh_from_db()
+        self.assertEqual(wr2.status, 'paid')
+        self.assertTrue(wr2.is_paid)
+        self.assertIsNotNone(wr2.reviewed_at)
+
+        wallet.refresh_from_db()
+        self.assertEqual(wallet.balance, Decimal('400.00'))
+
+        # تصفير المحفظة وإعادة التسوية يجب أن يسترجع 400.00 (500 مكتسبة - 100 مدفوعة فقط دون خصم 150 المرفوضة)
+        wallet.balance = Decimal('0.00')
+        wallet.total_earnings = Decimal('0.00')
+        wallet.save()
+        reconcile_teacher_wallet(self.teacher)
+        wallet.refresh_from_db()
+        self.assertEqual(wallet.total_earnings, Decimal('500.00'))
+        self.assertEqual(wallet.balance, Decimal('400.00'))
+
