@@ -199,7 +199,6 @@ class TeacherGroupLecturesAPIView(APIView):
         title = str(request.data.get('title', '')).strip()
         video_link = str(request.data.get('video_link', '')).strip()
         description = str(request.data.get('description', '')).strip()
-        lesson_id = request.data.get('lesson_id') or None
 
         if not title or not video_link:
             return Response({'error': 'عنوان المحاضرة ورابط الفيديو مطلوبان.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -209,7 +208,6 @@ class TeacherGroupLecturesAPIView(APIView):
             title=title,
             video_link=video_link,
             description=description,
-            lesson_id=lesson_id if str(lesson_id).isdigit() else None,
         )
         return Response({
             'message': 'تم نشر المحاضرة بنجاح!',

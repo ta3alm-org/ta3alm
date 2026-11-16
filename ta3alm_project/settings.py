@@ -231,11 +231,23 @@ WSGI_APPLICATION = 'ta3alm_project.wsgi.application'
 # ==========================================================
 import urllib.parse
 
+IS_TEST_RUN = 'test' in sys.argv
 DATABASE_URL = os.environ.get('DATABASE_URL') or os.environ.get('POSTGRES_URL')
+TEST_DATABASE_URL = os.environ.get('TEST_DATABASE_URL', '').strip()
 raw_use_sqlite = os.environ.get('USE_SQLITE', '').strip().lower()
+use_postgres_for_tests = os.environ.get('USE_POSTGRES_FOR_TESTS', '').strip().lower() in ('true', '1', 'yes')
+force_sqlite = (
+    raw_use_sqlite in ('true', '1', 'yes')
+    or (IS_TEST_RUN and not TEST_DATABASE_URL and not use_postgres_for_tests)
+)
+active_postgres_url = (
+    TEST_DATABASE_URL
+    if (IS_TEST_RUN and TEST_DATABASE_URL)
+    else (None if force_sqlite else DATABASE_URL)
+)
 
-if DATABASE_URL:
-    url = urllib.parse.urlparse(DATABASE_URL)
+if active_postgres_url:
+    url = urllib.parse.urlparse(active_postgres_url)
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
@@ -250,7 +262,7 @@ if DATABASE_URL:
             },
         }
     }
-elif raw_use_sqlite in ('false', '0', 'no') or os.environ.get('DB_HOST'):
+elif not force_sqlite and (raw_use_sqlite in ('false', '0', 'no') or os.environ.get('DB_HOST')):
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
@@ -266,7 +278,7 @@ elif raw_use_sqlite in ('false', '0', 'no') or os.environ.get('DB_HOST'):
         }
     }
 else:
-    # بيئة محلية أو Fallback لـ SQLite
+    # بيئة محلية أو الاختبارات المحلية بـ SQLite (Django يدير :memory: تلقائياً للاختبارات)
     db_file = Path('/tmp') / 'db.sqlite3' if 'VERCEL' in os.environ else BASE_DIR / 'db.sqlite3'
     DATABASES = {
         'default': {
@@ -373,7 +385,7 @@ PAYMOB_WALLET_INTEGRATION_ID = int(os.environ.get('PAYMOB_WALLET_INTEGRATION_ID'
 # Bot API Key
 # ==========================================================
 BOT_API_KEY = os.environ.get('BOT_API_KEY', '')
-if not BOT_API_KEY and not DEBUG and 'collectstatic' not in sys.argv:
+if not BOT_API_KEY and not DEBUG and 'collectstatic' not in sys.argv and not IS_TEST_RUN:
     raise ValueError("BOT_API_KEY environment variable is not set.")
 
 # ==========================================================
