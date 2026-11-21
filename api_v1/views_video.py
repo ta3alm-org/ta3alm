@@ -1,7 +1,5 @@
-"""
-api_v1/views_video.py
-نقاط النهاية المحمية لتشغيل الفيديو، النبض (Heartbeat)، حفظ التقدم، العلامات المرجعية، إبطال الجلسات،
-والتحقق من Google Play Integrity من جهة الخادم.
+"""api_v1.views_video
+Extracted from api_v1/views_video.py.
 """
 from __future__ import annotations
 
@@ -9,52 +7,51 @@ import mimetypes
 import os
 from datetime import timedelta
 from pathlib import Path
-
 import jwt
 from django.conf import settings
-from django.core.cache import cache
-from django.db import transaction
-from django.http import FileResponse, HttpResponse
+from django.http import (
+    FileResponse,
+    HttpResponse,
+)
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.permissions import AllowAny, IsAuthenticated
-from rest_framework.response import Response
-from rest_framework.throttling import UserRateThrottle
-from rest_framework.views import APIView
-
-from students.models import (
-    Enrollment,
-    PackageEnrollment,
-    VideoViewTracking,
+from rest_framework.permissions import (
+    AllowAny,
+    IsAuthenticated,
 )
-from students.views import check_student_access
-from teachers.models import CoursePackage, Lecture, PDFFile, VideoCode
-
-from .device_security_service import (
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from teachers.models import (
+    Lecture,
+    PDFFile,
+)
+from api_v1.device_security_service import (
     check_device_allowed,
     check_web_ios_only_lecture_access,
     detect_account_sharing,
     record_device_activity,
     record_security_event,
 )
-from .integrity_service import (
+from api_v1.integrity_service import (
     get_integrity_policy_mode,
     issue_integrity_challenge,
     verify_and_record_integrity,
 )
-from .models import (
+from api_v1.models import (
     DeviceIntegrityRecord,
     DeviceTrustStatus,
     PlaybackSession,
     RegisteredDevice,
-    VideoAsset,
     VideoBookmark,
     VideoProgress,
 )
-from .permissions import IsNotBanned
-from .serializers import LectureSerializer, PDFFileSerializer
-from .video_security import (
+from api_v1.permissions import IsNotBanned
+from api_v1.serializers import (
+    LectureSerializer,
+    PDFFileSerializer,
+)
+from api_v1.video_security import (
     HEARTBEAT_INTERVAL_SECONDS,
     PLAYBACK_TOKEN_TTL_SECONDS,
     build_watermark_payload,
@@ -62,276 +59,20 @@ from .video_security import (
     create_or_rotate_playback_session,
     decode_playback_token,
     detect_and_record_anomaly,
-    get_active_watch_window_expiry,
-    grant_watch_window,
     issue_playback_token,
     log_security_event,
     resolve_signed_playback_source,
 )
 
-
-class VideoAuthorizeThrottle(UserRateThrottle):
-    rate = '30/min'
-
-
-class VideoHeartbeatThrottle(UserRateThrottle):
-    rate = '120/min'
-
-
-class IntegrityCheckThrottle(UserRateThrottle):
-    rate = '30/min'
-
-
-class VideoProgressThrottle(UserRateThrottle):
-    rate = '60/min'
-
-
-def _has_recent_playback_session(user, lecture, window_minutes: int = 20) -> bool:
-    return get_active_watch_window_expiry(user, lecture.id) is not None
-
-
-def _mark_watch_window(user, lecture, window_seconds: int = 1200) -> None:
-    grant_watch_window(user, lecture.id, minutes=max(int(window_seconds // 60), 1))
-
-
-def _user_can_access_lecture_metadata(user, lecture: Lecture) -> bool:
-    """يتحقق من أن المستخدم يملك صلاحية الوصول إلى المحاضرة قبل قراءة أو حفظ التقدم والعلامات."""
-    if getattr(user, 'is_superuser', False) or getattr(user, 'role', '') == 'admin':
-        return True
-
-    role = getattr(user, 'role', '')
-    if role in ('teacher', 'assistant'):
-        if lecture.group:
-            teacher = lecture.group.teacher
-            if user == teacher.user or (
-                hasattr(user, 'assistant_profile')
-                and user.assistant_profile.assignments.filter(teacher=teacher).exists()
-            ):
-                return True
-        for pkg in lecture.packages.all():
-            if user == pkg.teacher.user or (
-                hasattr(user, 'assistant_profile')
-                and user.assistant_profile.assignments.filter(teacher=pkg.teacher).exists()
-            ):
-                return True
-        return False
-
-    student = getattr(user, 'student_profile', None)
-    if not student:
-        return False
-
-    if PlaybackSession.objects.filter(user=user, lecture=lecture).exists():
-        return True
-    if VideoCode.objects.filter(lecture=lecture, used_by=student).exists():
-        return True
-    if lecture.group_id and Enrollment.objects.filter(
-        student=student,
-        group_id=lecture.group_id,
-        is_active=True,
-    ).exists():
-        return True
-    return PackageEnrollment.objects.filter(
-        student=student,
-        is_paid=True,
-        package__lectures=lecture,
-    ).exists()
-
-
-def _package_error(msg: str, code: int = status.HTTP_403_FORBIDDEN) -> Response:
-    return Response({'error': msg}, status=code)
-
-
-def _check_user_lecture_entitlement(
-    request,
-    lecture: Lecture,
-    *,
-    package_id: int | None = None,
-    submitted_code: str = '',
-    consume_view: bool = True,
-) -> tuple[bool, dict]:
-    """
-    يتحقق من أحقية المستخدم في مشاهدة المحاضرة:
-    - المعلم/المساعد المصرح له أو الأدمن: وصول معاينة مباشر.
-    - الطالب في حزمة مدفوعة: يتحقق من الاشتراك + ارتباط المحاضرة بالحزمة + حد المشاهدات.
-    - الطالب في مجموعة: يتحقق من عضوية المجموعة + كود الفيديو + حد المشاهدات.
-    """
-    user = request.user
-
-    if getattr(user, 'is_superuser', False) or getattr(user, 'role', '') == 'admin':
-        pkg = CoursePackage.objects.filter(id=package_id).first() if package_id else None
-        return True, {'package': pkg, 'role_preview': True}
-
-    if getattr(user, 'role', '') in ('teacher', 'assistant'):
-        if lecture.group:
-            teacher = lecture.group.teacher
-            if user == teacher.user or (
-                hasattr(user, 'assistant_profile')
-                and user.assistant_profile.assignments.filter(teacher=teacher).exists()
-            ):
-                return True, {'package': None, 'role_preview': True}
-        if package_id:
-            pkg = CoursePackage.objects.filter(id=package_id, lectures=lecture).first()
-            if pkg and (
-                user == pkg.teacher.user
-                or (
-                    hasattr(user, 'assistant_profile')
-                    and user.assistant_profile.assignments.filter(teacher=pkg.teacher).exists()
-                )
-            ):
-                return True, {'package': pkg, 'role_preview': True}
-        return False, {
-            'status_code': status.HTTP_403_FORBIDDEN,
-            'payload': {'error': 'ليس لديك صلاحية معاينة هذه المحاضرة.'},
-        }
-
-    if getattr(user, 'role', '') != 'student' or not hasattr(user, 'student_profile'):
-        return False, {
-            'status_code': status.HTTP_403_FORBIDDEN,
-            'payload': {'error': 'هذه الخدمة متاحة للطلاب فقط.'},
-        }
-
-    student = user.student_profile
-    watch_window_expiry = get_active_watch_window_expiry(
-        user,
-        lecture.id,
-        package_id=package_id,
-    )
-    already_in_watch_window = watch_window_expiry is not None
-
-    # 1. مسار الحزم الأونلاين المدفوعة
-    if package_id is not None:
-        package = get_object_or_404(CoursePackage, id=package_id)
-        if not package.lectures.filter(id=lecture.id).exists():
-            return False, {
-                'status_code': status.HTTP_404_NOT_FOUND,
-                'payload': {'error': 'هذه المحاضرة غير مدرجة ضمن الحزمة المحددة.'},
-            }
-        if not PackageEnrollment.objects.filter(student=student, package=package, is_paid=True).exists():
-            return False, {
-                'status_code': status.HTTP_403_FORBIDDEN,
-                'payload': {'error': 'يجب شراء الحزمة أولاً للوصول إلى هذا الفيديو.'},
-            }
-        with transaction.atomic():
-            tracker, _ = VideoViewTracking.objects.select_for_update().get_or_create(
-                student=student,
-                package=package,
-                lecture=lecture,
-            )
-            limit_reached = tracker.views_count >= package.view_limit
-            can_resume = already_in_watch_window and tracker.views_count <= package.view_limit
-            if limit_reached and not can_resume:
-                return False, {
-                    'status_code': status.HTTP_403_FORBIDDEN,
-                    'payload': {'error': 'لقد استهلكت عدد مرات مشاهدة هذا الفيديو في الحزمة.'},
-                }
-            points_just_awarded = False
-            if not already_in_watch_window:
-                if not tracker.is_completed:
-                    tracker.is_completed = True
-                    tracker.points_awarded = 10
-                    points_just_awarded = True
-                tracker.views_count += 1
-                tracker.save()
-                watch_window_expiry = grant_watch_window(user, lecture.id)
-        return True, {
-            'package': package,
-            'watch_window_expires_at': watch_window_expiry,
-            'points_just_awarded': points_just_awarded,
-            'view_limit': package.view_limit,
-            'views_used': tracker.views_count,
-            'remaining_views': max(package.view_limit - tracker.views_count, 0),
-        }
-
-    # 2. مسار محاضرات المجموعات المحمية بالأكواد
-    if not lecture.group:
-        return False, {
-            'status_code': status.HTTP_400_BAD_REQUEST,
-            'payload': {'error': 'يرجى تحديد معرّف الحزمة لمشاهدة هذه المحاضرة.'},
-        }
-
-    group, access_status = check_student_access(user, lecture.group.id)
-    if access_status != 'ok':
-        return False, {
-            'status_code': status.HTTP_403_FORBIDDEN,
-            'payload': {'error': 'أنت غير مصرح لك بالوصول إلى هذه المجموعة حالياً.', 'access_status': access_status},
-        }
-
-    with transaction.atomic():
-        if submitted_code:
-            try:
-                new_code = VideoCode.objects.select_for_update().get(
-                    code__iexact=submitted_code.upper(),
-                    lecture=lecture,
-                    is_used=False,
-                )
-            except VideoCode.DoesNotExist:
-                return False, {
-                    'status_code': status.HTTP_400_BAD_REQUEST,
-                    'payload': {'error': 'الكود غير صحيح أو تم استخدامه مسبقاً.'},
-                }
-            new_code.is_used = True
-            new_code.used_by = student
-            new_code.used_at = timezone.now()
-            new_code.save()
-            active_code = new_code
-        else:
-            active_code = (
-                VideoCode.objects.select_for_update()
-                .filter(lecture=lecture, used_by=student)
-                .order_by('-used_at')
-                .first()
-            )
-
-        can_resume_code = bool(
-            active_code and already_in_watch_window and active_code.current_views <= active_code.max_views
-        )
-        if not active_code or (active_code.current_views >= active_code.max_views and not can_resume_code):
-            return False, {
-                'status_code': status.HTTP_403_FORBIDDEN,
-                'payload': {
-                    'is_unlocked': False,
-                    'require_code': True,
-                    'code': 'REQUIRE_CODE',
-                    'error': 'يرجى إدخال كود المشاهدة لفتح الفيديو.'
-                    if not active_code
-                    else 'لقد استهلكت عدد مرات مشاهدة هذا الكود. يرجى إدخال كود جديد.',
-                    'lecture': {
-                        'id': lecture.id,
-                        'title': lecture.title,
-                        'description': lecture.description,
-                    },
-                },
-            }
-
-        should_consume = bool(submitted_code) or not already_in_watch_window
-        if should_consume:
-            with transaction.atomic():
-                locked_code = VideoCode.objects.select_for_update().get(pk=active_code.pk)
-                if locked_code.current_views >= locked_code.max_views:
-                    return False, {
-                        'status_code': status.HTTP_403_FORBIDDEN,
-                        'payload': {
-                            'is_unlocked': False,
-                            'require_code': True,
-                            'code': 'REQUIRE_CODE',
-                            'error': 'تم استنفاد عدد المشاهدات المتاحة لهذا الكود. يرجى إدخال كود جديد.',
-                        },
-                    }
-                locked_code.current_views += 1
-                locked_code.save(update_fields=['current_views'])
-                active_code = locked_code
-                watch_window_expiry = grant_watch_window(user, lecture.id)
-
-        return True, {
-            'package': None,
-            'watch_window_expires_at': watch_window_expiry,
-            'code_info': {
-                'code': active_code.code,
-                'current_views': active_code.current_views,
-                'max_views': active_code.max_views,
-                'remaining_views': max(active_code.max_views - active_code.current_views, 0),
-            },
-        }
+from api_v1.services.video_access import (
+    _check_user_lecture_entitlement,
+    _neighbor_lectures_payload,
+)
+from api_v1.views.video.throttles import (
+    IntegrityCheckThrottle,
+    VideoAuthorizeThrottle,
+    VideoHeartbeatThrottle,
+)
 
 
 def _check_required_integrity(request, user, device_id: str) -> tuple[bool, str, str | None]:
@@ -353,23 +94,6 @@ def _check_required_integrity(request, user, device_id: str) -> tuple[bool, str,
         return False, 'missing', 'مطلوب التحقق من سلامة التطبيق قبل تشغيل الفيديو المحمي.'
 
     return True, 'unverified', None
-
-
-def _neighbor_lectures_payload(lecture: Lecture, package: CoursePackage | None) -> tuple[dict | None, dict | None]:
-    if package:
-        ordered = list(package.lectures.filter(is_active=True).order_by('created_at', 'id').values('id', 'title'))
-    elif lecture.group:
-        ordered = list(lecture.group.lectures.filter(is_active=True).order_by('created_at', 'id').values('id', 'title'))
-    else:
-        return None, None
-
-    ids = [item['id'] for item in ordered]
-    if lecture.id not in ids:
-        return None, None
-    idx = ids.index(lecture.id)
-    prev_lec = ordered[idx - 1] if idx > 0 else None
-    next_lec = ordered[idx + 1] if idx + 1 < len(ordered) else None
-    return prev_lec, next_lec
 
 
 class VideoAuthorizeAPIView(APIView):
@@ -716,161 +440,6 @@ class VideoHeartbeatAPIView(APIView):
         return Response(response_data)
 
 
-class VideoProgressAPIView(APIView):
-    """حفظ واسترجاع تقدم المشاهدة وموضع الاستئناف والسرعة المفضلة."""
-    permission_classes = [IsAuthenticated, IsNotBanned]
-    throttle_classes = [VideoProgressThrottle]
-
-    def get(self, request, lecture_id):
-        lecture = get_object_or_404(Lecture, id=lecture_id)
-        if not _user_can_access_lecture_metadata(request.user, lecture):
-            return Response({'error': 'غير مصرح لك بالوصول إلى بيانات هذه المحاضرة.'}, status=status.HTTP_403_FORBIDDEN)
-        progress, _ = VideoProgress.objects.get_or_create(user=request.user, lecture=lecture)
-        return Response({
-            'lecture_id': lecture.id,
-            'position_seconds': progress.position_seconds,
-            'duration_seconds': progress.duration_seconds,
-            'watched_seconds': progress.watched_seconds,
-            'progress_percent': round(progress.progress_percent, 1),
-            'is_completed': progress.is_completed,
-            'preferred_speed': progress.preferred_speed,
-            'last_watched_at': progress.last_watched_at,
-        })
-
-    def post(self, request, lecture_id):
-        lecture = get_object_or_404(Lecture, id=lecture_id)
-        if not _user_can_access_lecture_metadata(request.user, lecture):
-            return Response({'error': 'غير مصرح لك بتحديث تقدم هذه المحاضرة.'}, status=status.HTTP_403_FORBIDDEN)
-        position = max(int(request.data.get('position_seconds', 0) or 0), 0)
-        duration = max(int(request.data.get('duration_seconds', 0) or 0), 0)
-        watched_delta = max(int(request.data.get('watched_delta_seconds', 0) or 0), 0)
-        raw_speed = float(request.data.get('preferred_speed', 1.0) or 1.0)
-        clamped_speed = min(max(raw_speed, 0.5), 2.0)
-
-        progress, _ = VideoProgress.objects.get_or_create(user=request.user, lecture=lecture)
-        if duration > 0:
-            progress.duration_seconds = duration
-        effective_duration = progress.duration_seconds or getattr(getattr(lecture, 'video_asset', None), 'duration_seconds', 0)
-        if effective_duration > 0:
-            position = min(position, effective_duration)
-        progress.position_seconds = position
-        progress.watched_seconds += min(watched_delta, 120)
-        progress.preferred_speed = clamped_speed
-
-        if effective_duration > 0:
-            pct = min((position / effective_duration) * 100.0, 100.0)
-            progress.progress_percent = max(progress.progress_percent, pct)
-            if pct >= 90.0:
-                progress.is_completed = True
-
-        progress.save()
-        return Response({
-            'lecture_id': lecture.id,
-            'position_seconds': progress.position_seconds,
-            'duration_seconds': progress.duration_seconds,
-            'watched_seconds': progress.watched_seconds,
-            'progress_percent': round(progress.progress_percent, 1),
-            'is_completed': progress.is_completed,
-            'preferred_speed': progress.preferred_speed,
-        })
-
-
-class ContinueWatchingAPIView(APIView):
-    """قائمة استكمال المشاهدة للطالب مع نسب الإنجاز وموضع التوقف."""
-    permission_classes = [IsAuthenticated, IsNotBanned]
-
-    def get(self, request):
-        ios_access = check_web_ios_only_lecture_access(request, request.user)
-        if not ios_access.get('allowed'):
-            return Response({
-                'items': [],
-                'lectures_blocked': True,
-                'lectures_block_reason': ios_access.get('error') or '',
-                'lectures_block_code': ios_access.get('code') or 'WEB_LECTURES_IOS_ONLY',
-            })
-
-        rows = (
-            VideoProgress.objects.filter(user=request.user, position_seconds__gt=0)
-            .select_related('lecture__group', 'lecture__video_asset')
-            .order_by('-last_watched_at')[:12]
-        )
-        items = []
-        for row in rows:
-            lec = row.lecture
-            pkg = lec.packages.first() if not lec.group else None
-            items.append({
-                'lecture_id': lec.id,
-                'lecture_title': lec.title,
-                'group_id': lec.group_id,
-                'group_name': lec.group.name if lec.group else '',
-                'package_id': pkg.id if pkg else None,
-                'package_title': pkg.title if pkg else '',
-                'is_package_lecture': bool(pkg and not lec.group_id),
-                'position_seconds': row.position_seconds,
-                'duration_seconds': row.duration_seconds,
-                'progress_percent': round(row.progress_percent, 1),
-                'is_completed': row.is_completed,
-                'preferred_speed': row.preferred_speed,
-                'last_watched_at': row.last_watched_at,
-            })
-        return Response({'items': items})
-
-
-class VideoBookmarksAPIView(APIView):
-    """إدارة العلامات المرجعية الشخصية داخل المحاضرة."""
-    permission_classes = [IsAuthenticated, IsNotBanned]
-
-    def get(self, request, lecture_id):
-        lecture = get_object_or_404(Lecture, id=lecture_id)
-        if not _user_can_access_lecture_metadata(request.user, lecture):
-            return Response({'error': 'غير مصرح لك بالوصول إلى علامات هذه المحاضرة.'}, status=status.HTTP_403_FORBIDDEN)
-        bookmarks = VideoBookmark.objects.filter(user=request.user, lecture=lecture)
-        return Response({
-            'bookmarks': [
-                {
-                    'id': b.id,
-                    'timestamp_seconds': b.timestamp_seconds,
-                    'title': b.title,
-                    'note': b.note,
-                    'created_at': b.created_at,
-                }
-                for b in bookmarks
-            ]
-        })
-
-    def post(self, request, lecture_id):
-        lecture = get_object_or_404(Lecture, id=lecture_id)
-        if not _user_can_access_lecture_metadata(request.user, lecture):
-            return Response({'error': 'غير مصرح لك بإضافة علامات لهذه المحاضرة.'}, status=status.HTTP_403_FORBIDDEN)
-        ts = max(int(request.data.get('timestamp_seconds', 0) or 0), 0)
-        title = str(request.data.get('title') or '').strip() or f'علامة عند {ts // 60:02d}:{ts % 60:02d}'
-        note = str(request.data.get('note') or '').strip()
-        bookmark = VideoBookmark.objects.create(
-            user=request.user,
-            lecture=lecture,
-            timestamp_seconds=ts,
-            title=title[:120],
-            note=note,
-        )
-        return Response(
-            {
-                'bookmark': {
-                    'id': bookmark.id,
-                    'timestamp_seconds': bookmark.timestamp_seconds,
-                    'title': bookmark.title,
-                    'note': bookmark.note,
-                    'created_at': bookmark.created_at,
-                }
-            },
-            status=status.HTTP_201_CREATED,
-        )
-
-    def delete(self, request, bookmark_id=None, lecture_id=None):
-        bookmark = get_object_or_404(VideoBookmark, id=bookmark_id, user=request.user)
-        bookmark.delete()
-        return Response({'message': 'تم حذف العلامة المرجعية.'})
-
-
 class VideoSessionRevokeAPIView(APIView):
     """إبطال أو إنهاء جلسة تشغيل فيديو نشطة."""
     permission_classes = [IsAuthenticated, IsNotBanned]
@@ -1079,3 +648,83 @@ class PlayIntegrityVerifyAPIView(APIView):
             **verdict,
         })
 
+# Compatibility re-exports for original imports and extracted video helpers/views
+import mimetypes
+import os
+from datetime import timedelta
+from pathlib import Path
+import jwt
+from django.conf import settings
+from django.core.cache import cache
+from django.db import transaction
+from django.http import FileResponse, HttpResponse
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from rest_framework import status
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.throttling import UserRateThrottle
+from rest_framework.views import APIView
+from students.models import (
+    Enrollment,
+    PackageEnrollment,
+    VideoViewTracking,
+)
+from students.views import check_student_access
+from teachers.models import CoursePackage, Lecture, PDFFile, VideoCode
+from .device_security_service import (
+    check_device_allowed,
+    check_web_ios_only_lecture_access,
+    detect_account_sharing,
+    record_device_activity,
+    record_security_event,
+)
+from .integrity_service import (
+    get_integrity_policy_mode,
+    issue_integrity_challenge,
+    verify_and_record_integrity,
+)
+from .models import (
+    DeviceIntegrityRecord,
+    DeviceTrustStatus,
+    PlaybackSession,
+    RegisteredDevice,
+    VideoAsset,
+    VideoBookmark,
+    VideoProgress,
+)
+from .permissions import IsNotBanned
+from .serializers import LectureSerializer, PDFFileSerializer
+from .video_security import (
+    HEARTBEAT_INTERVAL_SECONDS,
+    PLAYBACK_TOKEN_TTL_SECONDS,
+    build_watermark_payload,
+    clear_watch_window,
+    create_or_rotate_playback_session,
+    decode_playback_token,
+    detect_and_record_anomaly,
+    get_active_watch_window_expiry,
+    grant_watch_window,
+    issue_playback_token,
+    log_security_event,
+    resolve_signed_playback_source,
+)
+from api_v1.views.video.throttles import (
+    IntegrityCheckThrottle,
+    VideoAuthorizeThrottle,
+    VideoHeartbeatThrottle,
+    VideoProgressThrottle,
+)
+from api_v1.services.video_access import (
+    _check_user_lecture_entitlement,
+    _has_recent_playback_session,
+    _mark_watch_window,
+    _neighbor_lectures_payload,
+    _package_error,
+    _user_can_access_lecture_metadata,
+)
+from api_v1.views.video.progress import (
+    ContinueWatchingAPIView,
+    VideoBookmarksAPIView,
+    VideoProgressAPIView,
+)

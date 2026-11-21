@@ -112,30 +112,30 @@
             </div>
             <div class="col-md-3">
                 <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="enforceLimit" name="enforce_device_limits" {% if
-                        policy.enforce_device_limits %}checked{% endif %}>
+                    <input class="form-check-input" type="checkbox" id="enforceLimit" name="enforce_device_limits"
+                        {% if policy.enforce_device_limits %}checked{% endif %}>
                     <label class="form-check-label small fw-bold" for="enforceLimit">فرض حد الأجهزة</label>
                 </div>
             </div>
             <div class="col-md-3">
                 <div class="form-check form-switch">
                     <input class="form-check-input" type="checkbox" id="enforceScreen"
-                        name="enforce_screen_capture_policy" {% if policy.enforce_screen_capture_policy %}checked{%
-                        endif %}>
+                        name="enforce_screen_capture_policy"
+                        {% if policy.enforce_screen_capture_policy %}checked{% endif %}>
                     <label class="form-check-label small fw-bold" for="enforceScreen">حماية الشاشة</label>
                 </div>
             </div>
             <div class="col-md-3">
                 <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="blockVpn" name="block_vpn_connections" {% if
-                        policy.block_vpn_connections %}checked{% endif %}>
+                    <input class="form-check-input" type="checkbox" id="blockVpn" name="block_vpn_connections"
+                        {% if policy.block_vpn_connections %}checked{% endif %}>
                     <label class="form-check-label small fw-bold" for="blockVpn">منع الدخول بـ VPN</label>
                 </div>
             </div>
             <div class="col-md-3">
                 <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="blockDev" name="block_developer_options" {% if
-                        policy.block_developer_options %}checked{% endif %}>
+                    <input class="form-check-input" type="checkbox" id="blockDev" name="block_developer_options"
+                        {% if policy.block_developer_options %}checked{% endif %}>
                     <label class="form-check-label small fw-bold" for="blockDev">منع خيارات المطور</label>
                 </div>
             </div>
@@ -143,8 +143,7 @@
                 <div class="form-check form-switch">
                     <input class="form-check-input" type="checkbox" id="blockDnsPort" name="block_abnormal_dns_or_ports"
                         {% if policy.block_abnormal_dns_or_ports %}checked{% endif %}>
-                    <label class="form-check-label small fw-bold" for="blockDnsPort">منع توجيه البورتات و DNS غير
-                        الطبيعي</label>
+                    <label class="form-check-label small fw-bold" for="blockDnsPort">منع توجيه البورتات و DNS غير الطبيعي</label>
                 </div>
             </div>
             <div class="col-md-6 text-start">
@@ -167,34 +166,29 @@
             <div class="col-md-2">
                 <select name="trust" class="form-select form-select-sm">
                     <option value="">كل حالات الثقة</option>
-                    <option value="multi_account" {% if trust_filter=='multi_account' %}selected{% endif %}>أكثر من حساب
-                    </option>
-                    <option value="maintenance_approved" {% if trust_filter=='maintenance_approved' %}selected{% endif
-                        %}>معتمد للصيانة</option>
+                    <option value="multi_account" {% if trust_filter == 'multi_account' %}selected{% endif %}>أكثر من حساب</option>
+                    <option value="maintenance_approved" {% if trust_filter == 'maintenance_approved' %}selected{% endif %}>معتمد للصيانة</option>
                     {% for val, label in trust_choices %}
-                    <option value="{{ val }}" {% if trust_filter==val %}selected{% endif %}>{{ label }}</option>
+                    <option value="{{ val }}" {% if trust_filter == val %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
             <div class="col-md-2">
                 <select name="severity" class="form-select form-select-sm">
                     <option value="">كل مستويات الخطورة</option>
-                    <option value="low" {% if severity_filter=='low' %}selected{% endif %}>Low</option>
-                    <option value="medium" {% if severity_filter=='medium' %}selected{% endif %}>Medium</option>
-                    <option value="high" {% if severity_filter=='high' %}selected{% endif %}>High</option>
-                    <option value="critical" {% if severity_filter=='critical' %}selected{% endif %}>Critical</option>
+                    <option value="low" {% if severity_filter == 'low' %}selected{% endif %}>Low</option>
+                    <option value="medium" {% if severity_filter == 'medium' %}selected{% endif %}>Medium</option>
+                    <option value="high" {% if severity_filter == 'high' %}selected{% endif %}>High</option>
+                    <option value="critical" {% if severity_filter == 'critical' %}selected{% endif %}>Critical</option>
                 </select>
             </div>
             <div class="col-md-2">
                 <select name="event_status" class="form-select form-select-sm">
                     <option value="">كل حالات التحقيق</option>
-                    <option value="open" {% if event_status_filter=='open' %}selected{% endif %}>مفتوح</option>
-                    <option value="investigating" {% if event_status_filter=='investigating' %}selected{% endif %}>قيد
-                        التحقيق</option>
-                    <option value="resolved" {% if event_status_filter=='resolved' %}selected{% endif %}>تم الحل
-                    </option>
-                    <option value="false_positive" {% if event_status_filter=='false_positive' %}selected{% endif %}>
-                        إنذار كاذب (False Positive)</option>
+                    <option value="open" {% if event_status_filter == 'open' %}selected{% endif %}>مفتوح</option>
+                    <option value="investigating" {% if event_status_filter == 'investigating' %}selected{% endif %}>قيد التحقيق</option>
+                    <option value="resolved" {% if event_status_filter == 'resolved' %}selected{% endif %}>تم الحل</option>
+                    <option value="false_positive" {% if event_status_filter == 'false_positive' %}selected{% endif %}>إنذار كاذب (False Positive)</option>
                 </select>
             </div>
             <div class="col-md-2 d-flex gap-2">
@@ -421,10 +415,12 @@
             <div class="p-3">
                 {% for s in sharing_alerts %}
                 <div class="border-bottom pb-2 mb-2">
-                    <div class="fw-bold small">{{ s.user.username|default:"-" }} — <span class="text-danger">{{
-                            s.event_type }}</span></div>
-                    <div class="small text-muted">{{ s.created_at|date:"Y-m-d H:i" }} · IP: {{ s.ip_address|default:"-"
-                        }}</div>
+                    <div class="fw-bold small">
+                        {{ s.user.username|default:"-" }} — <span class="text-danger">{{ s.event_type }}</span>
+                    </div>
+                    <div class="small text-muted">
+                        {{ s.created_at|date:"Y-m-d H:i" }} · IP: {{ s.ip_address|default:"-" }}
+                    </div>
                 </div>
                 {% empty %}
                 <div class="text-muted small text-center py-2">لا توجد تنبيهات مشاركة حساب حالياً.</div>
@@ -457,8 +453,13 @@
                     <td>{{ sess.user.username }}</td>
                     <td>{{ sess.device.device_name|default:sess.installation_id|truncatechars:28 }}</td>
                     <td>{{ sess.ip_address|default:"-" }} ({{ sess.country_code|default:"-" }})</td>
-                    <td>{% if sess.is_vpn_or_proxy %}<span class="badge bg-warning text-dark">VPN/Proxy</span>{% else
-                        %}-{% endif %}</td>
+                    <td>
+                        {% if sess.is_vpn_or_proxy %}
+                        <span class="badge bg-warning text-dark">VPN/Proxy</span>
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
                     <td><small>{{ sess.last_seen_at|date:"Y-m-d H:i" }}</small></td>
                     <td>
                         <form method="POST" action="{% url 'admin_panel:security_admin_action' %}">
