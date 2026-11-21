@@ -51,6 +51,7 @@ from .web import (
 )
 from .events import (
     record_device_activity,
+    record_failed_login,
     record_security_event,
     prune_expired_telemetry,
 )

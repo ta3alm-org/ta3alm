@@ -159,31 +159,14 @@ def group_students(request, group_id):
     form = PerformanceForm()
 
 
-        # كود البحث (ضعه بعد جلب البيانات الأساسية وقبل الـ context)
+    # بحث الطلاب
     query = request.GET.get('q')
-    
     if query:
-        # 1. بحث المحاضرات
-        if 'lectures' in locals():
-            lectures = lectures.filter(title__icontains=query)
-            
-        # 2. بحث الامتحانات
-        if 'exams' in locals():
-            exams = exams.filter(title__icontains=query)
-            
-        # 3. بحث الطلاب (والطلبات)
-        if 'enrollments' in locals():
-            enrollments = enrollments.filter(
-                Q(student__user__first_name__icontains=query) |
-                Q(student__user__last_name__icontains=query) |
-                Q(student__user__phone__icontains=query)
-            )
-        if 'pending_enrollments' in locals():
-            pending_enrollments = pending_enrollments.filter(
-                Q(student__user__first_name__icontains=query) |
-                Q(student__user__last_name__icontains=query) |
-                Q(student__user__phone__icontains=query)
-            )
+        enrollments = enrollments.filter(
+            Q(student__user__first_name__icontains=query) |
+            Q(student__user__last_name__icontains=query) |
+            Q(student__user__phone__icontains=query)
+        )
 
     context = {
         'group': group,
@@ -225,31 +208,14 @@ def group_requests(request, group_id):
     pending_enrollments = group.enrollments.filter(is_active=False).select_related('student__user')
     pending_count = pending_enrollments.count()
 
-        # كود البحث (ضعه بعد جلب البيانات الأساسية وقبل الـ context)
+    # بحث الطلبات
     query = request.GET.get('q')
-    
     if query:
-        # 1. بحث المحاضرات
-        if 'lectures' in locals():
-            lectures = lectures.filter(title__icontains=query)
-            
-        # 2. بحث الامتحانات
-        if 'exams' in locals():
-            exams = exams.filter(title__icontains=query)
-            
-        # 3. بحث الطلاب (والطلبات)
-        if 'enrollments' in locals():
-            enrollments = enrollments.filter(
-                Q(student__user__first_name__icontains=query) |
-                Q(student__user__last_name__icontains=query) |
-                Q(student__user__phone__icontains=query)
-            )
-        if 'pending_enrollments' in locals():
-            pending_enrollments = pending_enrollments.filter(
-                Q(student__user__first_name__icontains=query) |
-                Q(student__user__last_name__icontains=query) |
-                Q(student__user__phone__icontains=query)
-            )
+        pending_enrollments = pending_enrollments.filter(
+            Q(student__user__first_name__icontains=query) |
+            Q(student__user__last_name__icontains=query) |
+            Q(student__user__phone__icontains=query)
+        )
 
     context = {
         'group': group,

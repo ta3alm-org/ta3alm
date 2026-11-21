@@ -227,7 +227,7 @@ def edit_user(request, user_id):
         user_form = AdminUserEditForm(request.POST, instance=target)
 
         if target.role == 'teacher' and hasattr(target, 'teacher_profile'):
-            teacher_form = AdminTeacherEditForm(request.POST, instance=target.teacher_profile)
+            teacher_form = AdminTeacherEditForm(request.POST, request.FILES, instance=target.teacher_profile)
             if user_form.is_valid() and teacher_form.is_valid():
                 user_form.save()
                 teacher_form.save()

@@ -12,9 +12,13 @@
 {% block content %}
 <div class="page-header d-flex align-items-center justify-content-between flex-wrap gap-3 mb-4">
     <div class="d-flex align-items-center gap-3">
+        {% if target_user.teacher_profile and target_user.teacher_profile.image %}
+        <img src="{{ target_user.teacher_profile.image.url }}" alt="{{ target_user.get_full_name|default:target_user.username }}" class="user-avatar" style="width:56px;height:56px;border-radius:14px;object-fit:cover;padding:0;border:1px solid rgba(0,0,0,0.08);">
+        {% else %}
         <div class="user-avatar" style="width:56px;height:56px;font-size:1.4rem;border-radius:14px;">
             {{ target_user.first_name|slice:":1"|upper|default:"U" }}
         </div>
+        {% endif %}
         <div>
             <h1 class="mb-1">{{ target_user.get_full_name|default:target_user.username }}</h1>
             <p class="mb-0 text-muted">
@@ -31,7 +35,7 @@
 <div class="row g-4">
     <!-- العمود الأيمن: البيانات الأساسية وبيانات الدور -->
     <div class="col-lg-7">
-        <form method="POST" id="editUserForm">
+        <form method="POST" enctype="multipart/form-data" id="editUserForm">
             {% csrf_token %}
             <div class="admin-card mb-4">
                 <div class="admin-card-header">

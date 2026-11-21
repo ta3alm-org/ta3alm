@@ -64,9 +64,13 @@
                         <tr>
                             <td>
                                 <div class="d-flex align-items-center gap-2">
+                                    {% if t.image %}
+                                    <img src="{{ t.image.url }}" alt="{{ t.user.get_full_name }}" class="user-avatar" style="object-fit:cover;padding:0;border:1px solid rgba(0,0,0,0.08);">
+                                    {% else %}
                                     <div class="user-avatar" style="background: hsl({{ t.user.id|stringformat:'d' }}00, 60%, 50%);">
                                         {{ t.user.first_name|slice:":1" }}
                                     </div>
+                                    {% endif %}
                                     <div>
                                         <div class="fw-bold" style="font-size:0.875rem;">
                                             {{ t.user.get_full_name }}

@@ -17,8 +17,17 @@
                 {% for r in requests %}
                 <tr>
                     <td>
-                        <div class="fw-bold" style="font-size:0.875rem;">{{ r.wallet.teacher.user.get_full_name }}</div>
-                        <div class="text-muted" style="font-size:0.75rem;">{{ r.wallet.teacher.user.phone }}</div>
+                        <div class="d-flex align-items-center gap-2">
+                            {% if r.wallet.teacher.image %}
+                            <img src="{{ r.wallet.teacher.image.url }}" alt="{{ r.wallet.teacher.user.get_full_name }}" class="user-avatar" style="object-fit:cover;padding:0;border:1px solid rgba(0,0,0,0.08);">
+                            {% else %}
+                            <div class="user-avatar">{{ r.wallet.teacher.user.first_name|slice:":1"|default:"T" }}</div>
+                            {% endif %}
+                            <div>
+                                <div class="fw-bold" style="font-size:0.875rem;">{{ r.wallet.teacher.user.get_full_name }}</div>
+                                <div class="text-muted" style="font-size:0.75rem;">{{ r.wallet.teacher.user.phone }}</div>
+                            </div>
+                        </div>
                     </td>
                     <td class="fw-bold" style="color:var(--admin-success);">{{ r.amount }} EGP</td>
                     <td style="font-size:0.8rem;">

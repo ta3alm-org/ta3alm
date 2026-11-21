@@ -58,15 +58,17 @@ class AdminTeacherEditForm(forms.ModelForm):
 
     class Meta:
         model = TeacherProfile
-        fields = ['subject', 'bio', 'subscription_end_date', 'current_plan']
+        fields = ['subject', 'bio', 'image', 'subscription_end_date', 'current_plan']
         labels = {
             'subject':      'المادة',
             'bio':          'نبذة',
+            'image':        'صورة المعلم',
             'current_plan': 'الباقة الحالية',
         }
         widgets = {
             'subject':      forms.Select(attrs={'class': 'form-select'}),
             'bio':          forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'image':        forms.ClearableFileInput(attrs={'class': 'form-control'}),
             'current_plan': forms.Select(attrs={'class': 'form-select'}),
         }
 

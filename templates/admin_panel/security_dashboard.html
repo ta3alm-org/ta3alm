@@ -70,6 +70,115 @@
     </div>
 </div>
 
+<!-- AI Security Analyst & Quick Trigger -->
+<div class="admin-card mb-4">
+    <div class="admin-card-header flex-wrap gap-2">
+        <span class="admin-card-title">
+            <i class="bi bi-cpu-fill me-2 text-danger"></i>مركز الذكاء الاصطناعي الأمني وتقارير الفحص الآلي
+        </span>
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            {% if ai_config.enabled and ai_config.configured %}
+            <span class="badge bg-success">مفعّل ({{ ai_config.provider|upper }} / {{ ai_config.model }})</span>
+            {% elif ai_config.enabled %}
+            <span class="badge bg-warning text-dark">يعمل بالمحلل السلوكي المحلي — ضع AI API Key للتفعيل الكامل</span>
+            {% else %}
+            <span class="badge bg-secondary">معطّل</span>
+            {% endif %}
+            <a href="#ai-reports-section" class="btn btn-sm btn-outline-primary fw-bold">
+                <i class="bi bi-clipboard2-pulse me-1"></i>عرض تقارير السلوك ({{ risk_profiles|length }})
+            </a>
+            <form method="POST" action="{% url 'admin_panel:security_admin_action' %}" class="d-inline">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="analyze_user_behavior">
+                <button type="submit" class="btn btn-sm btn-danger fw-bold">
+                    <i class="bi bi-play-circle-fill me-1"></i>تشغيل فحص الذكاء الاصطناعي الآن
+                </button>
+            </form>
+        </div>
+    </div>
+    <div class="p-4">
+        <div class="row g-2 mb-3 small">
+            <div class="col-md-4">
+                <div class="border rounded p-2 bg-light">
+                    <span class="text-muted d-block">آخر فحص آلي</span>
+                    <strong>{{ policy.last_ai_audit_at|date:"Y-m-d H:i"|default:"لم يتم التشغيل بعد" }}</strong>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="border rounded p-2 bg-light">
+                    <span class="text-muted d-block">نتيجة آخر دورة فحص</span>
+                    <strong>
+                        فحص: {{ ai_summary.analyzed_users|default:0 }} مستخدم · عالي الخطورة: {{ ai_summary.flagged_high_risk|default:0 }} (الإجمالي: {{ stats.high_risk_users|default:0 }})
+                    </strong>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="border rounded p-2 bg-light">
+                    <span class="text-muted d-block">الحظر التلقائي / حالة المفتاح</span>
+                    <strong>
+                        حظر: {{ ai_summary.banned_users|default:0 }} حساب / {{ ai_summary.banned_devices|default:0 }} جهاز
+                        {% if ai_config.masked_key %}· Key: <code dir="ltr">{{ ai_config.masked_key }}</code>{% endif %}
+                    </strong>
+                </div>
+            </div>
+        </div>
+        <form method="POST" action="{% url 'admin_panel:security_admin_action' %}" class="row g-3 align-items-end">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="update_ai_config">
+            <div class="col-md-3">
+                <label class="form-label small fw-bold">مزود الذكاء الاصطناعي</label>
+                <select name="ai_provider" class="form-select form-select-sm">
+                    <option value="auto" {% if policy.ai_provider == 'auto' %}selected{% endif %}>كشف تلقائي (Auto)</option>
+                    <option value="gemini" {% if policy.ai_provider == 'gemini' %}selected{% endif %}>Google Gemini</option>
+                    <option value="openai" {% if policy.ai_provider == 'openai' %}selected{% endif %}>OpenAI</option>
+                    <option value="groq" {% if policy.ai_provider == 'groq' %}selected{% endif %}>Groq</option>
+                    <option value="deepseek" {% if policy.ai_provider == 'deepseek' %}selected{% endif %}>DeepSeek</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-bold">اسم الموديل</label>
+                <input type="text" name="ai_model_name" dir="ltr" value="{{ policy.ai_model_name|default:'gemini-2.5-flash' }}" class="form-control form-control-sm">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small fw-bold">تجاوز مفتاح AI API (اختياري — يقرأ .env تلقائياً)</label>
+                <input type="password" name="ai_api_key_override" dir="ltr" class="form-control form-control-sm" placeholder="اتركه فارغاً لاستخدام مفتاح .env أو المحفوظ">
+            </div>
+            <div class="col-md-2">
+                {% if policy.ai_api_key_override %}
+                <div class="form-check mb-1">
+                    <input class="form-check-input" type="checkbox" id="clearAiKey" name="clear_ai_key" value="1">
+                    <label class="form-check-label small text-danger" for="clearAiKey">مسح التجاوز</label>
+                </div>
+                {% endif %}
+                <button type="submit" class="btn btn-dark btn-sm w-100 fw-bold">
+                    <i class="bi bi-save me-1"></i>حفظ إعدادات AI
+                </button>
+            </div>
+            <div class="col-md-4">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="aiEnabledSwitch" name="ai_security_enabled"
+                        {% if policy.ai_security_enabled %}checked{% endif %}>
+                    <label class="form-check-label small fw-bold" for="aiEnabledSwitch">تفعيل محلل الذكاء الاصطناعي</label>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="aiHourlySwitch" name="ai_hourly_schedule_enabled"
+                        {% if policy.ai_hourly_schedule_enabled %}checked{% endif %}>
+                    <label class="form-check-label small fw-bold" for="aiHourlySwitch">فحص دوري تلقائي كل ساعة</label>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="aiAutoBanSwitch" name="ai_auto_enforce_bans"
+                        {% if policy.ai_auto_enforce_bans %}checked{% endif %}>
+                    <label class="form-check-label small fw-bold" for="aiAutoBanSwitch">تنفيذ الحظر التلقائي عند الخطورة الحرجة</label>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
 <!-- Security Policy Config -->
 <div class="admin-card mb-4">
     <div class="admin-card-header">
@@ -473,6 +582,122 @@
                 {% empty %}
                 <tr>
                     <td colspan="6" class="text-center text-muted py-4">لا توجد جلسات نشطة.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- AI Behavioral Reports -->
+<div class="admin-card mt-4" id="ai-reports-section">
+    <div class="admin-card-header flex-wrap gap-2">
+        <span class="admin-card-title">
+            <i class="bi bi-clipboard2-data-fill me-2 text-primary"></i>تقارير الذكاء الاصطناعي وتحليل سلوك المستخدمين
+        </span>
+        <form method="POST" action="{% url 'admin_panel:security_admin_action' %}" class="d-inline">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="analyze_user_behavior">
+            <button type="submit" class="btn btn-sm btn-outline-danger fw-bold">
+                <i class="bi bi-arrow-repeat me-1"></i>تحديث جميع التقارير الآن
+            </button>
+        </form>
+    </div>
+    <div class="table-responsive">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>المستخدم</th>
+                    <th>درجة الخطورة</th>
+                    <th>مؤشرات السلوك</th>
+                    <th>تقرير وتوصية الذكاء الاصطناعي</th>
+                    <th>إجراءات الحظر والفحص</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in risk_profiles %}
+                <tr>
+                    <td>
+                        <div class="fw-bold">{{ p.user.get_full_name|default:p.user.email|default:p.user.username }}</div>
+                        <div class="small text-muted">{{ p.user.email }} · IP: {{ p.last_ip|default:"-" }}</div>
+                        {% if p.user.is_banned %}
+                        <span class="badge bg-dark mt-1">الحساب محظور</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {% if p.behavior_risk_level == 'critical' %}bg-danger{% elif p.behavior_risk_level == 'high' %}bg-warning text-dark{% elif p.behavior_risk_level == 'medium' %}bg-info text-dark{% else %}bg-success{% endif %}">
+                            {{ p.behavior_risk_score }}% ({{ p.behavior_risk_level|upper }})
+                        </span>
+                        <div class="small text-muted mt-1">AI: {{ p.ai_risk_score }}%</div>
+                    </td>
+                    <td>
+                        <div class="small">
+                            إجراءات: <strong>{{ p.total_actions_count }}</strong><br>
+                            دخول فاشل: <strong>{{ p.total_failed_logins }}</strong> · MITM/عبث: <strong class="text-danger">{{ p.proxy_tamper_strikes }}</strong> · مشاركة: <strong class="text-warning">{{ p.sharing_strikes }}</strong>
+                        </div>
+                    </td>
+                    <td style="min-width:260px;">
+                        <div class="small fw-bold mb-1">
+                            التوصية:
+                            {% if p.ai_recommended_action == 'device_and_user' %}
+                            <span class="text-danger">حظر الجهاز والحساب معاً</span>
+                            {% elif p.ai_recommended_action == 'device_only' %}
+                            <span class="text-danger">حظر الجهاز فقط</span>
+                            {% elif p.ai_recommended_action == 'user_only' %}
+                            <span class="text-danger">حظر الحساب فقط</span>
+                            {% elif p.ai_recommended_action == 'warn' %}
+                            <span class="text-warning">مراقبة وتحذير</span>
+                            {% else %}
+                            <span class="text-success">سلوك طبيعي</span>
+                            {% endif %}
+                        </div>
+                        <div class="small text-muted">{{ p.ai_analysis_summary|default:"لم يصدر تقرير AI لهذا المستخدم بعد — اضغط فحص AI." }}</div>
+                        <div class="small text-muted mt-1">آخر تحليل: {{ p.ai_last_analyzed_at|date:"Y-m-d H:i"|default:"-" }}</div>
+                    </td>
+                    <td>
+                        <div class="d-flex flex-wrap gap-1">
+                            <form method="POST" action="{% url 'admin_panel:security_admin_action' %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="analyze_user_behavior">
+                                <input type="hidden" name="user_id" value="{{ p.user.id }}">
+                                <button type="submit" class="btn btn-sm btn-outline-primary" title="فحص هذا المستخدم بالذكاء الاصطناعي">
+                                    <i class="bi bi-cpu"></i> فحص AI
+                                </button>
+                            </form>
+                            <form method="POST" action="{% url 'admin_panel:security_admin_action' %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="ban_device_only">
+                                <input type="hidden" name="user_id" value="{{ p.user.id }}">
+                                <button type="submit" class="btn btn-sm btn-outline-warning text-dark">حظر جهاز</button>
+                            </form>
+                            <form method="POST" action="{% url 'admin_panel:security_admin_action' %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="ban_user_only">
+                                <input type="hidden" name="user_id" value="{{ p.user.id }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">حظر حساب</button>
+                            </form>
+                            <form method="POST" action="{% url 'admin_panel:security_admin_action' %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="ban_user_and_device">
+                                <input type="hidden" name="user_id" value="{{ p.user.id }}">
+                                <button type="submit" class="btn btn-sm btn-danger">حظر الاثنين</button>
+                            </form>
+                            {% if p.user.is_banned or p.auto_ban_mode != 'none' %}
+                            <form method="POST" action="{% url 'admin_panel:security_admin_action' %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="unban_user_and_devices">
+                                <input type="hidden" name="user_id" value="{{ p.user.id }}">
+                                <button type="submit" class="btn btn-sm btn-success">فك الحظر</button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="text-center text-muted py-4">
+                        لا توجد تقارير سلوكية بعد — اضغط على «تشغيل فحص الذكاء الاصطناعي الآن» بالأعلى لتحليل المستخدمين وإصدار التقارير فوراً.
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>

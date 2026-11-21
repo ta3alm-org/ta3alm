@@ -91,6 +91,7 @@ class PlatformNotificationCoverageTests(APITestCase):
             subject=self.subject,
             current_plan=self.plan,
             subscription_end_date=timezone.now() + timedelta(days=2),
+            is_approved=True,
         )
         self.wallet = Wallet.objects.create(
             teacher=self.teacher,
@@ -545,6 +546,8 @@ class PlatformNotificationCoverageTests(APITestCase):
                 title__contains='v1.2.0',
             ).exists()
         )
+        site_cfg.is_maintenance_mode = False
+        site_cfg.save(update_fields=['is_maintenance_mode'])
 
         # 4. نقطة الإشعارات العادية + نقطة سحب الخلفية للأندرويد
         self.client.force_authenticate(user=self.student_user)
@@ -892,6 +895,7 @@ class AdminCustomNotificationTests(APITestCase):
             subject=self.subject_math,
             current_plan=self.plan_pro,
             subscription_end_date=timezone.now() + timedelta(days=20),
+            is_approved=True,
         )
 
         self.teacher_expired_user = User.objects.create_user(
@@ -908,6 +912,7 @@ class AdminCustomNotificationTests(APITestCase):
             subject=self.subject_phys,
             current_plan=self.plan_basic,
             subscription_end_date=timezone.now() - timedelta(days=3),
+            is_approved=True,
         )
 
         self.student_3sec_user = User.objects.create_user(

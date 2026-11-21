@@ -449,10 +449,23 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # إعدادات الذكاء الاصطناعي للأمن وتحليل سلوك المستخدمين (AI Security Analyst)
 # ضع مفتاح الـ API الخاص بك هنا (يدعم Google Gemini أو OpenAI / Groq / DeepSeek)
 # ==========================================================
-AI_SECURITY_API_KEY = os.environ.get(
-    'AI_SECURITY_API_KEY',
+AI_SECURITY_API_KEY = next(
+    (
+        val
+        for val in (
+            os.environ.get(name, '').strip()
+            for name in (
+                'AI_SECURITY_API_KEY',
+                'GEMINI_API_KEY',
+                'GOOGLE_API_KEY',
+                'OPENAI_API_KEY',
+                'GROQ_API_KEY',
+            )
+        )
+        if val and val != 'PUT_YOUR_AI_API_KEY_HERE'
+    ),
     'PUT_YOUR_AI_API_KEY_HERE',  # <--- ضع الـ API KEY الخاص بك هنا أو من إعدادات الأمان في لوحة الأدمن
-).strip()
+)
 AI_SECURITY_PROVIDER = os.environ.get('AI_SECURITY_PROVIDER', 'auto').strip()  # auto | gemini | openai
 AI_SECURITY_MODEL = os.environ.get('AI_SECURITY_MODEL', 'gemini-2.5-flash').strip()
 AI_SECURITY_HOURLY_ENABLED = os.environ.get('AI_SECURITY_HOURLY_ENABLED', 'True') == 'True'

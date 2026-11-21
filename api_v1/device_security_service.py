@@ -83,6 +83,7 @@ from api_v1.services.device_security.web import (
 from api_v1.services.device_security.events import (
     prune_expired_telemetry,
     record_device_activity,
+    record_failed_login,
     record_security_event,
 )
 from api_v1.services.device_security.blocks import (

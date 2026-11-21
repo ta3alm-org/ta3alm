@@ -4,6 +4,7 @@ Extracted from api_v1/security_engine.py.
 from __future__ import annotations
 
 from datetime import timedelta
+import os
 from typing import Any
 from django.conf import settings
 from django.core.cache import cache
@@ -32,22 +33,40 @@ def _mask_secret(raw: str) -> str:
 
 
 def get_effective_ai_config(policy: SecurityPolicyConfig | None = None) -> dict[str, Any]:
-    """استخراج إعدادات الذكاء الاصطناعي الأمني مع أولوية المفتاح المُدخل من لوحة الإدارة ثم settings."""
+    """استخراج إعدادات الذكاء الاصطناعي الأمني مع أولوية المفتاح المُدخل من لوحة الإدارة ثم settings ثم متغيرات البيئة."""
     pol = policy or SecurityPolicyConfig.load()
-    raw_key = str(getattr(pol, 'ai_api_key_override', '') or '').strip()
-    if not raw_key or raw_key == 'PUT_YOUR_AI_API_KEY_HERE':
-        raw_key = str(getattr(settings, 'AI_SECURITY_API_KEY', '') or '').strip()
+    candidates = [
+        getattr(pol, 'ai_api_key_override', ''),
+        getattr(settings, 'AI_SECURITY_API_KEY', ''),
+        os.environ.get('AI_SECURITY_API_KEY', ''),
+        os.environ.get('GEMINI_API_KEY', ''),
+        os.environ.get('GOOGLE_API_KEY', ''),
+        os.environ.get('OPENAI_API_KEY', ''),
+        os.environ.get('GROQ_API_KEY', ''),
+    ]
+    raw_key = next(
+        (
+            str(val or '').strip()
+            for val in candidates
+            if str(val or '').strip() and str(val or '').strip() != 'PUT_YOUR_AI_API_KEY_HERE'
+        ),
+        '',
+    )
     is_configured = bool(raw_key and raw_key != 'PUT_YOUR_AI_API_KEY_HERE')
 
     provider = str(getattr(pol, 'ai_provider', '') or getattr(settings, 'AI_SECURITY_PROVIDER', 'auto') or 'auto').strip().lower()
     model = str(getattr(pol, 'ai_model_name', '') or getattr(settings, 'AI_SECURITY_MODEL', 'gemini-2.5-flash') or 'gemini-2.5-flash').strip()
     if provider == 'auto' or provider not in ('gemini', 'openai', 'groq', 'deepseek'):
-        if raw_key.startswith('AIza'):
+        if raw_key.startswith('AIza') or raw_key.startswith('AQ.'):
             provider = 'gemini'
         elif raw_key.startswith('gsk_'):
             provider = 'groq'
         elif 'deepseek' in model.lower():
             provider = 'deepseek'
+        elif raw_key.startswith('sk-'):
+            provider = 'openai'
+        elif 'gemini' in model.lower():
+            provider = 'gemini'
         elif raw_key:
             provider = 'openai'
         else:
@@ -205,13 +224,14 @@ def analyze_user_with_ai(
         try:
             verdict = _call_ai_security_llm(telemetry, ai_cfg)
         except Exception as exc:
+            reason_bits = '، '.join(heur['reasons'][:4]) if heur['reasons'] else 'نشاط طبيعي دون مؤشرات عبث'
             verdict = {
                 'used_external_ai': False,
                 'risk_score': heur['score'],
                 'risk_level': heur['level'],
                 'recommended_action': _derive_heuristic_action(heur['score'], heur['reasons'], telemetry),
                 'target_installation_id': _pick_riskiest_installation_id(telemetry),
-                'reason_ar': f"تحليل سلوكي محلي (تعذر الاتصال بـ AI الخارجي: {str(exc)[:100]}).",
+                'reason_ar': f"تحليل سلوكي محلي ({reason_bits}) — تعذر الاتصال بـ AI الخارجي: {str(exc)[:100]}",
             }
     else:
         heur_action = _derive_heuristic_action(heur['score'], heur['reasons'], telemetry)
@@ -323,7 +343,30 @@ def run_hourly_ai_behavioral_audit(*, force: bool = False, request=None) -> dict
         .distinct()
     )
 
-    users = User.objects.filter(id__in=user_ids, is_active=True, is_superuser=False).exclude(role='admin')
+    from api_v1.models import RegisteredDevice
+
+    users_qs = User.objects.filter(id__in=user_ids, is_active=True, is_superuser=False).exclude(role='admin')
+    if force and not users_qs.exists():
+        fallback_ids = set(
+            RegisteredDevice.objects.values_list('user_id', flat=True).distinct()[:25]
+        )
+        fallback_ids.update(
+            UserSecurityProfile.objects.values_list('user_id', flat=True)[:25]
+        )
+        users_qs = (
+            User.objects.filter(id__in=fallback_ids, is_active=True, is_superuser=False)
+            .exclude(role='admin')
+            .order_by('-last_login', '-id')
+        )
+        if not users_qs.exists():
+            users_qs = (
+                User.objects.filter(is_active=True, is_superuser=False)
+                .exclude(role='admin')
+                .order_by('-last_login', '-id')
+            )
+        users = users_qs[:25]
+    else:
+        users = users_qs
     analyzed_users = 0
     flagged_high_risk = 0
     banned_users = 0
@@ -354,6 +397,10 @@ def run_hourly_ai_behavioral_audit(*, force: bool = False, request=None) -> dict
         'model': ai_cfg['model'],
         'ran_at': now.isoformat(),
     }
+    existing_summary = policy.last_ai_audit_summary if isinstance(policy.last_ai_audit_summary, dict) else {}
+    existing_flags = existing_summary.get('boot_guard_flags')
+    if isinstance(existing_flags, dict):
+        summary['boot_guard_flags'] = existing_flags
     policy.last_ai_audit_at = now
     policy.last_ai_audit_summary = summary
     policy.save(update_fields=['last_ai_audit_at', 'last_ai_audit_summary', 'updated_at'])

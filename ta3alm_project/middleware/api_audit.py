@@ -45,6 +45,9 @@ class ApiSecurityAndActivityAuditMiddleware:
         self.get_response = get_response
 
     def _resolve_api_user(self, request):
+        force_user = getattr(request, '_force_auth_user', None)
+        if force_user is not None and getattr(force_user, 'is_authenticated', False):
+            return force_user
         user = getattr(request, 'user', None)
         if user is not None and user.is_authenticated:
             return user
@@ -110,6 +113,7 @@ class ApiSecurityAndActivityAuditMiddleware:
                 '/api/v1/public/metadata/',
                 '/api/v1/public/app-version/',
                 '/api/v1/public/app-update/',
+                '/api/v1/notifications/background-pull/',
                 '/api/v1/security/events/report/',
             )
         )

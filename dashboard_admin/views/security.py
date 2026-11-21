@@ -34,10 +34,17 @@ def security_dashboard(request):
         DeviceTrustStatus,
         RegisteredDevice,
         SecurityPolicyConfig,
+        UserSecurityProfile,
+    )
+    from api_v1.security_engine import (
+        get_effective_ai_config,
+        maybe_trigger_hourly_ai_audit_async,
     )
 
     ctx = _base_context(request)
     policy = SecurityPolicyConfig.load()
+    if getattr(policy, 'ai_security_enabled', True):
+        maybe_trigger_hourly_ai_audit_async()
     now = timezone.now()
 
     q = (request.GET.get('q') or '').strip()
@@ -99,8 +106,20 @@ def security_dashboard(request):
     except Exception:
         unified_devices = []
 
+    risk_profiles = (
+        UserSecurityProfile.objects
+        .select_related('user')
+        .order_by('-behavior_risk_score', '-ai_risk_score', '-analyzed_at')[:60]
+    )
+    high_risk_users_count = UserSecurityProfile.objects.filter(
+        behavior_risk_level__in=('high', 'critical')
+    ).count()
+
     ctx.update({
         'policy': policy,
+        'ai_config': get_effective_ai_config(policy),
+        'ai_summary': policy.last_ai_audit_summary if isinstance(policy.last_ai_audit_summary, dict) else {},
+        'risk_profiles': risk_profiles,
         'devices': devices_qs[:60],
         'unified_devices': unified_devices,
         'events': events_qs[:60],
@@ -126,6 +145,7 @@ def security_dashboard(request):
                 severity='critical',
                 investigation_status='open',
             ).count(),
+            'high_risk_users': high_risk_users_count,
         },
     })
     return render(request, 'admin_panel/security_dashboard.html', ctx)
@@ -406,6 +426,110 @@ def security_admin_action(request):
                 request,
                 f"تم {'اعتماد' if approved else 'إلغاء اعتماد'} الجهاز ({target_ident}) لظهور زر دخول الإدارة في وضع الصيانة.",
             )
+
+    elif action == 'update_ai_config':
+        policy = SecurityPolicyConfig.load()
+        policy.ai_security_enabled = request.POST.get('ai_security_enabled') == 'on'
+        policy.ai_hourly_schedule_enabled = request.POST.get('ai_hourly_schedule_enabled') == 'on'
+        policy.ai_auto_enforce_bans = request.POST.get('ai_auto_enforce_bans') == 'on'
+        raw_provider = (request.POST.get('ai_provider') or '').strip().lower()
+        if raw_provider in ('auto', 'gemini', 'openai', 'groq', 'deepseek'):
+            policy.ai_provider = raw_provider
+        raw_model = (request.POST.get('ai_model_name') or '').strip()
+        if raw_model:
+            policy.ai_model_name = raw_model[:64]
+        if request.POST.get('clear_ai_key') == '1':
+            policy.ai_api_key_override = ''
+        else:
+            raw_key = (request.POST.get('ai_api_key_override') or '').strip()
+            if raw_key and raw_key != 'PUT_YOUR_AI_API_KEY_HERE':
+                policy.ai_api_key_override = raw_key[:255]
+        policy.save()
+        AuditLog.log(
+            request,
+            AuditLog.ACTION_TOGGLE_AI,
+            target_label='AI Security Analyst',
+            target_id=policy.id,
+            details={
+                'ai_security_enabled': policy.ai_security_enabled,
+                'ai_hourly_schedule_enabled': policy.ai_hourly_schedule_enabled,
+                'ai_auto_enforce_bans': policy.ai_auto_enforce_bans,
+                'ai_provider': policy.ai_provider,
+                'ai_model_name': policy.ai_model_name,
+            },
+        )
+        messages.success(request, "تم حفظ إعدادات الذكاء الاصطناعي الأمني بنجاح.")
+
+    elif action == 'analyze_user_behavior':
+        from api_v1.security_engine import (
+            analyze_user_with_ai,
+            run_hourly_ai_behavioral_audit,
+        )
+        raw_uid = (request.POST.get('user_id') or '').strip()
+        if raw_uid:
+            target_user = get_object_or_404(User, id=raw_uid)
+            res = analyze_user_with_ai(target_user, enforce_if_flagged=True, request=request)
+            verdict = res.get('verdict') or {}
+            messages.success(
+                request,
+                f"تم فحص {target_user.get_full_name() or target_user.email}: الخطورة {verdict.get('risk_score', 0)}% ({verdict.get('recommended_action', 'none')}) — {verdict.get('reason_ar', '')}",
+            )
+        else:
+            summary = run_hourly_ai_behavioral_audit(force=True, request=request)
+            messages.success(
+                request,
+                f"تم تشغيل فحص الذكاء الاصطناعي لـ {summary.get('analyzed_users', 0)} مستخدماً (خطورة عالية: {summary.get('flagged_high_risk', 0)} | حظر تلقائي: {summary.get('banned_users', 0)} حساب / {summary.get('banned_devices', 0)} جهاز).",
+            )
+
+    elif action in ('ban_user_only', 'ban_device_only', 'ban_user_and_device'):
+        from api_v1.security_engine import enforce_security_ban
+        raw_uid = (request.POST.get('user_id') or '').strip()
+        inst_id = (request.POST.get('installation_id') or '').strip()
+        target_user = User.objects.filter(id=raw_uid).first() if raw_uid else None
+        device = RegisteredDevice.objects.filter(installation_id=inst_id).first() if inst_id else None
+        if not device and target_user is not None:
+            device = RegisteredDevice.objects.filter(user=target_user).order_by('-last_active_at').first()
+            if device and not inst_id:
+                inst_id = device.installation_id
+        mode = (
+            'user_only'
+            if action == 'ban_user_only'
+            else ('device_only' if action == 'ban_device_only' else 'device_and_user')
+        )
+        reason = (request.POST.get('reason') or f'حظر أمني ({mode}) من تقارير الذكاء الاصطناعي').strip()
+        if target_user is None and not inst_id:
+            messages.error(request, "بيانات المستخدم أو الجهاز غير كافية لتنفيذ الحظر.")
+        else:
+            enforce_security_ban(
+                user=target_user,
+                device=device,
+                installation_id=inst_id,
+                mode=mode,
+                reason=reason,
+                block_type='permanent',
+                duration_hours=24,
+                actor=request.user,
+                request=request,
+            )
+            messages.success(request, "تم تنفيذ الحظر الأمني بنجاح.")
+
+    elif action == 'unban_user_and_devices':
+        from api_v1.security_engine import unban_user_and_devices
+        raw_uid = (request.POST.get('user_id') or '').strip()
+        inst_id = (request.POST.get('installation_id') or '').strip()
+        target_user = User.objects.filter(id=raw_uid).first() if raw_uid else None
+        if target_user is None and not inst_id:
+            messages.error(request, "بيانات المستخدم غير كافية لرفع الحظر.")
+        else:
+            unban_user_and_devices(
+                user=target_user,
+                installation_id=inst_id,
+                mode='both',
+                actor=request.user,
+                reason=(request.POST.get('reason') or 'فك الحظر من لوحة الأمان').strip(),
+                request=request,
+            )
+            messages.success(request, "تم فك الحظر عن الحساب والأجهزة بنجاح.")
 
     elif action == 'prune_telemetry':
         res = prune_expired_telemetry()

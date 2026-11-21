@@ -82,6 +82,7 @@ class Ta3almAPIV1TestSuite(TestCase):
             bio='خبير الفيزياء للثانوية العامة',
             subscription_end_date=timezone.now() + timedelta(days=30),
             current_plan=self.plan,
+            is_approved=True,
         )
         Wallet.objects.create(teacher=self.teacher_profile, balance=500)
 

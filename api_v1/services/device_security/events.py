@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from typing import Any
+from django.db.models import Q
 from django.utils import timezone
 from core.models import Notification
 from api_v1.models import (
@@ -109,3 +110,55 @@ def prune_expired_telemetry(retention_days: int | None = None) -> dict[str, int]
         'events_deleted': evt_deleted,
         'video_logs_deleted': audit_deleted,
     }
+
+
+def record_failed_login(
+    request,
+    identifier: str = '',
+    user=None,
+    installation_id: str = '',
+) -> DeviceActivity:
+    """يسجل محاولة دخول فاشلة ويرصد المحاولات المتكررة المشبوهة خلال آخر 10 دقائق."""
+    ctx = extract_network_context(request)
+    ip = ctx.get('ip_address')
+    act = record_device_activity(
+        request=request,
+        user=user,
+        activity_type='login_failed',
+        metadata={
+            'identifier': str(identifier or ''),
+            'installation_id': str(installation_id or ''),
+        },
+        net_ctx=ctx,
+    )
+    recent_window = timezone.now() - timedelta(minutes=10)
+    has_user = user is not None and getattr(user, 'pk', None) is not None
+    fail_q = Q(user=user) if has_user else Q()
+    if ip:
+        fail_q = (fail_q | Q(ip_address=ip)) if has_user else Q(ip_address=ip)
+    fail_count = (
+        DeviceActivity.objects.filter(
+            fail_q,
+            activity_type='login_failed',
+            created_at__gte=recent_window,
+        ).count()
+        if (has_user or ip)
+        else 0
+    )
+    if fail_count >= 5:
+        record_security_event(
+            event_type='excessive_login_attempts',
+            severity='medium',
+            risk_score=35,
+            user=user,
+            installation_id=installation_id,
+            request=request,
+            net_ctx=ctx,
+            action_taken='monitored',
+            details={
+                'identifier': str(identifier or ''),
+                'recent_failures_10m': fail_count,
+                'title': 'محاولات تسجيل دخول فاشلة متكررة',
+            },
+        )
+    return act

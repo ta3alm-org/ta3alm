@@ -64,6 +64,7 @@ class VideoSecurityAndIntegrityTests(APITestCase):
             subject=self.subject,
             current_plan=self.plan,
             subscription_end_date=timezone.now() + timedelta(days=30),
+            is_approved=True,
         )
         self.group = Group.objects.create(teacher=self.teacher, name='Sec 3 Physics', grade='3_sec')
         self.protected_lecture = Lecture.objects.create(
@@ -461,6 +462,7 @@ class PlatformFinancialAndContentFixesTests(APITestCase):
             subject=self.subject,
             current_plan=self.plan,
             subscription_end_date=timezone.now() + timedelta(days=30),
+            is_approved=True,
         )
         self.student_user = User.objects.create_user(
             username='student_fin',
