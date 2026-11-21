@@ -51,8 +51,20 @@ from .serializers import (
     CurriculumUnitSerializer,
     SubjectSerializer,
 )
+from .models import UserSecurityProfile
+from .security_engine import enforce_security_ban, unban_user_and_devices
 
 User = get_user_model()
+
+
+def _backfill_missing_user_profiles() -> None:
+    """ضمان وجود سجل Profile ورقم تعريفي لكل حساب مدرج في قاعدة البيانات حتى يظهر بانتظام في كافة اللوحات."""
+    for u in User.objects.filter(role='teacher', teacher_profile__isnull=True):
+        TeacherProfile.objects.get_or_create(user=u)
+    for u in User.objects.filter(role='student', student_profile__isnull=True):
+        StudentProfile.objects.get_or_create(user=u, defaults={'parent_phone': ''})
+    for u in User.objects.filter(role='assistant', assistant_profile__isnull=True):
+        AssistantProfile.objects.get_or_create(user=u, defaults={'phone': u.phone or ''})
 
 
 class AdminDashboardAPIView(APIView):
@@ -60,14 +72,18 @@ class AdminDashboardAPIView(APIView):
     permission_classes = [IsAuthenticated, IsPlatformAdmin]
 
     def get(self, request):
+        _backfill_missing_user_profiles()
         site_settings = SiteSetting.load()
         recent_logs = AuditLog.objects.select_related('admin').order_by('-created_at')[:15]
 
         return Response({
-            'total_teachers': TeacherProfile.objects.count(),
+            'total_teachers': User.objects.filter(role='teacher').count(),
+            'approved_teachers_count': TeacherProfile.objects.filter(is_approved=True, user__is_banned=False).count(),
+            'pending_teachers_count': TeacherProfile.objects.filter(is_approved=False).count(),
             'active_teachers_count': TeacherProfile.objects.filter(subscription_end_date__gt=timezone.now()).count(),
-            'total_students': StudentProfile.objects.count(),
-            'total_assistants': AssistantProfile.objects.count(),
+            'total_students': User.objects.filter(role='student').count(),
+            'total_assistants': User.objects.filter(role='assistant').count(),
+            'high_risk_users_count': UserSecurityProfile.objects.filter(behavior_risk_level__in=('high', 'critical')).count(),
             'pending_manual_payments': ManualPayment.objects.filter(status='pending').count(),
             'pending_withdrawals': WithdrawRequest.objects.filter(status=WithdrawRequest.STATUS_PENDING).count(),
             'is_maintenance_mode': site_settings.is_maintenance_mode,
@@ -211,30 +227,57 @@ class AdminManageUsersAPIView(APIView):
     permission_classes = [IsAuthenticated, IsPlatformModerator]
 
     def get(self, request):
+        _backfill_missing_user_profiles()
         query = request.query_params.get('q', '').strip()
         role_filter = request.query_params.get('role', '').strip()
+        try:
+            limit = min(max(int(request.query_params.get('limit') or 500), 1), 1000)
+        except (TypeError, ValueError):
+            limit = 500
 
-        users = User.objects.all().order_by('-id')
-        if role_filter:
+        users = (
+            User.objects
+            .select_related(
+                'student_profile',
+                'teacher_profile',
+                'teacher_profile__subject',
+                'teacher_profile__current_plan',
+                'assistant_profile',
+                'admin_profile',
+            )
+            .all()
+            .order_by('-id')
+        )
+        if role_filter == 'pending_teacher':
+            users = users.filter(role='teacher', teacher_profile__is_approved=False)
+        elif role_filter == 'approved_teacher':
+            users = users.filter(role='teacher', teacher_profile__is_approved=True)
+        elif role_filter == 'banned':
+            users = users.filter(is_banned=True)
+        elif role_filter:
             users = users.filter(role=role_filter)
+
         if query:
             users = users.filter(
                 Q(first_name__icontains=query)
                 | Q(last_name__icontains=query)
+                | Q(username__icontains=query)
                 | Q(email__icontains=query)
                 | Q(phone__icontains=query)
                 | Q(custom_id__icontains=query)
             )
 
         return Response({
-            'users': UserDetailSerializer(users[:100], many=True, context={'request': request}).data,
+            'total_count': users.count(),
+            'pending_teachers_count': TeacherProfile.objects.filter(is_approved=False).count(),
+            'users': UserDetailSerializer(users[:limit], many=True, context={'request': request}).data,
             'plans': SubscriptionPlanSerializer(SubscriptionPlan.objects.all(), many=True).data,
             'subjects': SubjectSerializer(Subject.objects.all(), many=True).data,
         })
 
     @transaction.atomic
     def post(self, request):
-        """إجراءات على المستخدم: ban, unban, delete, renew_free, edit_user, change_password, generate_login_link."""
+        """إجراءات على المستخدم: approve_teacher, unapprove_teacher, ban, unban, delete, renew_free, edit_user, change_password, generate_login_link."""
         user_id = request.data.get('user_id')
         action = request.data.get('action')
         target = get_object_or_404(User, id=user_id)
@@ -245,16 +288,65 @@ class AdminManageUsersAPIView(APIView):
         requester_profile = getattr(request.user, 'admin_profile', None)
         can_delete = request.user.is_superuser or (requester_profile and requester_profile.can_delete_users)
 
+        if action == 'approve_teacher':
+            if target.role != 'teacher':
+                return Response({'error': 'هذا المستخدم ليس معلماً.'}, status=status.HTTP_400_BAD_REQUEST)
+            tp, _ = TeacherProfile.objects.get_or_create(user=target)
+            tp.is_approved = True
+            tp.approved_at = timezone.now()
+            tp.save(update_fields=['is_approved', 'approved_at'])
+            notify_user(
+                target,
+                'تم اعتماد حسابك كمعلم على منصة تعلّم',
+                'وافقت إدارة المنصة على ظهور حسابك ومجموعاتك وكورساتك للطلاب. أهلاً بك في منصة تعلّم!',
+                link='/teacher/',
+            )
+            AuditLog.log(request, AuditLog.ACTION_EDIT_USER, target_label=f'اعتماد معلم: {target.get_full_name() or target.email}', target_id=target.id)
+            return Response({
+                'message': f'تم اعتماد المعلم {target.get_full_name() or target.email} وسيظهر الآن للطلاب.',
+                'user': UserDetailSerializer(target, context={'request': request}).data,
+            })
+
+        if action == 'unapprove_teacher':
+            if target.role != 'teacher':
+                return Response({'error': 'هذا المستخدم ليس معلماً.'}, status=status.HTTP_400_BAD_REQUEST)
+            tp, _ = TeacherProfile.objects.get_or_create(user=target)
+            tp.is_approved = False
+            tp.approved_at = None
+            tp.save(update_fields=['is_approved', 'approved_at'])
+            notify_user(
+                target,
+                'تم إيقاف ظهور ملفك التعليمي مؤقتاً',
+                'تم سحب الاعتماد المؤقت لحسابك من الظهور العام للطلاب لحين المراجعة الإدارية.',
+                link='/teacher/',
+            )
+            AuditLog.log(request, AuditLog.ACTION_EDIT_USER, target_label=f'إلغاء اعتماد معلم: {target.get_full_name() or target.email}', target_id=target.id)
+            return Response({
+                'message': f'تم إخفاء المعلم {target.get_full_name() or target.email} وإعادته لقائمة الانتظار.',
+                'user': UserDetailSerializer(target, context={'request': request}).data,
+            })
+
         if action == 'ban':
-            target.is_banned = True
-            target.save(update_fields=['is_banned'])
-            AuditLog.log(request, AuditLog.ACTION_BAN, target_label=target.email, target_id=target.id)
-            return Response({'message': f'تم حظر {target.get_full_name() or target.email}.'})
+            ban_mode = str(request.data.get('ban_mode') or 'user_only').strip()
+            reason = str(request.data.get('reason') or 'حظر من إدارة المستخدمين').strip()
+            enforce_security_ban(
+                user=target,
+                mode=ban_mode,
+                reason=reason,
+                actor=request.user,
+                request=request,
+            )
+            return Response({'message': f'تم تنفيذ الحظر ({ban_mode}) على {target.get_full_name() or target.email}.'})
 
         if action == 'unban':
-            target.is_banned = False
-            target.save(update_fields=['is_banned'])
-            AuditLog.log(request, AuditLog.ACTION_UNBAN, target_label=target.email, target_id=target.id)
+            unban_mode = str(request.data.get('unban_mode') or 'both').strip()
+            unban_user_and_devices(
+                user=target,
+                mode=unban_mode,
+                actor=request.user,
+                reason='رفع الحظر بواسطة الإدارة',
+                request=request,
+            )
             return Response({'message': f'تم رفع الحظر عن {target.get_full_name() or target.email}.'})
 
         if action == 'delete':

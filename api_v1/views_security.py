@@ -29,6 +29,7 @@ from .device_security_service import (
     unblock_device_admin,
 )
 from .models import (
+    DeviceActivity,
     DeviceBlock,
     DeviceSecurityEvent,
     DeviceSession,
@@ -36,8 +37,17 @@ from .models import (
     PlaybackSession,
     RegisteredDevice,
     SecurityPolicyConfig,
+    UserSecurityProfile,
 )
 from .permissions import IsNotBanned, IsPlatformAdmin
+from .security_engine import (
+    compute_behavioral_risk,
+    enforce_security_ban,
+    record_behavioral_activity,
+    serialize_user_security_profile,
+    unban_user_and_devices,
+    verify_client_request_signature,
+)
 
 User = get_user_model()
 
@@ -49,6 +59,10 @@ ALLOWED_CLIENT_REPORT_EVENTS = {
     'tamper_detected': ('critical', 80),
     'integrity_failure': ('high', 65),
     'unfamiliar_device_report': ('high', 40),
+    'proxy_mitm_detected': ('critical', 95),
+    'user_ca_mitm_detected': ('critical', 95),
+    'request_tamper_detected': ('critical', 95),
+    'vpn_detected': ('medium', 25),
 }
 
 
@@ -130,6 +144,12 @@ def _serialize_policy(policy: SecurityPolicyConfig) -> dict:
         'event_retention_days': policy.event_retention_days,
         'enforce_device_limits': policy.enforce_device_limits,
         'enforce_screen_capture_policy': policy.enforce_screen_capture_policy,
+        'auto_block_on_proxy_mitm': policy.auto_block_on_proxy_mitm,
+        'auto_ban_on_account_sharing': policy.auto_ban_on_account_sharing,
+        'auto_ban_on_tamper': policy.auto_ban_on_tamper,
+        'auto_enforcement_mode': policy.auto_enforcement_mode,
+        'enforce_request_signatures': policy.enforce_request_signatures,
+        'request_signature_max_skew_seconds': policy.request_signature_max_skew_seconds,
         'updated_at': policy.updated_at.isoformat() if policy.updated_at else None,
     }
 
@@ -405,8 +425,8 @@ class SecuritySessionsListAPIView(APIView):
 
 
 class SecurityEventReportAPIView(APIView):
-    """استقبال بلاغات التطبيق (محاولة لقطة شاشة، تسجيل شاشة، عرض خارجي، أداة تصحيح/حقن)."""
-    permission_classes = [IsAuthenticated, IsNotBanned]
+    """استقبال بلاغات التطبيق (محاولة لقطة شاشة، تسجيل شاشة، عرض خارجي، بروكسي MITM، أداة تصحيح/حقن)."""
+    permission_classes = []
 
     def post(self, request):
         raw_type = str(request.data.get('event_type') or '').strip().lower()
@@ -419,6 +439,17 @@ class SecurityEventReportAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        is_auth = bool(request.user and getattr(request.user, 'is_authenticated', False))
+        sig_check = verify_client_request_signature(request)
+        if not is_auth and not sig_check.get('present'):
+            return Response(
+                {'error': 'يتطلب مصادقة أو توقيعاً تشفيرياً موثقاً لتسجيل الحدث الأمني.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        if sig_check.get('present') and not sig_check.get('valid'):
+            return Response({'error': sig_check.get('reason') or 'توقيع غير صالح.'}, status=status.HTTP_403_FORBIDDEN)
+
+        reporter_user = request.user if is_auth else None
         severity, base_risk = ALLOWED_CLIENT_REPORT_EVENTS[raw_type]
         inst_id = _extract_client_installation_id(request)
         screen_name = str(request.data.get('screen_name') or '').strip()[:120]
@@ -429,16 +460,29 @@ class SecurityEventReportAPIView(APIView):
 
         net_ctx = extract_network_context(request)
         device = (
-            RegisteredDevice.objects.filter(user=request.user, installation_id=inst_id).first()
-            if inst_id
-            else None
+            RegisteredDevice.objects.filter(user=reporter_user, installation_id=inst_id).first()
+            if (reporter_user and inst_id)
+            else (RegisteredDevice.objects.filter(installation_id=inst_id).first() if inst_id else None)
         )
 
-        record_device_activity(
+        signal_tag = ''
+        if raw_type == 'proxy_mitm_detected':
+            signal_tag = 'proxy_mitm'
+        elif raw_type == 'user_ca_mitm_detected':
+            signal_tag = 'user_ca_mitm'
+        elif raw_type == 'request_tamper_detected':
+            signal_tag = 'request_tamper'
+        elif raw_type in ('debugger_detected', 'tamper_detected', 'integrity_failure'):
+            signal_tag = 'integrity_tamper'
+
+        behav = record_behavioral_activity(
             request=request,
-            user=request.user,
+            user=reporter_user,
             device=device,
+            installation_id=inst_id,
             activity_type=raw_type,
+            signal_tag=signal_tag,
+            risk_delta=base_risk,
             net_ctx=net_ctx,
             metadata=details,
         )
@@ -462,32 +506,54 @@ class SecurityEventReportAPIView(APIView):
                 action_taken = 'monitored'
             device.save(update_fields=['risk_score', 'risk_level', 'trust_status', 'requires_reauth'])
 
+        # إذا كان المستخدم غير مسجل دخول ولكن التوقيع أكد وجود بروكسي/MITM حقيقي، احظر الجهاز نفسه مؤقتاً
+        policy = SecurityPolicyConfig.load()
+        if (
+            reporter_user is None
+            and inst_id
+            and signal_tag in ('proxy_mitm', 'user_ca_mitm', 'request_tamper')
+            and policy.auto_block_on_proxy_mitm
+            and policy.auto_enforcement_mode in ('device_only', 'device_and_user')
+        ):
+            enforce_security_ban(
+                device=device,
+                installation_id=inst_id,
+                mode='device_only',
+                reason=f'حظر تلقائي للجهاز: رصد اعتراض/بروكسي ({raw_type})',
+                request=request,
+            )
+            action_taken = 'device_blocked'
+
         evt = record_security_event(
             event_type=raw_type,
             severity=severity,
             risk_score=device.risk_score if device else base_risk,
-            user=request.user,
+            user=reporter_user,
             device=device,
             installation_id=inst_id,
             request=request,
             net_ctx=net_ctx,
-            action_taken=action_taken,
+            action_taken=(behav.get('enforcement') or {}).get('mode') or action_taken,
             details=details,
-            notify_user=severity in ('medium', 'high', 'critical'),
+            notify_user=bool(reporter_user and severity in ('medium', 'high', 'critical')),
             notify_title='تنبيه حماية المحتوى',
             notify_message=(
-                'تم رصد محاولة التقاط لقطة شاشة أو تسجيل محتوى محمي على حسابك.'
-                if raw_type in ('screenshot_attempt', 'screen_recording_detected', 'display_capture_detected')
-                else 'تم رصد نشاط غير معتاد أو محاولة عبث على جهازك أثناء استخدام المنصة.'
+                'تم رصد محاولة اعتراض اتصال أو استخدام شهادة/بروكسي غير مصرح وتم تقييد الوصول لحماية المنصة.'
+                if signal_tag in ('proxy_mitm', 'user_ca_mitm', 'request_tamper')
+                else (
+                    'تم رصد محاولة التقاط لقطة شاشة أو تسجيل محتوى محمي على حسابك.'
+                    if raw_type in ('screenshot_attempt', 'screen_recording_detected', 'display_capture_detected')
+                    else 'تم رصد نشاط غير معتاد أو محاولة عبث على جهازك أثناء استخدام المنصة.'
+                )
             ),
         )
 
-        policy = SecurityPolicyConfig.load()
         return Response(
             {
                 'recorded': True,
                 'event': _serialize_event(evt),
-                'action_taken': action_taken,
+                'action_taken': evt.action_taken,
+                'behavioral_risk': {k: v for k, v in behav.items() if k != 'profile'},
                 'screen_capture_policy_enforced': policy.enforce_screen_capture_policy,
             },
             status=status.HTTP_201_CREATED,
@@ -495,12 +561,36 @@ class SecurityEventReportAPIView(APIView):
 
 
 class SecurityAdminActionAPIView(APIView):
-    """إجراءات مسؤولي المنصة لإدارة حظر الأجهزة والجلسات والسياسات والأحداث الأمنية."""
+    """إجراءات مسؤولي المنصة لإدارة حظر الأجهزة والجلسات والسياسات وتحليل السلوك والأحداث الأمنية."""
     permission_classes = [IsPlatformAdmin]
 
     def get(self, request):
         now = timezone.now()
+        last_24h = now - timezone.timedelta(hours=24) if hasattr(timezone, 'timedelta') else (now - __import__('datetime').timedelta(hours=24))
         policy = SecurityPolicyConfig.load()
+
+        profiles = (
+            UserSecurityProfile.objects
+            .select_related('user')
+            .order_by('-behavior_risk_score', '-analyzed_at')[:60]
+        )
+        recent_activities = (
+            DeviceActivity.objects
+            .select_related('user', 'device')
+            .order_by('-created_at')[:60]
+        )
+        recent_events = (
+            DeviceSecurityEvent.objects
+            .select_related('user', 'device')
+            .order_by('-created_at')[:40]
+        )
+        active_blocks = (
+            DeviceBlock.objects
+            .select_related('user', 'device')
+            .filter(is_active=True)
+            .order_by('-created_at')[:40]
+        )
+
         return Response({
             'metrics': {
                 'total_devices': RegisteredDevice.objects.count(),
@@ -512,8 +602,44 @@ class SecurityAdminActionAPIView(APIView):
                 'active_sessions': DeviceSession.objects.filter(status='active', expires_at__gt=now).count(),
                 'open_security_events': DeviceSecurityEvent.objects.filter(investigation_status='open').count(),
                 'critical_events': DeviceSecurityEvent.objects.filter(severity='critical', investigation_status='open').count(),
+                'high_risk_users_count': UserSecurityProfile.objects.filter(behavior_risk_level__in=('high', 'critical')).count(),
+                'total_activities_24h': DeviceActivity.objects.filter(created_at__gte=last_24h).count(),
             },
             'policy': _serialize_policy(policy),
+            'risk_profiles': [serialize_user_security_profile(p) for p in profiles],
+            'recent_activities': [
+                {
+                    'id': a.id,
+                    'user_id': a.user_id,
+                    'username': (a.user.get_full_name() or a.user.email or a.user.username) if a.user else 'زائر',
+                    'role': a.user.role if a.user else 'guest',
+                    'device_name': a.device.device_name if a.device else '',
+                    'installation_id': a.device.installation_id if a.device else (a.metadata.get('installation_id', '') if isinstance(a.metadata, dict) else ''),
+                    'activity_type': a.activity_type,
+                    'endpoint': a.endpoint,
+                    'ip_address': a.ip_address,
+                    'country_code': a.country_code,
+                    'is_vpn_or_proxy': a.is_vpn_or_proxy,
+                    'metadata': a.metadata,
+                    'created_at': a.created_at.isoformat() if a.created_at else None,
+                }
+                for a in recent_activities
+            ],
+            'recent_events': [_serialize_event(e) for e in recent_events],
+            'active_blocks': [
+                {
+                    'id': b.id,
+                    'installation_id': b.installation_id,
+                    'device_name': b.device.device_name if b.device else b.installation_id,
+                    'user_id': b.user_id,
+                    'username': (b.user.get_full_name() or b.user.email) if b.user else None,
+                    'block_type': b.block_type,
+                    'reason': b.reason,
+                    'expires_at': b.expires_at.isoformat() if b.expires_at else None,
+                    'created_at': b.created_at.isoformat() if b.created_at else None,
+                }
+                for b in active_blocks
+            ],
         })
 
     def post(self, request):
@@ -691,7 +817,7 @@ class SecurityAdminActionAPIView(APIView):
 
         if action == 'update_policy_config':
             policy = SecurityPolicyConfig.load()
-            int_fields = (
+            for field in (
                 'student_device_limit',
                 'teacher_device_limit',
                 'assistant_device_limit',
@@ -703,14 +829,25 @@ class SecurityAdminActionAPIView(APIView):
                 'rapid_login_threshold_5m',
                 'rapid_geo_kmh_threshold',
                 'event_retention_days',
-            )
-            for field in int_fields:
+                'request_signature_max_skew_seconds',
+            ):
                 if field in request.data and request.data[field] is not None:
                     setattr(policy, field, max(int(request.data[field]), 1))
-            for bfield in ('enforce_device_limits', 'enforce_screen_capture_policy'):
+            for bfield in (
+                'enforce_device_limits',
+                'enforce_screen_capture_policy',
+                'auto_block_on_proxy_mitm',
+                'auto_ban_on_account_sharing',
+                'auto_ban_on_tamper',
+                'enforce_request_signatures',
+            ):
                 if bfield in request.data:
                     raw_b = request.data[bfield]
                     setattr(policy, bfield, raw_b if isinstance(raw_b, bool) else str(raw_b).lower() in ('1', 'true', 'yes'))
+            if 'auto_enforcement_mode' in request.data and str(request.data['auto_enforcement_mode']).strip() in (
+                'warn', 'device_only', 'user_only', 'device_and_user'
+            ):
+                policy.auto_enforcement_mode = str(request.data['auto_enforcement_mode']).strip()
             policy.save()
             AuditLog.log(
                 request,
@@ -720,6 +857,66 @@ class SecurityAdminActionAPIView(APIView):
                 details=_serialize_policy(policy),
             )
             return Response({'message': 'تم تحديث إعدادات السياسة الأمنية بنجاح.', 'policy': _serialize_policy(policy)})
+
+        if action in ('ban_user_only', 'ban_device_only', 'ban_user_and_device'):
+            user_id = request.data.get('user_id')
+            device_id = request.data.get('device_id')
+            inst_id = str(request.data.get('installation_id') or '').strip()
+            target_user = User.objects.filter(id=user_id).first() if user_id else None
+            device = RegisteredDevice.objects.filter(id=device_id).first() if device_id else None
+            if not device and inst_id:
+                device = RegisteredDevice.objects.filter(installation_id=inst_id).first()
+            mode = (
+                'user_only'
+                if action == 'ban_user_only'
+                else ('device_only' if action == 'ban_device_only' else 'device_and_user')
+            )
+            reason = str(request.data.get('reason') or f'حظر أمني ({mode}) بواسطة مسؤول المنصة').strip()
+            block_type = 'temporary' if str(request.data.get('block_type') or 'permanent') == 'temporary' else 'permanent'
+            duration_hours = int(request.data.get('duration_hours') or 24)
+            res = enforce_security_ban(
+                user=target_user,
+                device=device,
+                installation_id=inst_id,
+                mode=mode,
+                reason=reason,
+                block_type=block_type,
+                duration_hours=duration_hours,
+                actor=request.user,
+                request=request,
+            )
+            return Response({'message': 'تم تنفيذ إجراء الحظر الأمني بنجاح.', 'result': res})
+
+        if action == 'unban_user_and_devices':
+            user_id = request.data.get('user_id')
+            inst_id = str(request.data.get('installation_id') or '').strip()
+            mode = str(request.data.get('mode') or 'both').strip()
+            target_user = User.objects.filter(id=user_id).first() if user_id else None
+            res = unban_user_and_devices(
+                user=target_user,
+                installation_id=inst_id,
+                mode=mode,
+                actor=request.user,
+                reason=str(request.data.get('reason') or 'فك الحظر بواسطة الإدارة').strip(),
+                request=request,
+            )
+            return Response({'message': 'تم رفع الحظر بنجاح.', 'result': res})
+
+        if action == 'analyze_user_behavior':
+            user_id = request.data.get('user_id')
+            if user_id:
+                target_user = get_object_or_404(User, id=user_id)
+                res = compute_behavioral_risk(target_user)
+                return Response({
+                    'message': 'تم تحليل السلوك وتحديث درجة المخاطر.',
+                    'profile': serialize_user_security_profile(res['profile']),
+                })
+            # تحليل شامل لأحدث الحسابات النشطة
+            analyzed = 0
+            for u in User.objects.filter(is_active=True).order_by('-last_login')[:100]:
+                compute_behavioral_risk(u)
+                analyzed += 1
+            return Response({'message': f'تم فحص وتحليل السلوك الأمني لـ {analyzed} حساباً.', 'analyzed_count': analyzed})
 
         if action == 'prune_telemetry':
             days = request.data.get('retention_days')

@@ -110,14 +110,20 @@ class StudentDashboardAPIView(APIView):
 
 
 class StudentSearchGroupsAPIView(APIView):
-    """البحث عن المجموعات الدراسية بالاسم أو المعلم أو الصف أو المادة."""
-    permission_classes = [IsAuthenticated, IsNotBanned]
+    """البحث عن المجموعات الدراسية بالاسم أو المعلم أو الصف أو المادة (متاح للزوار والطلاب)."""
+    permission_classes = [AllowAny]
 
     def get(self, request):
-        groups = Group.objects.select_related('teacher__user', 'teacher__subject', 'teacher__current_plan').order_by('-created_at')
+        groups = (
+            Group.objects
+            .select_related('teacher__user', 'teacher__subject', 'teacher__current_plan')
+            .filter(teacher__is_approved=True, teacher__user__is_banned=False)
+            .order_by('-created_at')
+        )
         query = request.query_params.get('q', '').strip()
         grade = request.query_params.get('grade', '').strip()
         subject_id = request.query_params.get('subject', '').strip()
+        teacher_id = request.query_params.get('teacher_id', '').strip()
 
         if query:
             groups = groups.filter(
@@ -129,11 +135,17 @@ class StudentSearchGroupsAPIView(APIView):
         if grade:
             groups = groups.filter(grade=grade)
         if subject_id:
-            groups = groups.filter(teacher__subject_id=subject_id)
+            if subject_id.isdigit():
+                groups = groups.filter(teacher__subject_id=int(subject_id))
+            else:
+                groups = groups.filter(teacher__subject__name__icontains=subject_id)
+        if teacher_id and teacher_id.isdigit():
+            groups = groups.filter(teacher_id=int(teacher_id))
 
         enrollment_map = {}
-        if request.user.role == 'student' and hasattr(request.user, 'student_profile'):
-            for e in request.user.student_profile.enrollments.all():
+        user = getattr(request, 'user', None)
+        if user and user.is_authenticated and getattr(user, 'role', '') == 'student' and hasattr(user, 'student_profile'):
+            for e in user.student_profile.enrollments.all():
                 enrollment_map[e.group_id] = 'active' if e.is_active else 'pending'
 
         data = GroupSerializer(groups, many=True, context={'request': request}).data
@@ -151,6 +163,12 @@ class StudentJoinGroupAPIView(APIView):
         student = request.user.student_profile
         group = get_object_or_404(Group, id=group_id)
         teacher = group.teacher
+
+        if not teacher.is_approved or teacher.user.is_banned:
+            return Response(
+                {'error': 'هذا المعلم غير متاح للانضمام حالياً.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         if Enrollment.objects.filter(student=student, group=group).exists():
             return Response(
@@ -489,17 +507,28 @@ class StudentPackagesStoreAPIView(APIView):
         packages = (
             CoursePackage.objects
             .select_related('teacher__user', 'teacher__subject', 'teacher__current_plan')
-            .filter(is_active=True, teacher__current_plan__allow_online_packages=True)
+            .filter(
+                is_active=True,
+                teacher__is_approved=True,
+                teacher__user__is_banned=False,
+                teacher__current_plan__allow_online_packages=True,
+            )
             .order_by('-created_at')
         )
         grade = request.query_params.get('grade', '').strip()
         subject_id = request.query_params.get('subject', '').strip()
+        teacher_id = request.query_params.get('teacher_id', '').strip()
         query = request.query_params.get('q', '').strip()
 
         if grade:
             packages = packages.filter(grade=grade)
         if subject_id:
-            packages = packages.filter(teacher__subject_id=subject_id)
+            if subject_id.isdigit():
+                packages = packages.filter(teacher__subject_id=int(subject_id))
+            else:
+                packages = packages.filter(teacher__subject__name__icontains=subject_id)
+        if teacher_id and teacher_id.isdigit():
+            packages = packages.filter(teacher_id=int(teacher_id))
         if query:
             packages = packages.filter(
                 Q(title__icontains=query)

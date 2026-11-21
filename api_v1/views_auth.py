@@ -47,8 +47,53 @@ from .models import (
 )
 from .permissions import IsNotBanned
 from .serializers import UserDetailSerializer
+from .security_engine import record_behavioral_activity
 
 User = get_user_model()
+
+
+def _resolve_subject_input(raw_subject):
+    if raw_subject in (None, ''):
+        return None
+    raw_str = str(raw_subject).strip()
+    if not raw_str:
+        return None
+    if raw_str.isdigit():
+        return Subject.objects.filter(id=int(raw_str)).first()
+    subj = (
+        Subject.objects.filter(name__iexact=raw_str).first()
+        or Subject.objects.filter(name__icontains=raw_str).first()
+    )
+    if subj is None:
+        subj = Subject.objects.create(name=raw_str[:100])
+    return subj
+
+
+def ensure_user_role_profile(user) -> None:
+    """يضمن وجود ملف الدور المرتبط بالمستخدم (طالب / معلم / مساعد) ومنع تباين الجداول."""
+    if not user or not getattr(user, 'pk', None):
+        return
+    if user.role == 'teacher':
+        TeacherProfile.objects.get_or_create(user=user)
+    elif user.role == 'student':
+        StudentProfile.objects.get_or_create(user=user, defaults={'parent_phone': ''})
+    elif user.role == 'assistant':
+        AssistantProfile.objects.get_or_create(user=user, defaults={'phone': user.phone or ''})
+
+
+def _notify_admins_teacher_pending(teacher_profile) -> None:
+    try:
+        from core.notifications_service import notify_users_bulk
+        admins = User.objects.filter(Q(is_superuser=True) | Q(role='admin'), is_active=True)
+        teacher_name = teacher_profile.user.get_full_name() or teacher_profile.user.email or teacher_profile.user.username
+        notify_users_bulk(
+            admins,
+            'طلب اعتماد معلم جديد',
+            f'قام المعلم {teacher_name} بالتسجيل وهو بانتظار موافقة الإدارة للظهور للطلاب.',
+            link='/admin-panel/users/',
+        )
+    except Exception:
+        pass
 
 
 def _extract_installation_id(request) -> str:
@@ -169,10 +214,12 @@ class LoginAPIView(APIView):
         if not user:
             inst_id = _extract_installation_id(request)
             ip = get_server_observed_ip(request)
-            record_device_activity(
+            record_behavioral_activity(
                 request=request,
                 user=candidate,
+                installation_id=inst_id,
                 activity_type='login_failed',
+                risk_delta=10,
                 metadata={'identifier': identifier, 'installation_id': inst_id},
             )
             recent_window = timezone.now() - timedelta(minutes=10)
@@ -224,6 +271,13 @@ class LoginAPIView(APIView):
             return Response(dev_outcome, status=err_status)
 
         requires_verification, otp_sent, otp_err = _ensure_verification_otp_sent(request, user)
+        record_behavioral_activity(
+            request=request,
+            user=user,
+            installation_id=_extract_installation_id(request),
+            activity_type='login_success',
+            metadata={'role': user.role, 'identifier': identifier},
+        )
         user_data = UserDetailSerializer(user, context={'request': request}).data
         payload = {
             **tokens,
@@ -287,6 +341,7 @@ class RegisterAPIView(APIView):
             first_name=first_name,
             last_name=last_name,
         )
+        ensure_user_role_profile(user)
 
         tokens = generate_jwt_pair(user)
         dev_allowed, dev_outcome = _handle_auth_device_registration(request, user, tokens)
@@ -298,6 +353,13 @@ class RegisterAPIView(APIView):
             request,
             user,
             force_new=True,
+        )
+        record_behavioral_activity(
+            request=request,
+            user=user,
+            installation_id=_extract_installation_id(request),
+            activity_type='register_account',
+            metadata={'role': user.role},
         )
         user_data = UserDetailSerializer(user, context={'request': request}).data
         payload = {
@@ -354,6 +416,10 @@ class CompleteProfileAPIView(APIView):
             user.first_name = parts[0]
             user.last_name = parts[1] if len(parts) > 1 else ''
 
+        req_role = str(request.data.get('role', '')).strip().lower()
+        if req_role in ('student', 'teacher', 'assistant') and not user.custom_id and not user.is_superuser and user.role != 'admin':
+            user.role = req_role
+
         user.national_id = national_id
         user.phone = phone
 
@@ -379,20 +445,21 @@ class CompleteProfileAPIView(APIView):
             )
 
         elif user.role == 'teacher':
-            subject_id = request.data.get('subject_id') or request.data.get('subject')
+            raw_subject = request.data.get('subject_id')
+            if raw_subject in (None, ''):
+                raw_subject = request.data.get('subject')
             bio = str(request.data.get('bio', '')).strip()
-            if not subject_id:
+            if not raw_subject:
                 return Response({'error': 'يرجى اختيار المادة التي تدرسها.'}, status=status.HTTP_400_BAD_REQUEST)
-            try:
-                subject = Subject.objects.get(id=subject_id)
-            except Subject.DoesNotExist:
+            subject = _resolve_subject_input(raw_subject)
+            if subject is None:
                 return Response({'error': 'المادة المختارة غير موجودة.'}, status=status.HTTP_404_NOT_FOUND)
 
             default_plan = (
                 SubscriptionPlan.objects.filter(is_default=True).first()
                 or SubscriptionPlan.objects.order_by('price').first()
             )
-            TeacherProfile.objects.update_or_create(
+            tp, _ = TeacherProfile.objects.update_or_create(
                 user=user,
                 defaults={
                     'bio': bio,
@@ -402,6 +469,8 @@ class CompleteProfileAPIView(APIView):
                     'current_plan': default_plan,
                 },
             )
+            if not tp.is_approved:
+                _notify_admins_teacher_pending(tp)
 
         elif user.role == 'assistant':
             AssistantProfile.objects.update_or_create(
@@ -409,6 +478,13 @@ class CompleteProfileAPIView(APIView):
                 defaults={'phone': phone},
             )
 
+        record_behavioral_activity(
+            request=request,
+            user=user,
+            installation_id=_extract_installation_id(request),
+            activity_type='complete_profile',
+            metadata={'role': user.role},
+        )
         return Response({
             'message': f'تم استكمال البيانات بنجاح! أهلاً بك يا {user.first_name}',
             'user': UserDetailSerializer(user, context={'request': request}).data,
@@ -564,10 +640,11 @@ class LogoutAPIView(APIView):
             if inst_id
             else None
         )
-        record_device_activity(
+        record_behavioral_activity(
             request=request,
             user=request.user,
             device=reg_dev,
+            installation_id=inst_id,
             activity_type='logout',
             metadata={'installation_id': inst_id},
         )
@@ -604,9 +681,11 @@ class MeProfileAPIView(APIView):
             if 'bio' in request.data:
                 tp.bio = str(request.data['bio']).strip()
             if 'subject_id' in request.data or 'subject' in request.data:
-                sid = request.data.get('subject_id') or request.data.get('subject')
+                sid = request.data.get('subject_id')
+                if sid in (None, ''):
+                    sid = request.data.get('subject')
                 if sid:
-                    tp.subject = Subject.objects.filter(id=sid).first() or tp.subject
+                    tp.subject = _resolve_subject_input(sid) or tp.subject
             uploaded_img = request.FILES.get('image') or request.FILES.get('avatar')
             if uploaded_img is not None:
                 tp.image = uploaded_img
@@ -624,6 +703,13 @@ class MeProfileAPIView(APIView):
                 ap.phone = str(request.data['phone']).strip()
                 ap.save()
 
+        record_behavioral_activity(
+            request=request,
+            user=user,
+            installation_id=_extract_installation_id(request),
+            activity_type='profile_updated',
+            metadata={'role': user.role},
+        )
         return Response({
             'message': 'تم تحديث البيانات بنجاح.',
             'user': UserDetailSerializer(user, context={'request': request}).data,
@@ -633,6 +719,13 @@ class MeProfileAPIView(APIView):
         user = request.user
         if user.is_superuser:
             return Response({'error': 'لا يمكن حذف حساب المالك.'}, status=status.HTTP_400_BAD_REQUEST)
+        record_behavioral_activity(
+            request=request,
+            user=user,
+            installation_id=_extract_installation_id(request),
+            activity_type='account_deleted',
+            metadata={'email': user.email, 'role': user.role},
+        )
         user.delete()
         return Response({'message': 'تم حذف الحساب نهائياً.'}, status=status.HTTP_200_OK)
 
@@ -652,6 +745,12 @@ class ChangePasswordAPIView(APIView):
             return Response({'error': 'كلمة المرور الجديدة يجب ألا تقل عن 6 أحرف.'}, status=status.HTTP_400_BAD_REQUEST)
         request.user.set_password(new_password)
         request.user.save(update_fields=['password'])
+        record_behavioral_activity(
+            request=request,
+            user=request.user,
+            installation_id=_extract_installation_id(request),
+            activity_type='password_changed',
+        )
         return Response({'message': 'تم تغيير كلمة المرور بنجاح.'})
 
 
@@ -676,6 +775,12 @@ class ResetPasswordByNationalIdAPIView(APIView):
 
         user.set_password(new_password)
         user.save(update_fields=['password'])
+        record_behavioral_activity(
+            request=request,
+            user=user,
+            installation_id=_extract_installation_id(request),
+            activity_type='password_reset_nid',
+        )
         return Response({'message': 'تمت إعادة تعيين كلمة المرور بنجاح. يمكنك تسجيل الدخول الآن.'})
 
 
@@ -772,6 +877,7 @@ class GoogleLoginAPIView(APIView):
             )
             user.set_unusable_password()
             user.save()
+            ensure_user_role_profile(user)
 
             # ربط الحساب بـ django-allauth SocialAccount إن وجد
             try:
@@ -802,6 +908,13 @@ class GoogleLoginAPIView(APIView):
             return Response(dev_outcome, status=err_status)
 
         requires_verification, otp_sent, otp_err = _ensure_verification_otp_sent(request, user)
+        record_behavioral_activity(
+            request=request,
+            user=user,
+            installation_id=_extract_installation_id(request),
+            activity_type='google_login_success',
+            metadata={'role': user.role, 'is_new_user': is_new_user},
+        )
         user_data = UserDetailSerializer(user, context={'request': request}).data
         payload = {
             'message': 'تم تسجيل الدخول عبر جوجل بنجاح!',
@@ -875,6 +988,13 @@ class OneTimeLoginAPIView(APIView):
             return Response(dev_outcome, status=err_status)
 
         requires_verification, otp_sent, otp_err = _ensure_verification_otp_sent(request, user)
+        record_behavioral_activity(
+            request=request,
+            user=user,
+            installation_id=_extract_installation_id(request),
+            activity_type='one_time_login_success',
+            metadata={'role': user.role},
+        )
         user_data = UserDetailSerializer(user, context={'request': request}).data
         payload = {
             'message': f'تم تسجيل الدخول بنجاح! مرحباً {user.first_name or user.username}',
@@ -991,6 +1111,13 @@ class VerifyEmailOTPAPIView(APIView):
             verification.mark_verified()
             target_user = verification.user
             target_user.refresh_from_db()
+            record_behavioral_activity(
+                request=request,
+                user=target_user,
+                installation_id=_extract_installation_id(request),
+                activity_type='email_verified',
+                metadata={'method': 'token_link'},
+            )
             resp = {
                 'message': 'تم تأكيد وتفعيل حسابك بنجاح!',
                 'is_email_verified': True,
@@ -1047,6 +1174,13 @@ class VerifyEmailOTPAPIView(APIView):
         verification.mark_verified()
 
         user.refresh_from_db()
+        record_behavioral_activity(
+            request=request,
+            user=user,
+            installation_id=_extract_installation_id(request),
+            activity_type='email_verified',
+            metadata={'method': 'otp_code'},
+        )
         return Response(
             {
                 'message': 'تم تأكيد وتفعيل حسابك بنجاح!',

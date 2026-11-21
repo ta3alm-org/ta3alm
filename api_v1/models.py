@@ -293,6 +293,12 @@ class SecurityPolicyConfig(models.Model):
 
     enforce_device_limits = models.BooleanField(default=True)
     enforce_screen_capture_policy = models.BooleanField(default=True)
+    auto_block_on_proxy_mitm = models.BooleanField(default=True)
+    auto_ban_on_account_sharing = models.BooleanField(default=False)
+    auto_ban_on_tamper = models.BooleanField(default=True)
+    auto_enforcement_mode = models.CharField(max_length=24, default='device_and_user')
+    enforce_request_signatures = models.BooleanField(default=True)
+    request_signature_max_skew_seconds = models.PositiveIntegerField(default=300)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -628,5 +634,47 @@ class DeviceBlock(models.Model):
 
     def __str__(self):
         return f"DeviceBlock({self.installation_id}, {self.block_type}, active={self.is_active})"
+
+
+class UserSecurityProfile(models.Model):
+    """ملف التحليل السلوكي والمخاطر التراكمية للمستخدم وإجراءات الحظر الانتقائي أو المشترك."""
+    ENFORCEMENT_MODES = (
+        ('none', 'None'),
+        ('warn', 'Warning'),
+        ('device_only', 'Device Only'),
+        ('user_only', 'Account Only'),
+        ('device_and_user', 'Account & Device'),
+    )
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='security_profile',
+    )
+    behavior_risk_score = models.PositiveIntegerField(default=0, db_index=True)
+    behavior_risk_level = models.CharField(max_length=16, default='low', db_index=True)
+    total_actions_count = models.PositiveIntegerField(default=0)
+    total_failed_logins = models.PositiveIntegerField(default=0)
+    proxy_tamper_strikes = models.PositiveIntegerField(default=0)
+    sharing_strikes = models.PositiveIntegerField(default=0)
+    last_action_type = models.CharField(max_length=64, blank=True)
+    last_action_endpoint = models.CharField(max_length=255, blank=True)
+    last_action_at = models.DateTimeField(null=True, blank=True)
+    last_ip = models.GenericIPAddressField(null=True, blank=True)
+    last_country = models.CharField(max_length=16, blank=True)
+    last_signals = models.JSONField(default=dict, blank=True)
+    auto_ban_mode = models.CharField(max_length=24, choices=ENFORCEMENT_MODES, default='none')
+    ban_reason = models.CharField(max_length=255, blank=True)
+    analyzed_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-behavior_risk_score', '-analyzed_at']
+        indexes = [
+            models.Index(fields=['behavior_risk_level', '-behavior_risk_score'], name='usec_level_score_idx'),
+        ]
+
+    def __str__(self):
+        return f"UserSecurityProfile(user={self.user_id}, score={self.behavior_risk_score}, level={self.behavior_risk_level})"
 
 

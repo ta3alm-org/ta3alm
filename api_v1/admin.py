@@ -10,6 +10,7 @@ from .models import (
     PlayIntegrityNonce,
     RegisteredDevice,
     SecurityPolicyConfig,
+    UserSecurityProfile,
     VideoAsset,
     VideoBookmark,
     VideoProgress,
@@ -107,5 +108,13 @@ class DeviceBlockAdmin(admin.ModelAdmin):
     list_display = ('installation_id', 'block_type', 'is_active', 'user', 'reason', 'expires_at', 'created_at')
     list_filter = ('block_type', 'is_active')
     search_fields = ('installation_id', 'reason', 'user__email')
+
+
+@admin.register(UserSecurityProfile)
+class UserSecurityProfileAdmin(admin.ModelAdmin):
+    list_display = ('user', 'behavior_risk_score', 'behavior_risk_level', 'proxy_tamper_strikes', 'sharing_strikes', 'total_actions_count', 'auto_ban_mode', 'analyzed_at')
+    list_filter = ('behavior_risk_level', 'auto_ban_mode')
+    search_fields = ('user__email', 'user__username', 'user__phone', 'ban_reason')
+
 
 

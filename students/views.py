@@ -84,22 +84,28 @@ def student_dashboard(request):
 
 
 def list_packages(request):
-    # نعرض فقط الحزم التي يملك معلموها صلاحية "أونلاين" في باقتهم الحالية
+    # نعرض فقط الحزم التي يملك معلموها صلاحية "أونلاين" في باقتهم الحالية ومعتمدون من الإدارة
     packages = CoursePackage.objects.filter(
         is_active=True,
-        teacher__current_plan__allow_online_packages=True # <--- الشرط السحري
+        teacher__is_approved=True,
+        teacher__user__is_banned=False,
+        teacher__current_plan__allow_online_packages=True
     ).order_by('-created_at')
     
     return render(request, 'students/list_packages.html', {'packages': packages})
 
 
 
-# 2. صفحة البحث عن مجموعات جديدة
-@login_required
+# 2. صفحة البحث عن مجموعات جديدة (متاحة للزوار والطلاب)
 def search_groups(request):
     # 1. التعريف الأولي (الأساسي)
     # نضمن أن المتغير groups موجود دائماً حتى لو لم يدخل في أي if
-    groups = Group.objects.select_related('teacher__user', 'teacher__subject').order_by('-created_at')
+    groups = (
+        Group.objects
+        .select_related('teacher__user', 'teacher__subject')
+        .filter(teacher__is_approved=True, teacher__user__is_banned=False)
+        .order_by('-created_at')
+    )
     
     query = request.GET.get('q')
     grade = request.GET.get('grade')
@@ -123,11 +129,11 @@ def search_groups(request):
 
     # 3. بيانات الطالب (لزر الانضمام)
     my_enrollment_ids = []
-    if request.user.role == 'student':
+    if request.user.is_authenticated and getattr(request.user, 'role', '') == 'student':
         try:
             student = request.user.student_profile
             my_enrollment_ids = student.enrollments.values_list('group_id', flat=True)
-        except:
+        except Exception:
             pass
 
     # 4. قائمة المواد للفلتر
@@ -149,6 +155,9 @@ def join_group(request, group_id):
     student = request.user.student_profile
     group = get_object_or_404(Group, id=group_id)
     teacher = group.teacher
+    if not teacher.is_approved or teacher.user.is_banned:
+        messages.error(request, "هذا المعلم غير متاح للانضمام حالياً.")
+        return redirect('search_groups')
     current_count = teacher.get_total_students()
     limit = teacher.get_student_limit()
 

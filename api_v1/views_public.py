@@ -65,7 +65,12 @@ class PublicHomeAPIView(APIView):
         featured_packages = (
             CoursePackage.objects
             .select_related('teacher__user', 'teacher__subject')
-            .filter(is_active=True, teacher__current_plan__allow_online_packages=True)
+            .filter(
+                is_active=True,
+                teacher__is_approved=True,
+                teacher__user__is_banned=False,
+                teacher__current_plan__allow_online_packages=True,
+            )
             .order_by('-created_at')[:6]
         )
         site_settings = SiteSetting.load()
@@ -235,7 +240,7 @@ class PlatformGuideAPIView(APIView):
 
 class CurriculumLookupAPIView(APIView):
     """جلب الوحدات والدروس حسب الصف والمادة والترم."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def get(self, request):
         grade = request.query_params.get('grade')

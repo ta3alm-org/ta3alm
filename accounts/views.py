@@ -102,7 +102,7 @@ def complete_profile(request):
                     SubscriptionPlan.objects.filter(is_default=True).first()
                     or SubscriptionPlan.objects.order_by('price').first()
                 )
-                TeacherProfile.objects.update_or_create(
+                tp, _ = TeacherProfile.objects.update_or_create(
                     user=saved_user,
                     defaults={
                         'bio':                  form.cleaned_data.get('bio', ''),
@@ -112,6 +112,17 @@ def complete_profile(request):
                         'current_plan':         default_plan,
                     },
                 )
+                try:
+                    from core.notifications_service import notify_users_bulk
+                    admins = User.objects.filter(Q(is_superuser=True) | Q(role='admin'), is_active=True)
+                    notify_users_bulk(
+                        admins,
+                        'طلب اعتماد معلم جديد',
+                        f"سجّل المعلم {saved_user.get_full_name() or saved_user.email} وهو بانتظار موافقتك للظهور على المنصة.",
+                        link='/admin-panel/users/',
+                    )
+                except Exception:
+                    pass
 
             elif user.role == 'assistant':
                 phone_val = request.POST.get('phone', '').strip()

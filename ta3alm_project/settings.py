@@ -124,6 +124,7 @@ MIDDLEWARE = [
     'ta3alm_project.middleware.EmailVerificationMiddleware',
     'ta3alm_project.middleware.WebDeviceSecurityMiddleware',
     'ta3alm_project.middleware.AppVersionEnforcementMiddleware',
+    'ta3alm_project.middleware.ApiSecurityAndActivityAuditMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'allauth.account.middleware.AccountMiddleware',
@@ -168,6 +169,10 @@ CORS_ALLOW_HEADERS = (
     'x-app-build',
     'x-app-version',
     'x-client-platform',
+    'x-ta3alm-ts',
+    'x-ta3alm-nonce',
+    'x-ta3alm-sig',
+    'x-ta3alm-client',
 )
 
 # ==========================================================

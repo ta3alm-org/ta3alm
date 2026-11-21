@@ -287,6 +287,13 @@ def update_app_release_settings(request):
 def manage_users(request):
     ctx = _base_context(request)
 
+    for u in User.objects.filter(role='teacher', teacher_profile__isnull=True):
+        TeacherProfile.objects.get_or_create(user=u)
+    for u in User.objects.filter(role='student', student_profile__isnull=True):
+        StudentProfile.objects.get_or_create(user=u, defaults={'parent_phone': ''})
+    for u in User.objects.filter(role='assistant', assistant_profile__isnull=True):
+        AssistantProfile.objects.get_or_create(user=u, defaults={'phone': u.phone or ''})
+
     query = request.GET.get('q', '').strip()
     role_filter = request.GET.get('role', '')
 
@@ -368,6 +375,25 @@ def user_action(request):
                          details={'role': target.role, 'email': target.email})
             target.delete()
             messages.error(request, f"تم حذف المستخدم «{name}» وجميع بياناته نهائياً.")
+
+    elif action == 'approve_teacher':
+        if hasattr(target, 'teacher_profile'):
+            tp = target.teacher_profile
+            tp.is_approved = True
+            tp.approved_at = timezone.now()
+            tp.save(update_fields=['is_approved', 'approved_at'])
+            notify_user(target, 'تم اعتماد حسابك كمعلم', 'وافقت الإدارة على ظهور ملفك للطلاب على منصة تعلّم.', link='/teacher/')
+            AuditLog.log(request, AuditLog.ACTION_EDIT_USER, target_label=f"اعتماد معلم: {target.get_full_name()}", target_id=target.id)
+            messages.success(request, f"تم اعتماد المعلم {target.get_full_name()}.")
+
+    elif action == 'unapprove_teacher':
+        if hasattr(target, 'teacher_profile'):
+            tp = target.teacher_profile
+            tp.is_approved = False
+            tp.approved_at = None
+            tp.save(update_fields=['is_approved', 'approved_at'])
+            AuditLog.log(request, AuditLog.ACTION_EDIT_USER, target_label=f"إلغاء اعتماد معلم: {target.get_full_name()}", target_id=target.id)
+            messages.warning(request, f"تم سحب اعتماد المعلم {target.get_full_name()}.")
 
     elif action == 'renew_free':
         if not hasattr(target, 'teacher_profile'):

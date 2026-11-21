@@ -78,6 +78,7 @@ class UserDetailSerializer(serializers.ModelSerializer):
     is_profile_complete = serializers.SerializerMethodField()
     is_email_verified = serializers.SerializerMethodField()
     requires_verification = serializers.SerializerMethodField()
+    is_teacher_approved = serializers.SerializerMethodField()
     profile_data = serializers.SerializerMethodField()
 
     class Meta:
@@ -87,9 +88,15 @@ class UserDetailSerializer(serializers.ModelSerializer):
             'email', 'phone', 'national_id', 'custom_id',
             'role', 'role_display', 'is_banned', 'is_superuser',
             'is_email_verified', 'requires_verification',
-            'is_profile_complete', 'profile_data', 'date_joined',
+            'is_profile_complete', 'is_teacher_approved', 'profile_data', 'date_joined',
         ]
         read_only_fields = ['id', 'username', 'custom_id', 'role', 'is_banned', 'is_superuser', 'date_joined']
+
+    def get_is_teacher_approved(self, obj):
+        if obj.role != 'teacher':
+            return True
+        tp = getattr(obj, 'teacher_profile', None)
+        return bool(tp and getattr(tp, 'is_approved', False))
 
     def get_full_name(self, obj):
         return f"{obj.first_name} {obj.last_name}".strip() or obj.username
@@ -140,6 +147,8 @@ class UserDetailSerializer(serializers.ModelSerializer):
                 'subject_name': tp.subject.name if tp.subject else '',
                 'image': img_url,
                 'image_url': img_url,
+                'is_approved': bool(tp.is_approved),
+                'approved_at': tp.approved_at.isoformat() if tp.approved_at else None,
                 'has_active_subscription': tp.has_active_subscription(),
                 'days_remaining': tp.days_remaining(),
                 'subscription_end_date': tp.subscription_end_date,
@@ -180,7 +189,7 @@ class TeacherCardSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'first_name', 'last_name', 'full_name', 'phone', 'custom_id',
             'bio', 'subject', 'subject_name', 'image', 'image_url',
-            'has_active_subscription',
+            'is_approved', 'approved_at', 'has_active_subscription',
         ]
 
     def get_full_name(self, obj):

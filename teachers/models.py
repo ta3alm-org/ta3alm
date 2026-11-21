@@ -52,6 +52,8 @@ class TeacherProfile(models.Model):
     subscription_end_date = models.DateTimeField(null=True, blank=True, verbose_name=_('╪¬╪º╪▒┘è╪« ╪º┘å╪¬┘ç╪º╪í ╪º┘ä╪º╪┤╪¬╪▒╪º┘â'))
     is_trial_used = models.BooleanField(default=False, verbose_name=_('┘ç┘ä ╪º╪│╪¬┘ç┘ä┘â ╪º┘ä╪┤┘ç╪▒ ╪º┘ä┘à╪¼╪º┘å┘è╪ƒ'))
     current_plan = models.ForeignKey(SubscriptionPlan, on_delete=models.SET_NULL, null=True, blank=True, verbose_name=_("╪º┘ä╪¿╪º┘é╪⌐ ╪º┘ä╪¡╪º┘ä┘è╪⌐"))
+    is_approved = models.BooleanField(default=False, db_index=True, verbose_name=_('معتمد من الإدارة'))
+    approved_at = models.DateTimeField(null=True, blank=True, verbose_name=_('تاريخ الاعتماد'))
 
     def has_active_subscription(self):
         if not self.subscription_end_date: return False
@@ -79,13 +81,14 @@ class TeacherProfile(models.Model):
         return self.current_plan.allow_online_packages if self.current_plan else False
 
     @classmethod
-    def ordered_for_home(cls):
-        """ترتيب المعلمين للعرض في الرئيسية: أصحاب الصور الشخصية أولاً ثم الأعلى أقدمية."""
+    def ordered_for_home(cls, approved_only: bool = True):
+        """ترتيب المعلمين للعرض في الرئيسية: المعتمدون فقط وأصحاب الصور الشخصية أولاً ثم الأعلى أقدمية."""
         from django.db.models import Case, When, Value, IntegerField, Q
+        qs = cls.objects.select_related('user', 'subject', 'current_plan').filter(user__is_banned=False)
+        if approved_only:
+            qs = qs.filter(is_approved=True)
         return (
-            cls.objects
-            .select_related('user', 'subject', 'current_plan')
-            .filter(user__is_banned=False)
+            qs
             .annotate(
                 has_photo=Case(
                     When(~Q(image='') & Q(image__isnull=False), then=Value(0)),
