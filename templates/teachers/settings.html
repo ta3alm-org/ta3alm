@@ -15,6 +15,12 @@
                     <h5 class="mb-0 fw-bold text-primary">{% trans "البيانات الشخصية" %}</h5>
                 </div>
                 <div class="card-body p-4">
+                    {% if not user.phone or not form.instance.image %}
+                    <div class="alert alert-warning border-0 shadow-sm mb-4">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        <strong>{% trans "تنبيه هام:" %}</strong> {% trans "رفع الصورة الشخصية وإدخال رقم الهاتف المحمول (11 رقماً) إجباري لجميع المعلمين لمتابعة استخدام المنصة والظهور للطلاب." %}
+                    </div>
+                    {% endif %}
                     <form method="POST" enctype="multipart/form-data">
                         {% csrf_token %}
 
@@ -25,6 +31,7 @@
                             
                             <label class="form-label d-block fw-bold">{% trans "تغيير الصورة الشخصية" %}</label>
                             {{ form.image }}
+                            {% if form.image.errors %}<div class="text-danger small mt-1 fw-bold">{{ form.image.errors.0 }}</div>{% endif %}
                         </div>                        
                         <div class="row g-3 mb-3">
                             <div class="col-md-6">
@@ -35,6 +42,12 @@
                                 <label class="form-label">{% trans "الاسم الأخير" %}</label>
                                 {{ form.last_name }}
                             </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">{% trans "رقم الهاتف الشخصي (إجباري)" %}</label>
+                            {{ form.phone }}
+                            {% if form.phone.errors %}<div class="text-danger small mt-1 fw-bold">{{ form.phone.errors.0 }}</div>{% endif %}
                         </div>
 
                         <div class="mb-3">

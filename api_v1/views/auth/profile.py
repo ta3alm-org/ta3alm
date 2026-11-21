@@ -40,8 +40,14 @@ class MeProfileAPIView(APIView):
             user.first_name = str(request.data['first_name']).strip()
         if 'last_name' in request.data:
             user.last_name = str(request.data['last_name']).strip()
-        if 'phone' in request.data:
-            new_phone = str(request.data['phone']).strip()
+        if 'phone' in request.data or 'phone_number' in request.data:
+            raw_phone = request.data.get('phone') if 'phone' in request.data else request.data.get('phone_number', '')
+            new_phone = str(raw_phone or '').strip()
+            if user.role == 'teacher' and (not new_phone or not new_phone.isdigit() or len(new_phone) < 11):
+                return Response(
+                    {'error': 'رقم الهاتف المكون من 11 رقماً إجباري للمعلم ولا يمكن حذفه أو تركه فارغاً.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             if new_phone and User.objects.filter(phone=new_phone).exclude(pk=user.pk).exists():
                 return Response({'error': 'رقم الهاتف مستخدم بالفعل.'}, status=status.HTTP_400_BAD_REQUEST)
             user.phone = new_phone
@@ -61,7 +67,13 @@ class MeProfileAPIView(APIView):
             if uploaded_img is not None:
                 tp.image = uploaded_img
             elif str(request.data.get('remove_image', '')).lower() in ('1', 'true', 'yes'):
-                tp.image = None
+                return Response(
+                    {
+                        'error': 'الصورة الشخصية للمعلم إجبارية ولا يمكن حذفها بدون رفع صورة بديلة.',
+                        'code': 'TEACHER_IMAGE_REQUIRED',
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             tp.save()
         elif user.role == 'student' and hasattr(user, 'student_profile'):
             sp = user.student_profile

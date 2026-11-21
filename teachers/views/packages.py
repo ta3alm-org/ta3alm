@@ -35,6 +35,12 @@ def create_package(request):
             teacher = request.user.teacher_profile
         except:
             return redirect('complete_profile')
+        if not request.user.phone or len(request.user.phone.strip()) < 11 or not teacher.image:
+            messages.warning(
+                request,
+                "يرجى رفع صورتك الشخصية وإدخال رقم هاتفك المحمول (إجباري لجميع المعلمين) قبل المتابعة في المنصة.",
+            )
+            return redirect('teacher_settings')
             
     elif request.user.role == 'assistant':
         # المساعد يجب أن يمرر teacher_id في الرابط
@@ -93,6 +99,13 @@ def create_package(request):
 def teacher_packages(request):
     try: teacher = request.user.teacher_profile
     except: return redirect('home')
+
+    if not request.user.phone or len(request.user.phone.strip()) < 11 or not teacher.image:
+        messages.warning(
+            request,
+            "يرجى رفع صورتك الشخصية وإدخال رقم هاتفك المحمول (إجباري لجميع المعلمين) قبل المتابعة في المنصة.",
+        )
+        return redirect('teacher_settings')
 
     # جلب حزم المعلم
     packages = teacher.packages.all().order_by('-created_at')

@@ -1,8 +1,10 @@
 from django import forms
+from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 from .models import Group, Lecture, CoursePackage, TeacherProfile, PDFFile
 from exams.models import Exam
 from accounts.models import User
+from accounts.forms import validate_egyptian_phone
 from core.models import Subject
 
 class PDFForm(forms.ModelForm):
@@ -56,6 +58,13 @@ class TeacherSettingsForm(forms.ModelForm):
     # حقول من جدول User
     first_name = forms.CharField(label=_('الاسم الأول'), widget=forms.TextInput(attrs={'class': 'form-control'}))
     last_name = forms.CharField(label=_('الاسم الأخير'), widget=forms.TextInput(attrs={'class': 'form-control'}))
+    phone = forms.CharField(
+        label=_('رقم الهاتف الشخصي (إجباري - 11 رقماً)'),
+        max_length=15,
+        required=True,
+        validators=[validate_egyptian_phone],
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': '01xxxxxxxxx', 'dir': 'ltr'}),
+    )
     
     # حقول من جدول TeacherProfile
     bio = forms.CharField(label=_('نبذة عنك'), widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 3}), required=False)
@@ -73,17 +82,48 @@ class TeacherSettingsForm(forms.ModelForm):
         fields = ['image', 'bio', 'subject'] 
         
         labels = {
-            'image': _('صورة البروفايل'),
+            'image': _('صورة البروفايل (إجبارية)'),
             'bio': _('نبذة عنك'),
             'subject': _('المادة الدراسية')
         }
         
         widgets = {
-            'image': forms.FileInput(attrs={'class': 'form-control'}),
+            'image': forms.FileInput(attrs={'class': 'form-control', 'accept': 'image/*'}),
             'bio': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             # المادة كقائمة منسدلة
             'subject': forms.Select(attrs={'class': 'form-select'}), 
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        user = getattr(self.instance, 'user', None)
+        if user and user.pk:
+            if not self.initial.get('first_name'):
+                self.fields['first_name'].initial = user.first_name
+            if not self.initial.get('last_name'):
+                self.fields['last_name'].initial = user.last_name
+            if not self.initial.get('phone'):
+                self.fields['phone'].initial = user.phone or ''
+
+    def clean_phone(self):
+        phone = (self.cleaned_data.get('phone') or '').strip()
+        validate_egyptian_phone(phone)
+        user_id = getattr(self.instance, 'user_id', None)
+        qs = User.objects.filter(phone=phone)
+        if user_id:
+            qs = qs.exclude(pk=user_id)
+        if qs.exists():
+            raise ValidationError(_("رقم الهاتف هذا مسجل بالفعل لحساب آخر."))
+        return phone
+
+    def clean(self):
+        cleaned_data = super().clean()
+        has_image = bool(cleaned_data.get('image')) or bool(
+            self.instance and self.instance.pk and self.instance.image
+        )
+        if not has_image:
+            self.add_error('image', _("الصورة الشخصية للمعلم إجبارية ولا يمكن حفظ الحساب بدون صورة."))
+        return cleaned_data
 
 
 from .models import CoursePackage

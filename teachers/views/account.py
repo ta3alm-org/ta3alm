@@ -29,11 +29,19 @@ def teacher_settings(request):
             form.save()
             request.user.first_name = form.cleaned_data['first_name']
             request.user.last_name = form.cleaned_data['last_name']
-            request.user.save()
-            messages.success(request, "تم تحديث البيانات.")
-            return redirect('teacher_settings')
+            request.user.phone = form.cleaned_data['phone']
+            request.user.save(update_fields=['first_name', 'last_name', 'phone'])
+            messages.success(request, "تم تحديث البيانات وحفظ الصورة ورقم الهاتف بنجاح.")
+            return redirect('teacher_dashboard')
     else:
-        form = TeacherSettingsForm(instance=teacher, initial={'first_name': request.user.first_name, 'last_name': request.user.last_name})
+        form = TeacherSettingsForm(
+            instance=teacher,
+            initial={
+                'first_name': request.user.first_name,
+                'last_name': request.user.last_name,
+                'phone': request.user.phone or '',
+            },
+        )
     return render(request, 'teachers/settings.html', {'form': form})
 
 
@@ -53,6 +61,10 @@ def delete_teacher_account(request):
 def manage_assistants(request):
     try: teacher = request.user.teacher_profile
     except: return redirect('home')
+
+    if not request.user.phone or len(request.user.phone.strip()) < 11 or not teacher.image:
+        messages.warning(request, "يرجى رفع صورتك الشخصية وإدخال رقم هاتفك المحمول (إجباري لجميع المعلمين) أولاً.")
+        return redirect('teacher_settings')
 
     if request.method == 'POST':
         job_id = request.POST.get('job_id')
@@ -96,5 +108,8 @@ def manage_assistants(request):
 def subscription_info(request):
     try: teacher = request.user.teacher_profile
     except: return redirect('home')
+    if not request.user.phone or len(request.user.phone.strip()) < 11 or not teacher.image:
+        messages.warning(request, "يرجى رفع صورتك الشخصية وإدخال رقم هاتفك المحمول (إجباري لجميع المعلمين) أولاً.")
+        return redirect('teacher_settings')
     plans = SubscriptionPlan.objects.all().order_by('price')
     return render(request, 'teachers/subscription.html', {'teacher': teacher, 'is_active': teacher.has_active_subscription(), 'days_left': teacher.days_remaining(),'plans':plans})

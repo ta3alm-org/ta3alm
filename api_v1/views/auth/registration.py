@@ -135,9 +135,11 @@ class CompleteProfileAPIView(APIView):
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
-        full_name = str(request.data.get('full_name', '')).strip()
-        national_id = str(request.data.get('national_id', user.national_id or '')).strip()
-        phone = str(request.data.get('phone', user.phone or '')).strip()
+        full_name = str(request.data.get('full_name') or user.get_full_name() or '').strip()
+        raw_nid = request.data.get('national_id')
+        national_id = str(raw_nid if raw_nid not in (None, '') else (user.national_id or '')).strip()
+        raw_phone = request.data.get('phone') if 'phone' in request.data else request.data.get('phone_number')
+        phone = str(raw_phone if raw_phone not in (None, '') else (user.phone or '')).strip()
         password = str(request.data.get('password', '')).strip()
 
         if not national_id or len(national_id) != 14 or not national_id.isdigit():
@@ -192,28 +194,51 @@ class CompleteProfileAPIView(APIView):
                 raw_subject = request.data.get('subject')
             bio = str(request.data.get('bio', '')).strip()
             if not raw_subject:
-                return Response({'error': 'يرجى اختيار المادة التي تدرسها.'}, status=status.HTTP_400_BAD_REQUEST)
-            subject = _resolve_subject_input(raw_subject)
-            if subject is None:
-                return Response({'error': 'المادة المختارة غير موجودة.'}, status=status.HTTP_404_NOT_FOUND)
+                if hasattr(user, 'teacher_profile') and user.teacher_profile.subject_id:
+                    subject = user.teacher_profile.subject
+                else:
+                    return Response({'error': 'يرجى اختيار المادة التي تدرسها.'}, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                subject = _resolve_subject_input(raw_subject)
+                if subject is None:
+                    return Response({'error': 'المادة المختارة غير موجودة.'}, status=status.HTTP_404_NOT_FOUND)
+
+            uploaded_image = request.FILES.get('image') or request.FILES.get('avatar')
+            has_existing_image = hasattr(user, 'teacher_profile') and bool(user.teacher_profile.image)
+            if uploaded_image is None and not has_existing_image:
+                return Response(
+                    {
+                        'error': 'يرجى رفع الصورة الشخصية للمعلم (الصورة الشخصية ورقم الهاتف إجباريان لجميع المعلمين).',
+                        'code': 'TEACHER_IMAGE_REQUIRED',
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             # لا يُمنح المعلم باقة أو ظهوراً مباشراً عند التسجيل؛ يظل قيد المراجعة حتى موافقة الإدارة
+            defaults = {
+                'bio': bio,
+                'subject': subject,
+                'is_approved': False,
+                'subscription_end_date': None,
+                'is_trial_used': False,
+                'current_plan': None,
+            }
+            if uploaded_image is not None:
+                defaults['image'] = uploaded_image
+
             tp, created = TeacherProfile.objects.get_or_create(
                 user=user,
-                defaults={
-                    'bio': bio,
-                    'subject': subject,
-                    'is_approved': False,
-                    'subscription_end_date': None,
-                    'is_trial_used': False,
-                    'current_plan': None,
-                },
+                defaults=defaults,
             )
             if not created:
-                tp.bio = bio
+                tp.bio = bio or tp.bio
                 tp.subject = subject
-                tp.save(update_fields=['bio', 'subject'])
-            if not tp.is_approved:
+                update_fields = ['bio', 'subject']
+                if uploaded_image is not None:
+                    tp.image = uploaded_image
+                    update_fields.append('image')
+                tp.save(update_fields=update_fields)
+            if created or not tp.is_approved:
                 pending_teacher_review = True
                 _notify_admins_teacher_pending(tp)
 

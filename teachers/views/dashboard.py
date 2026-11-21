@@ -25,6 +25,13 @@ def teacher_dashboard(request):
     except TeacherProfile.DoesNotExist:
         return redirect('complete_profile')
 
+    if not request.user.phone or len(request.user.phone.strip()) < 11 or not teacher.image:
+        messages.warning(
+            request,
+            "يرجى رفع صورتك الشخصية وإدخال رقم هاتفك المحمول (إجباري لجميع المعلمين) قبل المتابعة في المنصة.",
+        )
+        return redirect('teacher_settings')
+
     if not teacher.is_approved:
         return render(request, 'teachers/pending_approval.html', {'teacher': teacher})
     

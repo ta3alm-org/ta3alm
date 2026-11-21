@@ -28,7 +28,7 @@
                         <h3 class="mb-2 fw-bold text-dark">{% trans "خطوة أخيرة للبدء" %}</h3>
                         <p class="text-muted mb-4 small">{% trans "  يرجى ملء البيانات التالية بدقة لتوثيق حسابك في المنصة. ( سيتم حظرك لو البيانات غلط)" %}</p>
 
-                        <form method="POST" novalidate>
+                        <form method="POST" enctype="multipart/form-data" novalidate>
                             {% csrf_token %}
                             
                             {% if form.non_field_errors %}
@@ -42,20 +42,27 @@
                             <div class="row g-3">
                                 {% for field in form %}
                                     <div class="col-12">
-                                        <div class="form-floating">
+                                        {% if field.name == 'image' %}
+                                            <label for="{{ field.id_for_label }}" class="form-label fw-bold text-dark">{{ field.label }}</label>
                                             {{ field }}
-                                            <label for="{{ field.id_for_label }}" class="text-muted">{{ field.label }} </label>
-                                            
-                                            {% if field.help_text %}
-                                                <div class="form-text small text-muted ps-2">{{ field.help_text }}</div>
-                                            {% endif %}
-                                            
-                                            {% if field.errors %}
-                                                <div class="text-danger small mt-1 ps-2 fw-bold">
-                                                    {{ field.errors.0 }}
-                                                </div>
-                                            {% endif %}
-                                        </div>
+                                            {% if field.help_text %}<div class="form-text small text-muted ps-2">{{ field.help_text }}</div>{% endif %}
+                                            {% if field.errors %}<div class="text-danger small mt-1 ps-2 fw-bold">{{ field.errors.0 }}</div>{% endif %}
+                                        {% else %}
+                                            <div class="form-floating">
+                                                {{ field }}
+                                                <label for="{{ field.id_for_label }}" class="text-muted">{{ field.label }} </label>
+                                                
+                                                {% if field.help_text %}
+                                                    <div class="form-text small text-muted ps-2">{{ field.help_text }}</div>
+                                                {% endif %}
+                                                
+                                                {% if field.errors %}
+                                                    <div class="text-danger small mt-1 ps-2 fw-bold">
+                                                        {{ field.errors.0 }}
+                                                    </div>
+                                                {% endif %}
+                                            </div>
+                                        {% endif %}
                                     </div>
                                 {% endfor %}
                             </div>

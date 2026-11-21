@@ -135,6 +135,12 @@ class CompleteTeacherProfileForm(forms.ModelForm):
         widget=forms.Select(attrs={'class': 'form-select'}) # تنسيق Bootstrap
     )
 
+    image = forms.ImageField(
+        label=_('الصورة الشخصية للمعلم (إجبارية)'),
+        required=False,
+        widget=forms.FileInput(attrs={'class': 'form-control', 'accept': 'image/*'})
+    )
+
 
     # +++++ حقول الباسورد الجديدة +++++
     password = forms.CharField(
@@ -154,6 +160,17 @@ class CompleteTeacherProfileForm(forms.ModelForm):
         model = User
         fields = ['national_id', 'phone']
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            full_name = f"{self.instance.first_name} {self.instance.last_name}".strip()
+            if full_name and not self.initial.get('full_name'):
+                self.fields['full_name'].initial = full_name
+            if hasattr(self.instance, 'teacher_profile'):
+                tp = self.instance.teacher_profile
+                self.fields['bio'].initial = tp.bio
+                self.fields['subject'].initial = tp.subject_id
+
     def clean_national_id(self):
         nid = self.cleaned_data.get('national_id')
         if not nid: return nid
@@ -163,7 +180,7 @@ class CompleteTeacherProfileForm(forms.ModelForm):
 
     # التحقق من رقم المعلم
     def clean_phone(self):
-        phone = self.cleaned_data.get('phone')
+        phone = (self.cleaned_data.get('phone') or '').strip()
         return validate_egyptian_phone(phone)
     
     def clean(self):
@@ -172,6 +189,14 @@ class CompleteTeacherProfileForm(forms.ModelForm):
         p2 = cleaned_data.get("confirm_password")
         if p1 and p2 and p1 != p2:
             raise forms.ValidationError(_("كلمتا المرور غير متطابقتين."))
+        has_existing_image = (
+            self.instance
+            and self.instance.pk
+            and hasattr(self.instance, 'teacher_profile')
+            and bool(self.instance.teacher_profile.image)
+        )
+        if not cleaned_data.get('image') and not has_existing_image:
+            self.add_error('image', _("يرجى رفع الصورة الشخصية للمعلم (إجبارية)."))
         return cleaned_data
 
 # ==========================================

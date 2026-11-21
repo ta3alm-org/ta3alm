@@ -72,7 +72,12 @@ class UserDetailSerializer(serializers.ModelSerializer):
         if obj.role == 'student':
             return hasattr(obj, 'student_profile') and bool(obj.student_profile.parent_phone)
         if obj.role == 'teacher':
-            return hasattr(obj, 'teacher_profile') and bool(obj.teacher_profile.subject_id)
+            return (
+                hasattr(obj, 'teacher_profile')
+                and bool(obj.teacher_profile.subject_id)
+                and bool(obj.phone and len(str(obj.phone).strip()) >= 11)
+                and bool(obj.teacher_profile.image)
+            )
         if obj.role == 'assistant':
             return hasattr(obj, 'assistant_profile') and bool(obj.assistant_profile.phone)
         return True

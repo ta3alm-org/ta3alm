@@ -28,6 +28,8 @@ def get_group_permission(request, group_id, permission_type=None):
     if group.teacher.user == user:
         if not group.teacher.is_approved:
             return None, False
+        if not user.phone or len(user.phone.strip()) < 11 or not group.teacher.image:
+            return None, False
         return group, True
 
     # 2. المساعد
@@ -60,6 +62,8 @@ def get_package_permission(request, package_id, permission_type=None):
     # 1. المالك (المعلم المعتمد)
     if package.teacher.user == user:
         if not package.teacher.is_approved:
+            return None, False
+        if not user.phone or len(user.phone.strip()) < 11 or not package.teacher.image:
             return None, False
         return package, True
 

@@ -25,6 +25,13 @@ from teachers.models import WithdrawRequest
 def teacher_wallet(request):
     try: teacher = request.user.teacher_profile
     except: return redirect('home')
+
+    if not request.user.phone or len(request.user.phone.strip()) < 11 or not teacher.image:
+        messages.warning(
+            request,
+            "يرجى رفع صورتك الشخصية وإدخال رقم هاتفك المحمول (إجباري لجميع المعلمين) قبل المتابعة في المنصة.",
+        )
+        return redirect('teacher_settings')
     
     wallet = reconcile_teacher_wallet(teacher) or Wallet.objects.get_or_create(teacher=teacher)[0]
     site_setting = SiteSetting.load()

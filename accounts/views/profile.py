@@ -43,7 +43,12 @@ def complete_profile(request):
     if user.role == 'student':
         is_complete = hasattr(user, 'student_profile') and bool(user.student_profile.parent_phone)
     elif user.role == 'teacher':
-        is_complete = hasattr(user, 'teacher_profile') and bool(user.teacher_profile.subject_id)
+        is_complete = (
+            hasattr(user, 'teacher_profile')
+            and bool(user.teacher_profile.subject_id)
+            and bool(user.phone and len(user.phone.strip()) >= 11)
+            and bool(user.teacher_profile.image)
+        )
     elif user.role == 'assistant':
         is_complete = hasattr(user, 'assistant_profile') and bool(user.assistant_profile.phone)
 
@@ -64,7 +69,7 @@ def complete_profile(request):
 
     # 3. معالجة الحفظ
     if request.method == 'POST':
-        form = FormClass(request.POST, instance=user)
+        form = FormClass(request.POST, request.FILES, instance=user)
         if form.is_valid():
             saved_user = form.save(commit=False)
 
@@ -100,32 +105,41 @@ def complete_profile(request):
                 )
 
             elif user.role == 'teacher':
+                uploaded_image = form.cleaned_data.get('image')
+                defaults = {
+                    'bio': form.cleaned_data.get('bio', ''),
+                    'subject': form.cleaned_data['subject'],
+                    'is_approved': False,
+                    'subscription_end_date': None,
+                    'is_trial_used': False,
+                    'current_plan': None,
+                }
+                if uploaded_image:
+                    defaults['image'] = uploaded_image
                 tp, created = TeacherProfile.objects.get_or_create(
                     user=saved_user,
-                    defaults={
-                        'bio': form.cleaned_data.get('bio', ''),
-                        'subject': form.cleaned_data['subject'],
-                        'is_approved': False,
-                        'subscription_end_date': None,
-                        'is_trial_used': False,
-                        'current_plan': None,
-                    },
+                    defaults=defaults,
                 )
                 if not created:
                     tp.bio = form.cleaned_data.get('bio', '')
                     tp.subject = form.cleaned_data['subject']
-                    tp.save(update_fields=['bio', 'subject'])
-                try:
-                    from core.notifications_service import notify_users_bulk
-                    admins = User.objects.filter(Q(is_superuser=True) | Q(role='admin'), is_active=True)
-                    notify_users_bulk(
-                        admins,
-                        'طلب اعتماد معلم جديد',
-                        f"سجّل المعلم {saved_user.get_full_name() or saved_user.email} وهو بانتظار موافقتك للظهور وتفعيل الحساب.",
-                        link='/admin-panel/users/',
-                    )
-                except Exception:
-                    pass
+                    update_fields = ['bio', 'subject']
+                    if uploaded_image:
+                        tp.image = uploaded_image
+                        update_fields.append('image')
+                    tp.save(update_fields=update_fields)
+                if created or not tp.is_approved:
+                    try:
+                        from core.notifications_service import notify_users_bulk
+                        admins = User.objects.filter(Q(is_superuser=True) | Q(role='admin'), is_active=True)
+                        notify_users_bulk(
+                            admins,
+                            'طلب اعتماد معلم جديد',
+                            f"سجّل المعلم {saved_user.get_full_name() or saved_user.email} وهو بانتظار موافقتك للظهور وتفعيل الحساب.",
+                            link='/admin-panel/users/',
+                        )
+                    except Exception:
+                        pass
 
             elif user.role == 'assistant':
                 phone_val = request.POST.get('phone', '').strip()
