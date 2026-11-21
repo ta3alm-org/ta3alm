@@ -362,6 +362,7 @@ def enforce_security_ban(
                 block_device_admin(
                     device=None,
                     installation_id=clean_inst,
+                    hardware_id=clean_inst if clean_inst.startswith('DEV-') else '',
                     admin_user=actor,
                     block_type=block_type,
                     reason=reason,
@@ -504,6 +505,7 @@ def unban_user_and_devices(
             devices_unblocked += unblock_device_admin(
                 device=dev,
                 installation_id=installation_id,
+                hardware_id=installation_id if installation_id.startswith('DEV-') else '',
                 admin_user=actor,
                 reason=reason,
                 request=request,
@@ -680,7 +682,458 @@ def serialize_user_security_profile(profile: UserSecurityProfile) -> dict[str, A
         'last_signals': profile.last_signals,
         'auto_ban_mode': profile.auto_ban_mode,
         'ban_reason': profile.ban_reason,
+        'ai_risk_score': profile.ai_risk_score,
+        'ai_recommended_action': profile.ai_recommended_action,
+        'ai_analysis_summary': profile.ai_analysis_summary,
+        'ai_last_analyzed_at': profile.ai_last_analyzed_at.isoformat() if profile.ai_last_analyzed_at else None,
         'active_device_blocks': active_blocks,
         'devices_count': devices_count,
         'analyzed_at': profile.analyzed_at.isoformat() if profile.analyzed_at else None,
     }
+
+
+def _mask_secret(raw: str) -> str:
+    clean = str(raw or '').strip()
+    if not clean or clean == 'PUT_YOUR_AI_API_KEY_HERE':
+        return ''
+    if len(clean) <= 10:
+        return '*' * len(clean)
+    return f"{clean[:4]}...{clean[-4:]}"
+
+
+def get_effective_ai_config(policy: SecurityPolicyConfig | None = None) -> dict[str, Any]:
+    """استخراج إعدادات الذكاء الاصطناعي الأمني مع أولوية المفتاح المُدخل من لوحة الإدارة ثم settings."""
+    pol = policy or SecurityPolicyConfig.load()
+    raw_key = str(getattr(pol, 'ai_api_key_override', '') or '').strip()
+    if not raw_key or raw_key == 'PUT_YOUR_AI_API_KEY_HERE':
+        raw_key = str(getattr(settings, 'AI_SECURITY_API_KEY', '') or '').strip()
+    is_configured = bool(raw_key and raw_key != 'PUT_YOUR_AI_API_KEY_HERE')
+
+    provider = str(getattr(pol, 'ai_provider', '') or getattr(settings, 'AI_SECURITY_PROVIDER', 'auto') or 'auto').strip().lower()
+    model = str(getattr(pol, 'ai_model_name', '') or getattr(settings, 'AI_SECURITY_MODEL', 'gemini-2.5-flash') or 'gemini-2.5-flash').strip()
+    if provider == 'auto' or provider not in ('gemini', 'openai', 'groq', 'deepseek'):
+        if raw_key.startswith('AIza'):
+            provider = 'gemini'
+        elif raw_key.startswith('gsk_'):
+            provider = 'groq'
+        elif 'deepseek' in model.lower():
+            provider = 'deepseek'
+        elif raw_key:
+            provider = 'openai'
+        else:
+            provider = 'gemini'
+
+    return {
+        'enabled': bool(getattr(pol, 'ai_security_enabled', True)),
+        'hourly_enabled': bool(getattr(pol, 'ai_hourly_schedule_enabled', True) and getattr(settings, 'AI_SECURITY_HOURLY_ENABLED', True)),
+        'auto_enforce': bool(getattr(pol, 'ai_auto_enforce_bans', True)),
+        'api_key': raw_key if is_configured else '',
+        'configured': is_configured,
+        'masked_key': _mask_secret(raw_key),
+        'provider': provider,
+        'model': model,
+    }
+
+
+def collect_user_today_telemetry(user, *, since=None) -> dict[str, Any]:
+    """تجميع بصمة سلوك المستخدم وحركاته وأجهزته اليوم لإرسالها لمحلل الذكاء الاصطناعي."""
+    from django.db.models import Count
+
+    now = timezone.now()
+    today_start = since or timezone.localtime(now).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    today_activities = DeviceActivity.objects.filter(user=user, created_at__gte=today_start)
+    action_breakdown = {
+        row['activity_type']: row['c']
+        for row in today_activities.values('activity_type').annotate(c=Count('id'))
+    }
+    distinct_ips = list(
+        today_activities.filter(ip_address__isnull=False)
+        .values_list('ip_address', flat=True)
+        .distinct()[:12]
+    )
+    distinct_countries = list(
+        today_activities.exclude(country_code='')
+        .values_list('country_code', flat=True)
+        .distinct()[:8]
+    )
+    vpn_hits = today_activities.filter(is_vpn_or_proxy=True).count()
+
+    devices_data = []
+    for d in RegisteredDevice.objects.filter(user=user).order_by('-last_active_at')[:10]:
+        sig = d.integrity_signals if isinstance(d.integrity_signals, dict) else {}
+        devices_data.append({
+            'installation_id': d.installation_id,
+            'device_name': d.device_name,
+            'os': d.os_name,
+            'trust_status': d.trust_status,
+            'is_active': d.is_active,
+            'risk_score': d.risk_score,
+            'last_ip': d.last_ip,
+            'proxy_detected': bool(sig.get('proxy_detected')),
+            'user_ca_detected': bool(sig.get('user_ca_detected')),
+            'mitm_ca_detected': bool(sig.get('mitm_ca_detected')),
+            'frida_detected': bool(sig.get('frida_detected')),
+            'hooking_detected': bool(sig.get('hooking_detected')),
+            'root_detected': bool(sig.get('root_detected')),
+        })
+
+    recent_events = [
+        {
+            'event_type': e.event_type,
+            'severity': e.severity,
+            'risk_score': e.risk_score,
+            'installation_id': e.installation_id,
+            'action_taken': e.action_taken,
+            'created_at': e.created_at.isoformat() if e.created_at else None,
+        }
+        for e in DeviceSecurityEvent.objects.filter(user=user, created_at__gte=today_start - timedelta(days=2)).order_by('-created_at')[:15]
+    ]
+
+    sec_prof, _ = UserSecurityProfile.objects.get_or_create(user=user)
+    return {
+        'user_id': user.id,
+        'role': user.role,
+        'is_banned': user.is_banned,
+        'today_total_actions': today_activities.count(),
+        'today_action_breakdown': action_breakdown,
+        'today_distinct_ips': [str(ip) for ip in distinct_ips],
+        'today_distinct_countries': distinct_countries,
+        'today_vpn_hits': vpn_hits,
+        'lifetime_failed_logins': sec_prof.total_failed_logins,
+        'proxy_tamper_strikes': sec_prof.proxy_tamper_strikes,
+        'sharing_strikes': sec_prof.sharing_strikes,
+        'heuristic_score': sec_prof.behavior_risk_score,
+        'devices': devices_data,
+        'recent_security_events': recent_events,
+    }
+
+
+def _extract_json_object(raw_text: str) -> dict[str, Any]:
+    import json
+    import re as _re
+
+    text = str(raw_text or '').strip()
+    if text.startswith('```'):
+        text = _re.sub(r'^```(?:json)?\s*|\s*```$', '', text, flags=_re.IGNORECASE | _re.DOTALL).strip()
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            return parsed
+    except Exception:
+        pass
+    m = _re.search(r'\{.*\}', text, flags=_re.DOTALL)
+    if m:
+        parsed = json.loads(m.group(0))
+        if isinstance(parsed, dict):
+            return parsed
+    raise ValueError('AI returned non-JSON security verdict')
+
+
+def _call_ai_security_llm(telemetry: dict[str, Any], ai_cfg: dict[str, Any]) -> dict[str, Any]:
+    """استدعاء نموذج الذكاء الاصطناعي الخارجي (Gemini / OpenAI / Groq / DeepSeek) لتحليل سلوك المستخدم."""
+    import json
+    import urllib.parse
+    import urllib.request
+
+    system_prompt = (
+        "أنت محلل أمن سيبراني لمنصة تعليمية. قم بتحليل بيانات سلوك المستخدم وأجهزته التالية بدقة "
+        "لاكتشاف محاولات الاختراق، الاعتراض (Burp/HttpCanary/MITM/Proxy)، مشاركة الحساب، التخمين، أو القرصنة. "
+        "أرجع كائن JSON فقط بالحقول التالية: "
+        '{"risk_score": 0-100, "risk_level": "low|medium|high|critical", '
+        '"recommended_action": "none|warn|device_only|user_only|device_and_user", '
+        '"target_installation_id": "", "reason_ar": "ملخص عربي واضح ومختصر للسبب"}. '
+        "قواعد الحظر: استخدم device_only إذا كان العبث/MITM من جهاز معين؛ user_only إذا كان الاختراق/المشاركة من الحساب عبر عدة أجهزة؛ "
+        "device_and_user للهجوم الخطير المتعمد أو تعدد الانتهاكات الحرجة؛ none أو warn للسلوك التعليمي الطبيعي."
+    )
+    user_prompt = json.dumps(telemetry, ensure_ascii=False)
+    api_key = ai_cfg['api_key']
+    provider = ai_cfg['provider']
+    model = ai_cfg['model']
+
+    if provider == 'gemini':
+        safe_model = urllib.parse.quote(model or 'gemini-2.5-flash', safe='.-_')
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{safe_model}:generateContent?key={urllib.parse.quote(api_key)}"
+        body = {
+            'contents': [{'role': 'user', 'parts': [{'text': f"{system_prompt}\n\nالبيانات:\n{user_prompt}"}]}],
+            'generationConfig': {
+                'temperature': 0.1,
+                'responseMimeType': 'application/json',
+            },
+        }
+        headers = {'Content-Type': 'application/json'}
+    else:
+        if provider == 'groq':
+            url = 'https://api.groq.com/openai/v1/chat/completions'
+            default_m = 'llama-3.3-70b-versatile'
+        elif provider == 'deepseek':
+            url = 'https://api.deepseek.com/chat/completions'
+            default_m = 'deepseek-chat'
+        else:
+            url = 'https://api.openai.com/v1/chat/completions'
+            default_m = 'gpt-4o-mini'
+        chosen_model = model if (model and not model.startswith('gemini')) else default_m
+        body = {
+            'model': chosen_model,
+            'temperature': 0.1,
+            'response_format': {'type': 'json_object'},
+            'messages': [
+                {'role': 'system', 'content': system_prompt},
+                {'role': 'user', 'content': user_prompt},
+            ],
+        }
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {api_key}',
+        }
+
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(body).encode('utf-8'),
+        headers=headers,
+        method='POST',
+    )
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        raw_resp = json.loads(resp.read().decode('utf-8'))
+
+    if provider == 'gemini':
+        text_out = (
+            raw_resp.get('candidates', [{}])[0]
+            .get('content', {})
+            .get('parts', [{}])[0]
+            .get('text', '')
+        )
+    else:
+        text_out = (
+            raw_resp.get('choices', [{}])[0]
+            .get('message', {})
+            .get('content', '')
+        )
+    parsed = _extract_json_object(text_out)
+    score = min(max(int(parsed.get('risk_score') or 0), 0), 100)
+    action = str(parsed.get('recommended_action') or 'none').strip()
+    if action not in ('none', 'warn', 'device_only', 'user_only', 'device_and_user'):
+        action = 'warn' if score >= 60 else 'none'
+    level = str(parsed.get('risk_level') or '').strip()
+    if level not in ('low', 'medium', 'high', 'critical'):
+        level = 'critical' if score >= 85 else ('high' if score >= 60 else ('medium' if score >= 30 else 'low'))
+    return {
+        'used_external_ai': True,
+        'risk_score': score,
+        'risk_level': level,
+        'recommended_action': action,
+        'target_installation_id': str(parsed.get('target_installation_id') or '').strip(),
+        'reason_ar': str(parsed.get('reason_ar') or '').strip()[:600],
+    }
+
+
+def analyze_user_with_ai(
+    user,
+    *,
+    enforce_if_flagged: bool = True,
+    request=None,
+) -> dict[str, Any]:
+    """
+    تشغيل تحليل الذكاء الاصطناعي للمستخدم بناءً على حركات اليوم وسجله،
+    مع حفظ القرار وتنفيذ الحظر الانتقائي/المشترك تلقائياً عند وجود خطورة عالية.
+    """
+    policy = SecurityPolicyConfig.load()
+    ai_cfg = get_effective_ai_config(policy)
+    heur = compute_behavioral_risk(user)
+    profile: UserSecurityProfile = heur['profile']
+    telemetry = collect_user_today_telemetry(user)
+
+    verdict: dict[str, Any]
+    if ai_cfg['enabled'] and ai_cfg['configured']:
+        try:
+            verdict = _call_ai_security_llm(telemetry, ai_cfg)
+        except Exception as exc:
+            verdict = {
+                'used_external_ai': False,
+                'risk_score': heur['score'],
+                'risk_level': heur['level'],
+                'recommended_action': _derive_heuristic_action(heur['score'], heur['reasons'], telemetry),
+                'target_installation_id': _pick_riskiest_installation_id(telemetry),
+                'reason_ar': f"تحليل سلوكي محلي (تعذر الاتصال بـ AI الخارجي: {str(exc)[:100]}).",
+            }
+    else:
+        heur_action = _derive_heuristic_action(heur['score'], heur['reasons'], telemetry)
+        reason_bits = '، '.join(heur['reasons'][:4]) if heur['reasons'] else 'نشاط طبيعي دون مؤشرات عبث'
+        verdict = {
+            'used_external_ai': False,
+            'risk_score': heur['score'],
+            'risk_level': heur['level'],
+            'recommended_action': heur_action,
+            'target_installation_id': _pick_riskiest_installation_id(telemetry),
+            'reason_ar': f"تحليل سلوكي ذكي ({reason_bits}) — ضع مفتاح AI API لتفعيل التحليل بالذكاء الاصطناعي التوليدي.",
+        }
+
+    now = timezone.now()
+    profile.ai_risk_score = verdict['risk_score']
+    profile.ai_recommended_action = verdict['recommended_action']
+    profile.ai_analysis_summary = verdict['reason_ar']
+    profile.ai_last_analyzed_at = now
+    if verdict['risk_score'] > profile.behavior_risk_score:
+        profile.behavior_risk_score = verdict['risk_score']
+        profile.behavior_risk_level = verdict['risk_level']
+    profile.save(
+        update_fields=[
+            'ai_risk_score',
+            'ai_recommended_action',
+            'ai_analysis_summary',
+            'ai_last_analyzed_at',
+            'behavior_risk_score',
+            'behavior_risk_level',
+            'analyzed_at',
+        ]
+    )
+
+    enforcement_res = None
+    rec_action = verdict['recommended_action']
+    if (
+        enforce_if_flagged
+        and policy.ai_auto_enforce_bans
+        and not is_protected_admin_user(user)
+        and rec_action in ('device_only', 'user_only', 'device_and_user')
+        and (verdict['risk_score'] >= policy.risk_threshold_critical or telemetry['proxy_tamper_strikes'] > 0)
+    ):
+        target_inst = verdict.get('target_installation_id') or _pick_riskiest_installation_id(telemetry)
+        enforcement_res = enforce_security_ban(
+            user=user,
+            installation_id=target_inst if rec_action in ('device_only', 'device_and_user') else '',
+            mode=rec_action,
+            reason=f"حظر بقرار التحليل الأمني الذكي: {verdict['reason_ar'][:180]}",
+            block_type='permanent',
+            actor=None,
+            request=request,
+        )
+
+    return {
+        'profile': profile,
+        'verdict': verdict,
+        'enforcement': enforcement_res,
+    }
+
+
+def _pick_riskiest_installation_id(telemetry: dict[str, Any]) -> str:
+    for d in telemetry.get('devices') or []:
+        if d.get('mitm_ca_detected') or d.get('proxy_detected') or d.get('frida_detected') or d.get('hooking_detected'):
+            return str(d.get('installation_id') or '')
+    devices = telemetry.get('devices') or []
+    return str(devices[0].get('installation_id') or '') if devices else ''
+
+
+def _derive_heuristic_action(score: int, reasons: list[str], telemetry: dict[str, Any]) -> str:
+    if telemetry.get('proxy_tamper_strikes', 0) > 0:
+        return 'device_and_user' if score >= 85 else 'device_only'
+    if any('sharing' in r or 'multiple_ips' in r for r in reasons) and score >= 85:
+        return 'user_only'
+    if score >= 85:
+        return 'device_and_user'
+    if score >= 50:
+        return 'warn'
+    return 'none'
+
+
+def run_hourly_ai_behavioral_audit(*, force: bool = False, request=None) -> dict[str, Any]:
+    """
+    مهمة التدقيق الدورية كل ساعة: تحلل سلوك كل المستخدمين الذين دخلوا أو تفاعلوا على المنصة اليوم
+    وتتخذ إجراء الحظر المناسب (جهاز فقط / حساب فقط / كلاهما) تلقائياً حسب السياسة.
+    """
+    from django.contrib.auth import get_user_model
+
+    User = get_user_model()
+    policy = SecurityPolicyConfig.load()
+    ai_cfg = get_effective_ai_config(policy)
+    now = timezone.now()
+    if not force and not policy.ai_hourly_schedule_enabled:
+        return {'skipped': True, 'reason': 'hourly_schedule_disabled'}
+
+    today_start = timezone.localtime(now).replace(hour=0, minute=0, second=0, microsecond=0)
+    user_ids = set(
+        DeviceActivity.objects.filter(created_at__gte=today_start, user_id__isnull=False)
+        .values_list('user_id', flat=True)
+        .distinct()
+    )
+    user_ids.update(
+        DeviceSession.objects.filter(last_seen_at__gte=today_start)
+        .values_list('user_id', flat=True)
+        .distinct()
+    )
+    user_ids.update(
+        User.objects.filter(last_login__gte=today_start)
+        .values_list('id', flat=True)
+        .distinct()
+    )
+
+    users = User.objects.filter(id__in=user_ids, is_active=True, is_superuser=False).exclude(role='admin')
+    analyzed_users = 0
+    flagged_high_risk = 0
+    banned_users = 0
+    banned_devices = 0
+    used_external_ai = False
+
+    for u in users:
+        res = analyze_user_with_ai(u, enforce_if_flagged=True, request=request)
+        analyzed_users += 1
+        if res['verdict'].get('used_external_ai'):
+            used_external_ai = True
+        if res['verdict'].get('risk_score', 0) >= policy.risk_threshold_high:
+            flagged_high_risk += 1
+        enf = res.get('enforcement')
+        if isinstance(enf, dict) and enf.get('enforced'):
+            if enf.get('user_banned'):
+                banned_users += 1
+            banned_devices += int(enf.get('blocked_devices') or 0)
+
+    summary = {
+        'analyzed_users': analyzed_users,
+        'flagged_high_risk': flagged_high_risk,
+        'banned_users': banned_users,
+        'banned_devices': banned_devices,
+        'used_external_ai': used_external_ai,
+        'ai_key_configured': ai_cfg['configured'],
+        'provider': ai_cfg['provider'],
+        'model': ai_cfg['model'],
+        'ran_at': now.isoformat(),
+    }
+    policy.last_ai_audit_at = now
+    policy.last_ai_audit_summary = summary
+    policy.save(update_fields=['last_ai_audit_at', 'last_ai_audit_summary', 'updated_at'])
+    return summary
+
+
+def maybe_trigger_hourly_ai_audit_async() -> None:
+    """تشغيل التدقيق السلوكي الساعي في الخلفية بأمان بمجرد مرور ساعة على آخر فحص."""
+    import sys
+    import threading
+
+    if 'test' in sys.argv:
+        return
+    if not cache.add('ta3alm:ai_hourly_audit_probe', 1, timeout=180):
+        return
+    try:
+        policy = SecurityPolicyConfig.load()
+        if not policy.ai_security_enabled or not policy.ai_hourly_schedule_enabled:
+            return
+        now = timezone.now()
+        if policy.last_ai_audit_at and (now - policy.last_ai_audit_at) < timedelta(hours=1):
+            return
+        if not cache.add('ta3alm:ai_hourly_audit_running', 1, timeout=3500):
+            return
+
+        def _worker():
+            from django.db import close_old_connections
+            try:
+                close_old_connections()
+                run_hourly_ai_behavioral_audit(force=False, request=None)
+            except Exception:
+                pass
+            finally:
+                close_old_connections()
+                cache.delete('ta3alm:ai_hourly_audit_running')
+
+        threading.Thread(target=_worker, daemon=True).start()
+    except Exception:
+        pass
+

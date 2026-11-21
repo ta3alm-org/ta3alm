@@ -111,6 +111,28 @@ class PublicMetadataAPIView(APIView):
         ).strip()
         client_build = int(raw_build) if raw_build.isdigit() else None
 
+        meta = getattr(request, 'META', {}) or {}
+        qp = getattr(request, 'query_params', {})
+        def _flag(hdr: str, param: str) -> bool:
+            v = str(qp.get(param) or meta.get(hdr) or '').strip().lower()
+            return v in ('1', 'true', 'yes', 'on')
+
+        client_signals = {
+            'vpn_interface_active': _flag('HTTP_X_VPN_ACTIVE', 'vpn_active'),
+            'developer_options_enabled': _flag('HTTP_X_DEV_OPTIONS', 'dev_options'),
+            'adb_enabled': _flag('HTTP_X_ADB_ENABLED', 'adb_enabled'),
+            'proxy_detected': _flag('HTTP_X_PROXY_DETECTED', 'proxy_detected'),
+            'port_forwarding_detected': _flag('HTTP_X_PORT_FORWARDING', 'port_forwarding'),
+            'abnormal_dns_detected': _flag('HTTP_X_ABNORMAL_DNS', 'abnormal_dns'),
+        }
+        from .device_security_service import evaluate_boot_security_gate
+        resolved_user = request.user if getattr(request.user, 'is_authenticated', False) else None
+        boot_gate = evaluate_boot_security_gate(
+            request,
+            client_signals=client_signals,
+            user=resolved_user,
+        )
+
         return Response({
             'subjects': SubjectSerializer(subjects, many=True).data,
             'grades': [{'code': code, 'name': str(label)} for code, label in GRADE_CHOICES],
@@ -123,6 +145,8 @@ class PublicMetadataAPIView(APIView):
             'support_whatsapp': '+201507200894',
             'support_email': 'support@ta3alm.online',
             'google_web_client_id': google_web_client_id,
+            'is_maintenance_mode': site_settings.is_maintenance_mode,
+            'boot_gate': boot_gate,
             'app_update': site_settings.build_app_update_payload(
                 request=request,
                 client_version_code=client_build,

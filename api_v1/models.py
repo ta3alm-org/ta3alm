@@ -299,6 +299,14 @@ class SecurityPolicyConfig(models.Model):
     auto_enforcement_mode = models.CharField(max_length=24, default='device_and_user')
     enforce_request_signatures = models.BooleanField(default=True)
     request_signature_max_skew_seconds = models.PositiveIntegerField(default=300)
+    ai_security_enabled = models.BooleanField(default=True)
+    ai_provider = models.CharField(max_length=24, default='auto')
+    ai_model_name = models.CharField(max_length=64, default='gemini-2.5-flash')
+    ai_api_key_override = models.CharField(max_length=255, blank=True, default='')
+    ai_hourly_schedule_enabled = models.BooleanField(default=True)
+    ai_auto_enforce_bans = models.BooleanField(default=True)
+    last_ai_audit_at = models.DateTimeField(null=True, blank=True)
+    last_ai_audit_summary = models.JSONField(default=dict, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -313,6 +321,86 @@ class SecurityPolicyConfig(models.Model):
     def load(cls) -> 'SecurityPolicyConfig':
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
+
+    def _boot_guard_flags(self) -> dict:
+        raw = self.last_ai_audit_summary if isinstance(self.last_ai_audit_summary, dict) else {}
+        flags = raw.get('boot_guard_flags')
+        return flags if isinstance(flags, dict) else {}
+
+    @property
+    def block_vpn_connections(self) -> bool:
+        val = self._boot_guard_flags().get('block_vpn_connections')
+        return True if val is None else bool(val)
+
+    @property
+    def block_developer_options(self) -> bool:
+        val = self._boot_guard_flags().get('block_developer_options')
+        return True if val is None else bool(val)
+
+    @property
+    def block_abnormal_dns_or_ports(self) -> bool:
+        val = self._boot_guard_flags().get('block_abnormal_dns_or_ports')
+        return True if val is None else bool(val)
+
+    @property
+    def maintenance_approved_devices(self) -> list[str]:
+        raw_list = self._boot_guard_flags().get('maintenance_approved_devices')
+        if not isinstance(raw_list, list):
+            return []
+        cleaned: list[str] = []
+        seen: set[str] = set()
+        for item in raw_list:
+            tok = str(item or '').strip()
+            if tok and tok not in seen:
+                seen.add(tok)
+                cleaned.append(tok)
+        return cleaned
+
+    def is_device_maintenance_approved(self, *identifiers: str) -> bool:
+        approved_set = {x.upper() for x in self.maintenance_approved_devices}
+        if not approved_set:
+            return False
+        for ident in identifiers:
+            tok = str(ident or '').strip().upper()
+            if tok and tok in approved_set:
+                return True
+        return False
+
+    def set_device_maintenance_approval(self, identifier: str, approved: bool = True) -> list[str]:
+        tok = str(identifier or '').strip()
+        if not tok:
+            return self.maintenance_approved_devices
+        raw = dict(self.last_ai_audit_summary) if isinstance(self.last_ai_audit_summary, dict) else {}
+        flags = dict(raw.get('boot_guard_flags')) if isinstance(raw.get('boot_guard_flags'), dict) else {}
+        current = self.maintenance_approved_devices
+        tok_upper = tok.upper()
+        if approved:
+            if not any(x.upper() == tok_upper for x in current):
+                current.append(tok_upper if tok_upper.startswith('DEV-') else tok)
+        else:
+            current = [x for x in current if x.upper() != tok_upper]
+        flags['maintenance_approved_devices'] = current
+        raw['boot_guard_flags'] = flags
+        self.last_ai_audit_summary = raw
+        return current
+
+    def set_boot_guard_flags(
+        self,
+        *,
+        block_vpn=None,
+        block_dev_options=None,
+        block_abnormal_net=None,
+    ) -> None:
+        raw = dict(self.last_ai_audit_summary) if isinstance(self.last_ai_audit_summary, dict) else {}
+        flags = dict(raw.get('boot_guard_flags')) if isinstance(raw.get('boot_guard_flags'), dict) else {}
+        if block_vpn is not None:
+            flags['block_vpn_connections'] = bool(block_vpn)
+        if block_dev_options is not None:
+            flags['block_developer_options'] = bool(block_dev_options)
+        if block_abnormal_net is not None:
+            flags['block_abnormal_dns_or_ports'] = bool(block_abnormal_net)
+        raw['boot_guard_flags'] = flags
+        self.last_ai_audit_summary = raw
 
     def __str__(self):
         return (
@@ -665,6 +753,10 @@ class UserSecurityProfile(models.Model):
     last_signals = models.JSONField(default=dict, blank=True)
     auto_ban_mode = models.CharField(max_length=24, choices=ENFORCEMENT_MODES, default='none')
     ban_reason = models.CharField(max_length=255, blank=True)
+    ai_risk_score = models.PositiveIntegerField(default=0)
+    ai_recommended_action = models.CharField(max_length=24, default='none')
+    ai_analysis_summary = models.TextField(blank=True, default='')
+    ai_last_analyzed_at = models.DateTimeField(null=True, blank=True)
     analyzed_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

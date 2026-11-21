@@ -8,7 +8,8 @@
 {% block content %}
 <div class="page-header d-flex align-items-center justify-content-between flex-wrap gap-3">
     <div>
-        <h1><i class="bi bi-shield-lock-fill me-2" style="color:var(--admin-accent);"></i>مركز أمان الأجهزة ومكافحة مشاركة الحسابات</h1>
+        <h1><i class="bi bi-shield-lock-fill me-2" style="color:var(--admin-accent);"></i>مركز أمان الأجهزة ومكافحة
+            مشاركة الحسابات</h1>
         <p>مراقبة الأجهزة المسجّلة، البصمة متعددة الطبقات، الجلسات النشطة، محاولات التقاط الشاشة، وإدارة الحظر.</p>
     </div>
     <form method="POST" action="{% url 'admin_panel:security_admin_action' %}">
@@ -38,21 +39,24 @@
     </div>
     <div class="col-6 col-md-4 col-lg-2">
         <div class="stat-card">
-            <div class="stat-icon" style="background:#fff8e1; color:#f5a623;"><i class="bi bi-exclamation-triangle-fill"></i></div>
+            <div class="stat-icon" style="background:#fff8e1; color:#f5a623;"><i
+                    class="bi bi-exclamation-triangle-fill"></i></div>
             <div class="stat-number">{{ stats.suspicious_devices }}</div>
             <div class="stat-label">أجهزة مشبوهة/مقيّدة</div>
         </div>
     </div>
     <div class="col-6 col-md-4 col-lg-2">
         <div class="stat-card">
-            <div class="stat-icon" style="background:#fde8ea; color:#e94560;"><i class="bi bi-slash-circle-fill"></i></div>
+            <div class="stat-icon" style="background:#fde8ea; color:#e94560;"><i class="bi bi-slash-circle-fill"></i>
+            </div>
             <div class="stat-number">{{ stats.blocked_devices }}</div>
             <div class="stat-label">أجهزة محظورة</div>
         </div>
     </div>
     <div class="col-6 col-md-4 col-lg-2">
         <div class="stat-card">
-            <div class="stat-icon" style="background:#f3e8ff; color:#7c3aed;"><i class="bi bi-shield-exclamation"></i></div>
+            <div class="stat-icon" style="background:#f3e8ff; color:#7c3aed;"><i class="bi bi-shield-exclamation"></i>
+            </div>
             <div class="stat-number">{{ stats.open_events }}</div>
             <div class="stat-label">أحداث مفتوحة</div>
         </div>
@@ -69,7 +73,8 @@
 <!-- Security Policy Config -->
 <div class="admin-card mb-4">
     <div class="admin-card-header">
-        <span class="admin-card-title"><i class="bi bi-sliders me-2 text-primary"></i>إعدادات حدود الأجهزة وسياسات المخاطر وحماية الشاشة</span>
+        <span class="admin-card-title"><i class="bi bi-sliders me-2 text-primary"></i>إعدادات حدود الأجهزة وسياسات
+            المخاطر وحماية الشاشة</span>
     </div>
     <div class="p-4">
         <form method="POST" action="{% url 'admin_panel:security_admin_action' %}" class="row g-3 align-items-end">
@@ -77,41 +82,72 @@
             <input type="hidden" name="action" value="update_policy">
             <div class="col-6 col-md-2">
                 <label class="form-label small fw-bold">حد أجهزة الطالب</label>
-                <input type="number" min="1" name="student_device_limit" value="{{ policy.student_device_limit }}" class="form-control form-control-sm">
+                <input type="number" min="1" name="student_device_limit" value="{{ policy.student_device_limit }}"
+                    class="form-control form-control-sm">
             </div>
             <div class="col-6 col-md-2">
                 <label class="form-label small fw-bold">حد أجهزة المعلم</label>
-                <input type="number" min="1" name="teacher_device_limit" value="{{ policy.teacher_device_limit }}" class="form-control form-control-sm">
+                <input type="number" min="1" name="teacher_device_limit" value="{{ policy.teacher_device_limit }}"
+                    class="form-control form-control-sm">
             </div>
             <div class="col-6 col-md-2">
                 <label class="form-label small fw-bold">حد الجلسات المتزامنة</label>
-                <input type="number" min="1" name="max_concurrent_sessions" value="{{ policy.max_concurrent_sessions }}" class="form-control form-control-sm">
+                <input type="number" min="1" name="max_concurrent_sessions" value="{{ policy.max_concurrent_sessions }}"
+                    class="form-control form-control-sm">
             </div>
             <div class="col-6 col-md-2">
                 <label class="form-label small fw-bold">حد التشغيل المتزامن</label>
-                <input type="number" min="1" name="max_concurrent_playback" value="{{ policy.max_concurrent_playback }}" class="form-control form-control-sm">
+                <input type="number" min="1" name="max_concurrent_playback" value="{{ policy.max_concurrent_playback }}"
+                    class="form-control form-control-sm">
             </div>
             <div class="col-6 col-md-2">
                 <label class="form-label small fw-bold">عتبة الخطر العالي</label>
-                <input type="number" min="1" name="risk_threshold_high" value="{{ policy.risk_threshold_high }}" class="form-control form-control-sm">
+                <input type="number" min="1" name="risk_threshold_high" value="{{ policy.risk_threshold_high }}"
+                    class="form-control form-control-sm">
             </div>
             <div class="col-6 col-md-2">
                 <label class="form-label small fw-bold">أيام الاحتفاظ بالسجل</label>
-                <input type="number" min="7" name="event_retention_days" value="{{ policy.event_retention_days }}" class="form-control form-control-sm">
+                <input type="number" min="7" name="event_retention_days" value="{{ policy.event_retention_days }}"
+                    class="form-control form-control-sm">
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="enforceLimit" name="enforce_device_limits" {% if policy.enforce_device_limits %}checked{% endif %}>
-                    <label class="form-check-label small fw-bold" for="enforceLimit">تفعيل فرض حد الأجهزة</label>
+                    <input class="form-check-input" type="checkbox" id="enforceLimit" name="enforce_device_limits" {% if
+                        policy.enforce_device_limits %}checked{% endif %}>
+                    <label class="form-check-label small fw-bold" for="enforceLimit">فرض حد الأجهزة</label>
                 </div>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="enforceScreen" name="enforce_screen_capture_policy" {% if policy.enforce_screen_capture_policy %}checked{% endif %}>
-                    <label class="form-check-label small fw-bold" for="enforceScreen">فرض حماية التقاط الشاشة (FLAG_SECURE)</label>
+                    <input class="form-check-input" type="checkbox" id="enforceScreen"
+                        name="enforce_screen_capture_policy" {% if policy.enforce_screen_capture_policy %}checked{%
+                        endif %}>
+                    <label class="form-check-label small fw-bold" for="enforceScreen">حماية الشاشة</label>
                 </div>
             </div>
-            <div class="col-md-4 text-start">
+            <div class="col-md-3">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="blockVpn" name="block_vpn_connections" {% if
+                        policy.block_vpn_connections %}checked{% endif %}>
+                    <label class="form-check-label small fw-bold" for="blockVpn">منع الدخول بـ VPN</label>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="blockDev" name="block_developer_options" {% if
+                        policy.block_developer_options %}checked{% endif %}>
+                    <label class="form-check-label small fw-bold" for="blockDev">منع خيارات المطور</label>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="blockDnsPort" name="block_abnormal_dns_or_ports"
+                        {% if policy.block_abnormal_dns_or_ports %}checked{% endif %}>
+                    <label class="form-check-label small fw-bold" for="blockDnsPort">منع توجيه البورتات و DNS غير
+                        الطبيعي</label>
+                </div>
+            </div>
+            <div class="col-md-6 text-start">
                 <button type="submit" class="btn btn-primary btn-sm fw-bold px-4">
                     <i class="bi bi-check2-circle me-1"></i>حفظ السياسة الأمنية
                 </button>
@@ -125,32 +161,40 @@
     <div class="p-3">
         <form method="GET" class="row g-2 align-items-center">
             <div class="col-md-4">
-                <input type="text" name="q" value="{{ q }}" class="form-control form-control-sm" placeholder="بحث بالمستخدم، اسم الجهاز، IP، أو Installation ID...">
+                <input type="text" name="q" value="{{ q }}" class="form-control form-control-sm"
+                    placeholder="بحث بمعرّف الجهاز DEV-XXXX، اسم المستخدم، الموديل، أو IP...">
             </div>
             <div class="col-md-2">
                 <select name="trust" class="form-select form-select-sm">
                     <option value="">كل حالات الثقة</option>
+                    <option value="multi_account" {% if trust_filter=='multi_account' %}selected{% endif %}>أكثر من حساب
+                    </option>
+                    <option value="maintenance_approved" {% if trust_filter=='maintenance_approved' %}selected{% endif
+                        %}>معتمد للصيانة</option>
                     {% for val, label in trust_choices %}
-                    <option value="{{ val }}" {% if trust_filter == val %}selected{% endif %}>{{ label }}</option>
+                    <option value="{{ val }}" {% if trust_filter==val %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
             <div class="col-md-2">
                 <select name="severity" class="form-select form-select-sm">
                     <option value="">كل مستويات الخطورة</option>
-                    <option value="low" {% if severity_filter == 'low' %}selected{% endif %}>Low</option>
-                    <option value="medium" {% if severity_filter == 'medium' %}selected{% endif %}>Medium</option>
-                    <option value="high" {% if severity_filter == 'high' %}selected{% endif %}>High</option>
-                    <option value="critical" {% if severity_filter == 'critical' %}selected{% endif %}>Critical</option>
+                    <option value="low" {% if severity_filter=='low' %}selected{% endif %}>Low</option>
+                    <option value="medium" {% if severity_filter=='medium' %}selected{% endif %}>Medium</option>
+                    <option value="high" {% if severity_filter=='high' %}selected{% endif %}>High</option>
+                    <option value="critical" {% if severity_filter=='critical' %}selected{% endif %}>Critical</option>
                 </select>
             </div>
             <div class="col-md-2">
                 <select name="event_status" class="form-select form-select-sm">
                     <option value="">كل حالات التحقيق</option>
-                    <option value="open" {% if event_status_filter == 'open' %}selected{% endif %}>مفتوح</option>
-                    <option value="investigating" {% if event_status_filter == 'investigating' %}selected{% endif %}>قيد التحقيق</option>
-                    <option value="resolved" {% if event_status_filter == 'resolved' %}selected{% endif %}>تم الحل</option>
-                    <option value="false_positive" {% if event_status_filter == 'false_positive' %}selected{% endif %}>إنذار كاذب (False Positive)</option>
+                    <option value="open" {% if event_status_filter=='open' %}selected{% endif %}>مفتوح</option>
+                    <option value="investigating" {% if event_status_filter=='investigating' %}selected{% endif %}>قيد
+                        التحقيق</option>
+                    <option value="resolved" {% if event_status_filter=='resolved' %}selected{% endif %}>تم الحل
+                    </option>
+                    <option value="false_positive" {% if event_status_filter=='false_positive' %}selected{% endif %}>
+                        إنذار كاذب (False Positive)</option>
                 </select>
             </div>
             <div class="col-md-2 d-flex gap-2">
@@ -161,86 +205,118 @@
     </div>
 </div>
 
-<!-- Registered Devices Table -->
+<!-- Unified Physical Devices Table (Single Row Per Physical Device) -->
 <div class="admin-card mb-4">
     <div class="admin-card-header">
-        <span class="admin-card-title"><i class="bi bi-phone me-2 text-primary"></i>الأجهزة المسجّلة وأعلى المخاطر</span>
-        <span class="badge bg-secondary">{{ devices|length }} جهاز</span>
+        <span class="admin-card-title"><i class="bi bi-phone me-2 text-primary"></i>الأجهزة الموحدة (جهاز واحد لكل
+            هاتف/كمبيوتر بدون تكرار)</span>
+        <span class="badge bg-primary">{{ unified_devices|length }} جهاز فعلي</span>
     </div>
     <div class="table-responsive">
         <table class="admin-table">
             <thead>
                 <tr>
-                    <th>المستخدم</th>
-                    <th>الجهاز والنظام</th>
-                    <th>الخطورة / الثقة</th>
-                    <th>آخر IP والدولة</th>
-                    <th>التوقيع</th>
-                    <th>آخر نشاط</th>
-                    <th>إجراءات</th>
+                    <th>معرّف الجهاز</th>
+                    <th>الجهاز والمنصات</th>
+                    <th>الحسابات المرتبطة</th>
+                    <th>الحالة / الخطورة</th>
+                    <th>آخر IP</th>
+                    <th>إجراءات (تطبيق + متصفح)</th>
                 </tr>
             </thead>
             <tbody>
-                {% for d in devices %}
+                {% for udev in unified_devices %}
                 <tr>
                     <td>
-                        <div class="fw-bold">{{ d.user.get_full_name|default:d.user.username }}</div>
-                        <small class="text-muted">{{ d.user.email }}</small>
+                        <code class="fw-bold text-primary" dir="ltr">{{ udev.hardware_id }}</code>
+                        <div class="small text-muted">{{ udev.last_active_at|slice:":16"|default:"-" }}</div>
                     </td>
                     <td>
-                        <a href="{% url 'admin_panel:security_device_detail' d.id %}" class="fw-bold text-decoration-none">
-                            {{ d.device_name|default:d.model }}
+                        <a href="{% url 'admin_panel:security_device_detail' udev.primary_device_id %}"
+                            class="fw-bold text-decoration-none">
+                            {{ udev.display_name }}
                         </a>
-                        <div class="small text-muted">{{ d.os_name }} {{ d.android_version }} (API {{ d.api_level }}) · v{{ d.app_version }}</div>
-                        <code class="small">{{ d.installation_id|truncatechars:22 }}</code>
+                        <div class="small text-muted">{{ udev.os_summary }}</div>
+                        <div class="mt-1 d-flex flex-wrap gap-1">
+                            {% for pl in udev.platform_labels %}
+                            <span class="badge bg-light text-dark border">{{ pl }}</span>
+                            {% endfor %}
+                        </div>
                     </td>
                     <td>
-                        <span class="badge {% if d.trust_status == 'trusted' %}bg-success{% elif d.trust_status == 'blocked' %}bg-dark{% elif d.trust_status == 'restricted' %}bg-danger{% elif d.trust_status == 'suspicious' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
-                            {{ d.get_trust_status_display }}
+                        <div class="d-flex flex-wrap gap-1">
+                            {% for acc in udev.linked_accounts %}
+                            <span
+                                class="badge {% if acc.is_banned %}bg-danger-subtle text-danger{% else %}bg-secondary-subtle text-dark{% endif %}">
+                                {{ acc.full_name }}
+                            </span>
+                            {% endfor %}
+                        </div>
+                    </td>
+                    <td>
+                        <span
+                            class="badge {% if udev.is_blocked %}bg-dark{% elif udev.trust_status == 'restricted' %}bg-danger{% elif udev.trust_status == 'suspicious' %}bg-warning text-dark{% else %}bg-success{% endif %}">
+                            {% if udev.is_blocked %}محظور (تطبيق + متصفح){% else %}{{ udev.trust_status }}{% endif %}
                         </span>
-                        <div class="small mt-1 fw-bold">Score: {{ d.risk_score }} ({{ d.risk_level }})</div>
-                    </td>
-                    <td>
-                        <div>{{ d.last_ip|default:"-" }}</div>
-                        <small class="text-muted">{{ d.last_country|default:"-" }} {{ d.last_region }}</small>
-                    </td>
-                    <td>
-                        {% if d.signing_cert_verified %}
-                        <span class="badge bg-success-subtle text-success">موثوق</span>
-                        {% else %}
-                        <span class="badge bg-danger">غير مطابق</span>
+                        {% if udev.is_maintenance_approved %}
+                        <span class="badge bg-info text-dark mt-1">معتمد للصيانة</span>
                         {% endif %}
+                        <div class="small mt-1 fw-bold">Risk: {{ udev.max_risk_score }}%</div>
                     </td>
-                    <td><small>{{ d.last_active_at|date:"Y-m-d H:i" }}</small></td>
                     <td>
-                        <div class="d-flex gap-1">
-                            <a href="{% url 'admin_panel:security_device_detail' d.id %}" class="btn btn-sm btn-outline-primary" title="التفاصيل">
+                        <div>{{ udev.last_ip|default:"-" }}</div>
+                        <small class="text-muted">{{ udev.last_country }}</small>
+                    </td>
+                    <td>
+                        <div class="d-flex flex-wrap gap-1">
+                            <a href="{% url 'admin_panel:security_device_detail' udev.primary_device_id %}"
+                                class="btn btn-sm btn-outline-primary" title="التفاصيل">
                                 <i class="bi bi-eye"></i>
                             </a>
                             <form method="POST" action="{% url 'admin_panel:security_admin_action' %}">
                                 {% csrf_token %}
-                                <input type="hidden" name="device_id" value="{{ d.id }}">
-                                {% if d.trust_status == 'blocked' %}
-                                <input type="hidden" name="action" value="unblock_device">
-                                <button class="btn btn-sm btn-success" title="فك الحظر"><i class="bi bi-unlock-fill"></i></button>
+                                <input type="hidden" name="action" value="toggle_maintenance_device">
+                                <input type="hidden" name="device_id" value="{{ udev.primary_device_id }}">
+                                <input type="hidden" name="hardware_id" value="{{ udev.hardware_id }}">
+                                <input type="hidden" name="installation_id" value="{{ udev.primary_installation_id }}">
+                                {% if udev.is_maintenance_approved %}
+                                <input type="hidden" name="approved" value="0">
+                                <button class="btn btn-sm btn-info text-dark"
+                                    title="إلغاء اعتماد دخول الإدارة في الصيانة">
+                                    <i class="bi bi-shield-check"></i> إلغاء صيانة
+                                </button>
                                 {% else %}
-                                <input type="hidden" name="action" value="block_device">
-                                <input type="hidden" name="block_type" value="permanent">
-                                <input type="hidden" name="reason" value="حظر من لوحة الأمان">
-                                <button class="btn btn-sm btn-danger" title="حظر الجهاز"><i class="bi bi-slash-circle"></i></button>
+                                <input type="hidden" name="approved" value="1">
+                                <button class="btn btn-sm btn-outline-info"
+                                    title="اعتماد الجهاز لظهور زر دخول الإدارة في الصيانة">
+                                    <i class="bi bi-shield-plus"></i> اعتماد للصيانة
+                                </button>
                                 {% endif %}
                             </form>
                             <form method="POST" action="{% url 'admin_panel:security_admin_action' %}">
                                 {% csrf_token %}
-                                <input type="hidden" name="action" value="revoke_device">
-                                <input type="hidden" name="device_id" value="{{ d.id }}">
-                                <button class="btn btn-sm btn-outline-warning" title="إلغاء التفويض"><i class="bi bi-x-octagon"></i></button>
+                                <input type="hidden" name="device_id" value="{{ udev.primary_device_id }}">
+                                <input type="hidden" name="hardware_id" value="{{ udev.hardware_id }}">
+                                <input type="hidden" name="installation_id" value="{{ udev.primary_installation_id }}">
+                                {% if udev.is_blocked %}
+                                <input type="hidden" name="action" value="unblock_device">
+                                <button class="btn btn-sm btn-success" title="فك حظر التطبيق والمتصفح"><i
+                                        class="bi bi-unlock-fill"></i> فك</button>
+                                {% else %}
+                                <input type="hidden" name="action" value="block_device">
+                                <input type="hidden" name="block_type" value="permanent">
+                                <input type="hidden" name="reason" value="حظر شامل للجهاز (تطبيق + متصفح)">
+                                <button class="btn btn-sm btn-danger" title="حظر التطبيق والمتصفح"><i
+                                        class="bi bi-slash-circle"></i> حظر</button>
+                                {% endif %}
                             </form>
                         </div>
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="7" class="text-center text-muted py-4">لا توجد أجهزة مطابقة للبحث.</td></tr>
+                <tr>
+                    <td colspan="6" class="text-center text-muted py-4">لا توجد أجهزة مطابقة للبحث.</td>
+                </tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -252,7 +328,8 @@
     <div class="col-lg-8">
         <div class="admin-card h-100">
             <div class="admin-card-header">
-                <span class="admin-card-title"><i class="bi bi-shield-exclamation me-2 text-danger"></i>أحداث الأمان والتهديدات (التقاط شاشة / عبث / مشاركة حساب)</span>
+                <span class="admin-card-title"><i class="bi bi-shield-exclamation me-2 text-danger"></i>أحداث الأمان
+                    والتهديدات (التقاط شاشة / عبث / مشاركة حساب)</span>
             </div>
             <div class="table-responsive">
                 <table class="admin-table">
@@ -271,28 +348,37 @@
                         <tr>
                             <td>
                                 <span class="fw-bold">{{ e.event_type }}</span>
-                                <div class="small text-muted">{{ e.action_taken }} · {{ e.created_at|date:"m-d H:i" }}</div>
+                                <div class="small text-muted">{{ e.action_taken }} · {{ e.created_at|date:"m-d H:i" }}
+                                </div>
                             </td>
                             <td>{{ e.user.username|default:"-" }}</td>
                             <td>
-                                <span class="badge {% if e.severity == 'critical' %}bg-danger{% elif e.severity == 'high' %}bg-warning text-dark{% elif e.severity == 'medium' %}bg-info text-dark{% else %}bg-secondary{% endif %}">
+                                <span
+                                    class="badge {% if e.severity == 'critical' %}bg-danger{% elif e.severity == 'high' %}bg-warning text-dark{% elif e.severity == 'medium' %}bg-info text-dark{% else %}bg-secondary{% endif %}">
                                     {{ e.severity|upper }} ({{ e.risk_score }})
                                 </span>
                             </td>
                             <td><small>{{ e.ip_address|default:"-" }} {{ e.country_code }}</small></td>
                             <td><span class="badge bg-light text-dark border">{{ e.investigation_status }}</span></td>
                             <td>
-                                <form method="POST" action="{% url 'admin_panel:security_admin_action' %}" class="d-flex gap-1">
+                                <form method="POST" action="{% url 'admin_panel:security_admin_action' %}"
+                                    class="d-flex gap-1">
                                     {% csrf_token %}
                                     <input type="hidden" name="action" value="resolve_event">
                                     <input type="hidden" name="event_id" value="{{ e.id }}">
-                                    <button name="investigation_status" value="resolved" class="btn btn-sm btn-outline-success" title="تم الحل"><i class="bi bi-check-lg"></i></button>
-                                    <button name="investigation_status" value="false_positive" class="btn btn-sm btn-outline-secondary" title="إنذار كاذب واستعادة الثقة">FP</button>
+                                    <button name="investigation_status" value="resolved"
+                                        class="btn btn-sm btn-outline-success" title="تم الحل"><i
+                                            class="bi bi-check-lg"></i></button>
+                                    <button name="investigation_status" value="false_positive"
+                                        class="btn btn-sm btn-outline-secondary"
+                                        title="إنذار كاذب واستعادة الثقة">FP</button>
                                 </form>
                             </td>
                         </tr>
                         {% empty %}
-                        <tr><td colspan="6" class="text-center text-muted py-4">لا توجد أحداث أمنية مسجّلة.</td></tr>
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-4">لا توجد أحداث أمنية مسجّلة.</td>
+                        </tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -304,7 +390,8 @@
     <div class="col-lg-4">
         <div class="admin-card mb-3">
             <div class="admin-card-header">
-                <span class="admin-card-title"><i class="bi bi-slash-circle-fill me-2 text-danger"></i>قائمة الحظر النشطة</span>
+                <span class="admin-card-title"><i class="bi bi-slash-circle-fill me-2 text-danger"></i>قائمة الحظر
+                    النشطة</span>
             </div>
             <div class="p-3">
                 {% for b in active_blocks %}
@@ -328,13 +415,16 @@
 
         <div class="admin-card">
             <div class="admin-card-header">
-                <span class="admin-card-title"><i class="bi bi-people me-2 text-warning"></i>تنبيهات مشاركة الحسابات</span>
+                <span class="admin-card-title"><i class="bi bi-people me-2 text-warning"></i>تنبيهات مشاركة
+                    الحسابات</span>
             </div>
             <div class="p-3">
                 {% for s in sharing_alerts %}
                 <div class="border-bottom pb-2 mb-2">
-                    <div class="fw-bold small">{{ s.user.username|default:"-" }} — <span class="text-danger">{{ s.event_type }}</span></div>
-                    <div class="small text-muted">{{ s.created_at|date:"Y-m-d H:i" }} · IP: {{ s.ip_address|default:"-" }}</div>
+                    <div class="fw-bold small">{{ s.user.username|default:"-" }} — <span class="text-danger">{{
+                            s.event_type }}</span></div>
+                    <div class="small text-muted">{{ s.created_at|date:"Y-m-d H:i" }} · IP: {{ s.ip_address|default:"-"
+                        }}</div>
                 </div>
                 {% empty %}
                 <div class="text-muted small text-center py-2">لا توجد تنبيهات مشاركة حساب حالياً.</div>
@@ -367,7 +457,8 @@
                     <td>{{ sess.user.username }}</td>
                     <td>{{ sess.device.device_name|default:sess.installation_id|truncatechars:28 }}</td>
                     <td>{{ sess.ip_address|default:"-" }} ({{ sess.country_code|default:"-" }})</td>
-                    <td>{% if sess.is_vpn_or_proxy %}<span class="badge bg-warning text-dark">VPN/Proxy</span>{% else %}-{% endif %}</td>
+                    <td>{% if sess.is_vpn_or_proxy %}<span class="badge bg-warning text-dark">VPN/Proxy</span>{% else
+                        %}-{% endif %}</td>
                     <td><small>{{ sess.last_seen_at|date:"Y-m-d H:i" }}</small></td>
                     <td>
                         <form method="POST" action="{% url 'admin_panel:security_admin_action' %}">
@@ -379,11 +470,12 @@
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="6" class="text-center text-muted py-4">لا توجد جلسات نشطة.</td></tr>
+                <tr>
+                    <td colspan="6" class="text-center text-muted py-4">لا توجد جلسات نشطة.</td>
+                </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
 {% endblock %}
-

@@ -94,12 +94,24 @@
                             <td>
                                 {% if t.user.is_banned %}
                                     <span class="role-badge status-banned"><i class="bi bi-slash-circle me-1"></i>محظور</span>
+                                {% elif t.is_approved %}
+                                    <span class="role-badge status-active"><i class="bi bi-patch-check-fill me-1"></i>معتمد</span>
                                 {% else %}
-                                    <span class="role-badge status-active"><i class="bi bi-check2 me-1"></i>نشط</span>
+                                    <span class="role-badge status-expired"><i class="bi bi-hourglass-split me-1"></i>بانتظار الموافقة</span>
                                 {% endif %}
                             </td>
                             <td>
                                 <div class="d-flex gap-1 align-items-center">
+                                    {% if can_manage_users %}
+                                    <form method="POST" action="{% url 'admin_panel:user_action' %}" class="d-inline">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="user_id" value="{{ t.user.id }}">
+                                        <input type="hidden" name="action" value="{% if t.is_approved %}unapprove_teacher{% else %}approve_teacher{% endif %}">
+                                        <button type="submit" class="action-btn {% if t.is_approved %}action-btn-ban{% else %}action-btn-renew{% endif %}"
+                                                title="{% if t.is_approved %}سحب الاعتماد{% else %}موافقة واعتماد المعلم{% endif %}">
+                                            <i class="bi bi-{% if t.is_approved %}eye-slash-fill{% else %}check-circle-fill{% endif %}"></i>
+                                        </button>
+                                    </form>
                                     <!-- تجديد مجاني -->
                                     {% if can_manage_users %}
                                     <button class="action-btn action-btn-renew"

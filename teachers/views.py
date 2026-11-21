@@ -50,8 +50,10 @@ def get_group_permission(request, group_id, permission_type=None):
         return None, False # نمنع الدخول تماماً
 
 
-    # 1. المالك (المعلم)
+    # 1. المالك (المعلم المعتمد)
     if group.teacher.user == user:
+        if not group.teacher.is_approved:
+            return None, False
         return group, True
 
     # 2. المساعد
@@ -80,8 +82,10 @@ def get_package_permission(request, package_id, permission_type=None):
     package = get_object_or_404(CoursePackage, id=package_id)
     user = request.user
 
-    # 1. المالك (المعلم)
+    # 1. المالك (المعلم المعتمد)
     if package.teacher.user == user:
+        if not package.teacher.is_approved:
+            return None, False
         return package, True
 
     # 2. المساعد
@@ -114,6 +118,9 @@ def teacher_dashboard(request):
         teacher = request.user.teacher_profile
     except TeacherProfile.DoesNotExist:
         return redirect('complete_profile')
+
+    if not teacher.is_approved:
+        return render(request, 'teachers/pending_approval.html', {'teacher': teacher})
     
     if request.method == 'POST':
         # التحقق من الحد الأقصى للمجموعات

@@ -1,0 +1,283 @@
+{% load i18n %}
+{% get_current_language as LANGUAGE_CODE %}
+<!DOCTYPE html>
+<html lang="{{ LANGUAGE_CODE }}" dir="{% if LANGUAGE_CODE == 'ar' %}rtl{% else %}ltr{% endif %}">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ gate.title|default:"تَعَلَّم — بوابة الحماية والتحقق" }}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        :root {
+            --maroon: #7A0C2E;
+            --maroon-dark: #4A071C;
+            --gold: #D4AF37;
+            --bg: #FFFFFF;
+            --surface: #FAF8F9;
+            --text: #1B1D22;
+            --muted: #5F6470;
+            --danger: #C62828;
+            --warning: #D97706;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            min-height: 100vh;
+            background: var(--bg);
+            color: var(--text);
+            font-family: system-ui, -apple-system, 'Segoe UI', Tahoma, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        .splash-gate {
+            width: 100%;
+            max-width: 460px;
+            text-align: center;
+        }
+
+        .logo-box {
+            width: 88px;
+            height: 88px;
+            margin: 0 auto 18px;
+            border-radius: 24px;
+            background: #FFFFFF;
+            border: 1.5px solid rgba(122, 12, 46, 0.14);
+            box-shadow: 0 12px 28px rgba(122, 12, 46, 0.09);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--maroon);
+            font-size: 40px;
+        }
+
+        .brand-title {
+            font-size: 30px;
+            font-weight: 900;
+            color: var(--text);
+            margin-bottom: 4px;
+        }
+
+        .brand-sub {
+            font-size: 13.5px;
+            color: var(--muted);
+            margin-bottom: 24px;
+        }
+
+        .loader-bar {
+            width: 160px;
+            height: 4px;
+            margin: 0 auto 24px;
+            border-radius: 999px;
+            background: #F1F3F5;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .loader-fill {
+            width: 100%;
+            height: 100%;
+
+            background: {
+                % if gate.code=='MAINTENANCE_MODE' %
+            }
+
+            var(--warning) {
+                % else %
+            }
+
+            var(--danger) {
+                % endif %
+            }
+
+            ;
+        }
+
+        .gate-card {
+            background: var(--surface);
+
+            border: 1.5px solid {
+                % if gate.code=='MAINTENANCE_MODE' %
+            }
+
+            rgba(217, 119, 6, 0.35) {
+                % else %
+            }
+
+            rgba(198, 40, 40, 0.30) {
+                % endif %
+            }
+
+            ;
+            border-radius: 20px;
+            padding: 24px 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.04);
+        }
+
+        .status-icon {
+            width: 62px;
+            height: 62px;
+            margin: 0 auto 14px;
+            border-radius: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 30px;
+
+                {
+                % if gate.code=='MAINTENANCE_MODE' %
+            }
+
+            background: rgba(217, 119, 6, 0.12);
+            color: var(--warning);
+
+                {
+                % else %
+            }
+
+            background: rgba(198, 40, 40, 0.12);
+            color: var(--danger);
+
+                {
+                % endif %
+            }
+        }
+
+        .gate-title {
+            font-size: 19px;
+            font-weight: 900;
+            margin-bottom: 10px;
+
+            color: {
+                % if gate.code=='MAINTENANCE_MODE' %
+            }
+
+            #92400E {
+                % else %
+            }
+
+            var(--danger) {
+                % endif %
+            }
+
+            ;
+        }
+
+        .gate-msg {
+            font-size: 14px;
+            line-height: 1.7;
+            color: var(--muted);
+            margin-bottom: 16px;
+        }
+
+        .hw-badge {
+            display: inline-block;
+            background: #FFFFFF;
+            border: 1px solid #E2E5EB;
+            border-radius: 10px;
+            padding: 6px 12px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 12.5px;
+            font-weight: 700;
+            color: var(--text);
+            direction: ltr;
+            margin-bottom: 18px;
+        }
+
+        .actions {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .btn-primary-gate {
+            border: none;
+            border-radius: 12px;
+            background: linear-gradient(135deg, var(--maroon), var(--maroon-dark));
+            color: #FFFFFF;
+            padding: 12px 18px;
+            font-size: 14px;
+            font-weight: 800;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-secondary-gate {
+            border: 1px solid #D5D9E2;
+            border-radius: 12px;
+            background: #FFFFFF;
+            color: var(--text);
+            padding: 10px 16px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+    </style>
+</head>
+
+<body>
+    <main class="splash-gate">
+        <div class="logo-box">
+            <i class="bi bi-book-half"></i>
+        </div>
+        <h1 class="brand-title">تَعَلَّم</h1>
+        <p class="brand-sub">التعليم الذكي الآمن</p>
+
+        <div class="loader-bar">
+            <div class="loader-fill"></div>
+        </div>
+
+        <section class="gate-card">
+            <div class="status-icon">
+                {% if gate.code == 'VPN_DETECTED' %}
+                <i class="bi bi-shield-exclamation"></i>
+                {% elif gate.code == 'MAINTENANCE_MODE' %}
+                <i class="bi bi-tools"></i>
+                {% elif gate.code == 'ABNORMAL_NETWORK_OR_DNS' %}
+                <i class="bi bi-diagram-3-fill"></i>
+                {% else %}
+                <i class="bi bi-slash-circle-fill"></i>
+                {% endif %}
+            </div>
+
+            <h2 class="gate-title">{{ gate.title }}</h2>
+            <p class="gate-msg">{{ gate.message }}</p>
+
+            {% if gate.hardware_id %}
+            <div class="hw-badge">معرّف الجهاز: {{ gate.hardware_id }}</div>
+            {% endif %}
+
+            <div class="actions">
+                <button type="button" class="btn-primary-gate" onclick="window.location.reload();">
+                    <i class="bi bi-arrow-clockwise"></i>
+                    <span>إعادة الفحص والمحاولة</span>
+                </button>
+                {% if gate.code == 'MAINTENANCE_MODE' and gate.can_admin_login %}
+                <a href="/accounts/login/?next=/admin-panel/" class="btn-secondary-gate">
+                    <i class="bi bi-shield-lock"></i>
+                    <span>دخول الإدارة</span>
+                </a>
+                {% endif %}
+            </div>
+        </section>
+    </main>
+</body>
+
+</html>

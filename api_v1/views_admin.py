@@ -58,9 +58,12 @@ User = get_user_model()
 
 
 def _backfill_missing_user_profiles() -> None:
-    """ضمان وجود سجل Profile ورقم تعريفي لكل حساب مدرج في قاعدة البيانات حتى يظهر بانتظام في كافة اللوحات."""
-    for u in User.objects.filter(role='teacher', teacher_profile__isnull=True):
-        TeacherProfile.objects.get_or_create(user=u)
+    """ضمان وجود سجل Profile للحسابات المكتملة في قاعدة البيانات دون تفعيل حسابات المعلمين غير المستكملة."""
+    completed_teachers = User.objects.filter(role='teacher', teacher_profile__isnull=True).exclude(
+        Q(custom_id__isnull=True) | Q(custom_id='')
+    )
+    for u in completed_teachers:
+        TeacherProfile.objects.get_or_create(user=u, defaults={'is_approved': False})
     for u in User.objects.filter(role='student', student_profile__isnull=True):
         StudentProfile.objects.get_or_create(user=u, defaults={'parent_phone': ''})
     for u in User.objects.filter(role='assistant', assistant_profile__isnull=True):
@@ -294,16 +297,29 @@ class AdminManageUsersAPIView(APIView):
             tp, _ = TeacherProfile.objects.get_or_create(user=target)
             tp.is_approved = True
             tp.approved_at = timezone.now()
-            tp.save(update_fields=['is_approved', 'approved_at'])
+            update_fields = ['is_approved', 'approved_at']
+            # منح الباقة الافتراضية والتجربة 30 يوماً فور موافقة الإدارة لأول مرة
+            if not tp.is_trial_used and not tp.subscription_end_date:
+                default_plan = (
+                    SubscriptionPlan.objects.filter(is_default=True).first()
+                    or SubscriptionPlan.objects.order_by('price').first()
+                )
+                if default_plan:
+                    tp.current_plan = default_plan
+                    update_fields.append('current_plan')
+                tp.subscription_end_date = timezone.now() + timedelta(days=30)
+                tp.is_trial_used = True
+                update_fields.extend(['subscription_end_date', 'is_trial_used'])
+            tp.save(update_fields=update_fields)
             notify_user(
                 target,
-                'تم اعتماد حسابك كمعلم على منصة تعلّم',
-                'وافقت إدارة المنصة على ظهور حسابك ومجموعاتك وكورساتك للطلاب. أهلاً بك في منصة تعلّم!',
+                'تمت الموافقة على اعتمادك كمعلم في منصة تعلّم',
+                'وافقت إدارة المنصة على طلب انضمامك، وتم تفعيل لوحة المعلم والشهر التجريبي المجاني لتبدأ بإنشاء مجموعاتك وكورساتك.',
                 link='/teacher/',
             )
             AuditLog.log(request, AuditLog.ACTION_EDIT_USER, target_label=f'اعتماد معلم: {target.get_full_name() or target.email}', target_id=target.id)
             return Response({
-                'message': f'تم اعتماد المعلم {target.get_full_name() or target.email} وسيظهر الآن للطلاب.',
+                'message': f'تم اعتماد المعلم {target.get_full_name() or target.email} وتفعيل حسابه.',
                 'user': UserDetailSerializer(target, context={'request': request}).data,
             })
 

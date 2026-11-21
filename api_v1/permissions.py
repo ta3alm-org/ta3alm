@@ -37,10 +37,22 @@ class IsStudentRole(IsNotBanned):
 
 
 class IsTeacherRole(IsNotBanned):
-    message = 'هذه الخدمة مخصصة للمعلمين فقط.'
+    message = 'هذه الخدمة مخصصة للمعلمين المعتمدين فقط.'
 
     def has_permission(self, request, view):
-        return super().has_permission(request, view) and request.user.role == 'teacher'
+        if not (super().has_permission(request, view) and request.user.role == 'teacher'):
+            return False
+        tp = getattr(request.user, 'teacher_profile', None)
+        if tp is None or not getattr(tp, 'is_approved', False):
+            raise PermissionDenied(
+                detail={
+                    'error': 'حسابك كمعلم قيد المراجعة حالياً من قِبل إدارة المنصة. ستتمكن من إضافة المجموعات والكورسات فور الموافقة على الحساب.',
+                    'detail': 'حسابك كمعلم قيد المراجعة حالياً من قِبل إدارة المنصة.',
+                    'code': 'TEACHER_APPROVAL_PENDING',
+                    'is_teacher_approved': False,
+                }
+            )
+        return True
 
 
 class IsAssistantRole(IsNotBanned):

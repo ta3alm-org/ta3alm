@@ -294,10 +294,37 @@ def get_server_observed_ip(request) -> str | None:
     return None
 
 
+_VPN_ISP_KEYWORDS = (
+    'cloudflare warp',
+    'm247',
+    'nordvpn',
+    'expressvpn',
+    'protonvpn',
+    'proton ag',
+    'mullvad',
+    'surfshark',
+    'windscribe',
+    'psiphon',
+    'privatelayer',
+    'tzulo',
+    'datacamp',
+    'packethub',
+    'choopa',
+    'vultr',
+    'hetzner',
+    'ovh',
+    'linode',
+    'digitalocean',
+    'tor exit',
+    'wireguard',
+)
+
+
 def extract_network_context(request, integrity_signals: dict[str, Any] | None = None) -> dict[str, Any]:
-    """يستخلص سياق الشبكة والموقع التقريبي وإشارات الـ VPN من ترويسات البروكسي والخادم."""
+    """يستخلص سياق الشبكة والموقع التقريبي وإشارات الـ VPN/Proxy والـ DNS من ترويسات الخادم والعميل."""
     ip_addr = get_server_observed_ip(request)
     meta = getattr(request, 'META', {}) if request is not None else {}
+    sig = integrity_signals if isinstance(integrity_signals, dict) else {}
 
     country = (
         meta.get('HTTP_CF_IPCOUNTRY')
@@ -317,8 +344,12 @@ def extract_network_context(request, integrity_signals: dict[str, Any] | None = 
         or ''
     ).strip()[:128]
 
-    header_vpn = str(meta.get('HTTP_X_VPN_SUSPECTED') or '').strip().lower() in ('1', 'true', 'yes')
-    client_vpn = bool((integrity_signals or {}).get('vpn_interface_active'))
+    isp_low = isp.lower()
+    cf_warp = str(meta.get('HTTP_CF_WARP') or '').strip().lower() in ('1', 'true', 'yes', 'on')
+    header_vpn = str(meta.get('HTTP_X_VPN_SUSPECTED') or meta.get('HTTP_X_VPN_ACTIVE') or '').strip().lower() in ('1', 'true', 'yes', 'on')
+    proxy_via = bool((meta.get('HTTP_VIA') or meta.get('HTTP_X_PROXY_ID') or '').strip())
+    isp_vpn = any(tok in isp_low for tok in _VPN_ISP_KEYWORDS) if isp_low else False
+    client_vpn = bool(sig.get('vpn_interface_active'))
 
     is_private_ip = False
     if ip_addr:
@@ -333,7 +364,7 @@ def extract_network_context(request, integrity_signals: dict[str, Any] | None = 
         'country_code': country,
         'region_name': region,
         'isp_name': isp,
-        'is_vpn_or_proxy': header_vpn or client_vpn,
+        'is_vpn_or_proxy': header_vpn or cf_warp or proxy_via or isp_vpn or client_vpn,
         'is_private_ip': is_private_ip,
         'user_agent': str(meta.get('HTTP_USER_AGENT') or '')[:255],
     }
@@ -412,16 +443,269 @@ def get_user_device_limit(user) -> int:
     return max(int(policy.assistant_device_limit), 1)
 
 
-def get_active_device_block(installation_id: str) -> DeviceBlock | None:
-    """يتحقق من وجود حظر نشط للجهاز ويفكّ الحظر المؤقت المنتهي تلقائياً."""
-    if not installation_id:
-        return None
-    now = timezone.now()
-    active_blocks = DeviceBlock.objects.filter(
+def _clean_hw_token(val: Any) -> str:
+    return re.sub(r'[^a-z0-9]', '', str(val or '').lower())
+
+
+def _normalize_gpu_core(gpu_renderer: Any) -> str:
+    """يطبع اسم معالج الرسوميات للمقارنة بين تطبيق الأندرويد ومتصفح الويب على نفس الهاتف."""
+    raw = str(gpu_renderer or '').strip().lower()
+    if not raw:
+        return ''
+    # إزالة أغلفة Chrome ANGLE ونسخة OpenGL حتى يتطابق ANGLE (ARM, Mali-G68, OpenGL ES...) مع Mali-G68
+    raw = re.sub(r'^angle\s*\(', '', raw)
+    raw = re.sub(r'\)\s*$', '', raw)
+    raw = re.sub(r'opengl\s*es.*$', '', raw)
+    raw = re.sub(r'vulkan.*$', '', raw)
+    raw = re.sub(r'\(tm\)|\(r\)', '', raw)
+    parts = [p.strip() for p in raw.split(',') if p.strip()]
+    if len(parts) >= 2 and parts[0] in ('arm', 'qualcomm', 'imagination technologies', 'google', 'samsung'):
+        raw = parts[1]
+    elif parts:
+        raw = parts[0]
+    return re.sub(r'[^a-z0-9]', '', raw)[:48]
+
+
+def extract_android_model_from_ua(user_agent: str, sec_model: str = '') -> str:
+    """يستخرج موديل هاتف الأندرويد من User-Agent أو Sec-CH-UA-Model (متجاهلاً الرمز العام K)."""
+    candidate = str(sec_model or '').strip().strip('"')
+    if not candidate and user_agent:
+        m = re.search(r'Android\s+[^;)]+;\s*([^;)]+?)(?:\s+Build/|;|\))', user_agent, re.IGNORECASE)
+        if m:
+            candidate = m.group(1).strip()
+    tok = _clean_hw_token(candidate)
+    if tok in ('', 'k', 'mobile', 'android', 'wv', 'linux'):
+        return ''
+    return tok
+
+
+def _resolve_os_family(os_name: str, cpu_arch: str = '', user_agent: str = '') -> str:
+    combined = f"{os_name or ''} {cpu_arch or ''} {user_agent or ''}".lower()
+    if 'ipados' in combined or 'ipad' in combined:
+        return 'ipados'
+    if 'iphone' in combined or 'ios' in combined:
+        return 'ios'
+    if 'android' in combined:
+        return 'android'
+    if 'windows' in combined:
+        return 'windows'
+    if 'mac' in combined or 'darwin' in combined:
+        return 'macos'
+    if 'linux' in combined or 'x11' in combined:
+        return 'linux'
+    return _clean_hw_token(os_name) or 'unknown'
+
+
+def _extract_device_hw_profile(
+    traits: dict[str, Any] | None = None,
+    *,
+    device: RegisteredDevice | None = None,
+    request=None,
+) -> dict[str, str]:
+    src = traits if isinstance(traits, dict) else {}
+    meta = getattr(request, 'META', {}) if request is not None else {}
+    ua = str(meta.get('HTTP_USER_AGENT') or '')
+
+    if device is not None:
+        os_name = str(src.get('os_name') or device.os_name or '')
+        cpu_arch = str(src.get('cpu_arch') or device.cpu_arch or '')
+        raw_model = str(src.get('model') or device.model or '')
+        manufacturer = str(src.get('manufacturer') or device.manufacturer or '')
+        gpu_renderer = str(src.get('gpu_renderer') or device.gpu_renderer or '')
+        pkg = str(src.get('package_name') or device.package_name or '')
+        web_hw_sig = str(src.get('web_hw_sig') or '')
+        if not web_hw_sig and isinstance(device.integrity_signals, dict):
+            wt = device.integrity_signals.get('web_traits')
+            if isinstance(wt, dict):
+                web_hw_sig = str(wt.get('web_hw_sig') or '')
+        ip_addr = str(device.last_ip or '')
+    else:
+        os_name = str(src.get('os_name') or '')
+        cpu_arch = str(src.get('cpu_arch') or '')
+        raw_model = str(src.get('model') or meta.get('HTTP_X_DEVICE_MODEL') or '')
+        manufacturer = str(src.get('manufacturer') or '')
+        gpu_renderer = str(src.get('gpu_renderer') or meta.get('HTTP_X_DEVICE_GPU') or '')
+        pkg = str(src.get('package_name') or '')
+        web_hw_sig = str(src.get('web_hw_sig') or '')
+        ip_addr = get_server_observed_ip(request) or ''
+
+    os_family = _resolve_os_family(os_name, cpu_arch, ua)
+    is_web = pkg == WEB_PACKAGE_NAME or os_name.lower().startswith('web')
+    sec_model = str(meta.get('HTTP_SEC_CH_UA_MODEL') or meta.get('HTTP_X_DEVICE_MODEL') or '').strip().strip('"')
+
+    model_tok = ''
+    if not is_web:
+        model_tok = _clean_hw_token(raw_model)
+    elif os_family == 'android':
+        model_tok = extract_android_model_from_ua(ua, sec_model)
+        if not model_tok and raw_model and ' on ' not in raw_model.lower():
+            model_tok = _clean_hw_token(raw_model)
+
+    return {
+        'os_family': os_family,
+        'model_token': model_tok,
+        'manufacturer_token': _clean_hw_token(manufacturer) if not is_web else '',
+        'gpu_core': _normalize_gpu_core(gpu_renderer),
+        'web_hw_sig': web_hw_sig.strip().lower(),
+        'ip_address': ip_addr.strip(),
+        'is_web': '1' if is_web else '0',
+    }
+
+
+def _find_matching_canonical_hardware_id(
+    profile: dict[str, str],
+    *,
+    installation_id: str = '',
+    exclude_pk: int | None = None,
+) -> str | None:
+    """
+    يبحث عن جهاز مادي مسجّل مسبقاً يطابق نفس الهاتف/الجهاز (سواء تطبيق أندرويد أو متصفح ويب أو حساب آخر)
+    حتى يوحّد التطبيق والمتصفح والحسابات المتعددة تحت معرف DEV-XXXXXXXX واحد.
+    """
+    clean_inst = str(installation_id or '').strip()
+    os_fam = profile.get('os_family', '')
+    model_tok = profile.get('model_token', '')
+    gpu_core = profile.get('gpu_core', '')
+    web_hw_sig = profile.get('web_hw_sig', '')
+    ip_addr = profile.get('ip_address', '')
+
+    candidates = RegisteredDevice.objects.only(
+        'id',
+        'installation_id',
+        'os_name',
+        'cpu_arch',
+        'model',
+        'manufacturer',
+        'gpu_renderer',
+        'package_name',
+        'last_ip',
+        'last_active_at',
+        'integrity_signals',
+    ).order_by('-last_active_at')[:350]
+
+    recent_cutoff = timezone.now() - timedelta(days=30)
+    for dev in candidates:
+        if exclude_pk and dev.pk == exclude_pk:
+            continue
+        sigs = dev.integrity_signals if isinstance(dev.integrity_signals, dict) else {}
+        cand_hw_id = str(sigs.get('hardware_id') or '').strip()
+        if not cand_hw_id.startswith('DEV-'):
+            continue
+
+        # 1) نفس installation_id على أي حساب
+        if clean_inst and dev.installation_id == clean_inst:
+            return cand_hw_id
+
+        cand_prof = _extract_device_hw_profile(device=dev)
+        if cand_prof['os_family'] != os_fam:
+            continue
+
+        # 2) تطابق Web hardware signature الصارم لنفس المتصفح أو التصفح الخفي
+        if web_hw_sig and cand_prof['web_hw_sig'] and web_hw_sig == cand_prof['web_hw_sig']:
+            return cand_hw_id
+
+        # 3) الربط العابر للمنصات على الأندرويد (تطبيق أندرويد <-> متصفح أندرويد على نفس الهاتف)
+        if os_fam == 'android':
+            same_model = bool(model_tok and cand_prof['model_token'] and model_tok == cand_prof['model_token'])
+            same_gpu = bool(gpu_core and cand_prof['gpu_core'] and (gpu_core == cand_prof['gpu_core'] or gpu_core in cand_prof['gpu_core'] or cand_prof['gpu_core'] in gpu_core))
+            same_ip = bool(ip_addr and cand_prof['ip_address'] and ip_addr == cand_prof['ip_address'])
+
+            if same_model and (same_gpu or same_ip):
+                return cand_hw_id
+            if same_ip and dev.last_active_at and dev.last_active_at >= recent_cutoff:
+                # إذا تطابق نفس الـ IP ونظام Android و(GPU متطابق أو المتصفح أخفى الموديل بكلمة K)
+                if same_gpu or not model_tok or not cand_prof['model_token']:
+                    return cand_hw_id
+
+    return None
+
+
+def compute_canonical_hardware_id(
+    traits: dict[str, Any] | None = None,
+    *,
+    installation_id: str = '',
+    request=None,
+    net_ctx: dict[str, Any] | None = None,
+    existing_device: RegisteredDevice | None = None,
+) -> str:
+    """يولّد أو يسترجع معرّف الجهاز المادي الموحّد (DEV-XXXXXXXX) لتفادي التكرار وحظر التطبيق والمتصفح معاً."""
+    if existing_device is not None and isinstance(existing_device.integrity_signals, dict):
+        saved = str(existing_device.integrity_signals.get('hardware_id') or '').strip()
+        if saved.startswith('DEV-') and len(saved) == 12:
+            # تحقّق إن كان هناك جهاز أندرويد رئيسي بنفس الموديل/IP لربط التطبيق والمتصفح تحت معرّف أقدم واحد
+            profile = _extract_device_hw_profile(traits, device=existing_device, request=request)
+            if net_ctx and net_ctx.get('ip_address') and not profile.get('ip_address'):
+                profile['ip_address'] = str(net_ctx['ip_address'])
+            linked = _find_matching_canonical_hardware_id(
+                profile,
+                installation_id=installation_id or existing_device.installation_id,
+                exclude_pk=existing_device.pk,
+            )
+            return linked or saved
+
+    profile = _extract_device_hw_profile(traits, device=existing_device, request=request)
+    if net_ctx and net_ctx.get('ip_address') and not profile.get('ip_address'):
+        profile['ip_address'] = str(net_ctx['ip_address'])
+
+    matched = _find_matching_canonical_hardware_id(
+        profile,
         installation_id=installation_id,
-        is_active=True,
-    ).order_by('-created_at')
-    for blk in active_blocks:
+        exclude_pk=existing_device.pk if existing_device else None,
+    )
+    if matched:
+        return matched
+
+    seed_parts = [
+        profile.get('os_family', ''),
+        profile.get('model_token', ''),
+        profile.get('gpu_core', ''),
+        profile.get('web_hw_sig', ''),
+        str(installation_id or (existing_device.installation_id if existing_device else '')),
+    ]
+    # إذا توافرت سمات عتاد صلبة (تطبيق أصلي بموديل + GPU أو ويب ببصمة WebGL/Canvas)، استبعد installation_id لتوحيد المعرّف
+    if (profile.get('os_family') == 'android' and profile.get('model_token') and profile.get('gpu_core')) or profile.get('web_hw_sig'):
+        seed_parts[-1] = profile.get('os_family', '')
+
+    digest = hmac.new(
+        _fingerprint_secret(),
+        f"hw_id_v1:{'|'.join(seed_parts)}".encode('utf-8'),
+        hashlib.sha256,
+    ).hexdigest()[:8].upper()
+    return f"DEV-{digest}"
+
+
+def get_device_hardware_id(device: RegisteredDevice) -> str:
+    """يرجع معرّف الجهاز الموحد DEV-XXXXXXXX من سجل الجهاز أو يحسبه ويحفظه."""
+    sigs = dict(device.integrity_signals) if isinstance(device.integrity_signals, dict) else {}
+    existing = str(sigs.get('hardware_id') or '').strip()
+    if existing.startswith('DEV-') and len(existing) == 12:
+        return existing
+
+    hw_id = compute_canonical_hardware_id(
+        {
+            'device_name': device.device_name,
+            'manufacturer': device.manufacturer,
+            'model': device.model,
+            'os_name': device.os_name,
+            'cpu_arch': device.cpu_arch,
+            'gpu_renderer': device.gpu_renderer,
+            'package_name': device.package_name,
+        },
+        installation_id=device.installation_id,
+        existing_device=device,
+    )
+    sigs['hardware_id'] = hw_id
+    device.integrity_signals = sigs
+    try:
+        RegisteredDevice.objects.filter(pk=device.pk).update(integrity_signals=sigs)
+    except Exception:
+        pass
+    return hw_id
+
+
+def _filter_active_non_expired_block(blocks_qs) -> DeviceBlock | None:
+    now = timezone.now()
+    for blk in blocks_qs.order_by('-created_at'):
         if blk.block_type == 'temporary' and blk.expires_at and blk.expires_at <= now:
             blk.is_active = False
             blk.unblocked_at = now
@@ -433,6 +717,105 @@ def get_active_device_block(installation_id: str) -> DeviceBlock | None:
                 blk.device.save(update_fields=['trust_status', 'is_active'])
             continue
         return blk
+    return None
+
+
+def get_active_device_block(
+    installation_id: str = '',
+    *,
+    hardware_id: str = '',
+    request=None,
+    net_ctx: dict[str, Any] | None = None,
+) -> DeviceBlock | None:
+    """
+    يتحقق من وجود حظر نشط للجهاز عبر:
+    - installation_id المباشر
+    - معرّف العتاد الموحد hardware_id (DEV-XXXXXXXX) عبر fingerprint_hash
+    - الربط العابر للمنصات (حظر هاتف أندرويد يحظر التطبيق والمتصفح معاً)
+    """
+    clean_inst = str(installation_id or '').strip()
+    clean_hw = str(hardware_id or '').strip()
+
+    if not clean_hw and request is not None:
+        clean_hw = str(request.META.get('HTTP_X_HARDWARE_ID') or '').strip()
+
+    if not clean_hw and clean_inst:
+        existing_dev = RegisteredDevice.objects.filter(installation_id=clean_inst).first()
+        if existing_dev is not None:
+            clean_hw = get_device_hardware_id(existing_dev)
+
+    if not clean_hw and request is not None:
+        meta = getattr(request, 'META', {}) or {}
+        ua = str(meta.get('HTTP_USER_AGENT') or '')
+        parsed = parse_web_user_agent(ua) if ua else {'os_label': ''}
+        model_hdr = str(meta.get('HTTP_X_DEVICE_MODEL') or '').strip()
+        gpu_hdr = str(meta.get('HTTP_X_DEVICE_GPU') or '').strip()
+        req_traits = {
+            'os_name': 'Android' if 'dart/' in ua.lower() or str(meta.get('HTTP_X_CLIENT_PLATFORM') or '').lower() == 'android' else f"Web ({parsed.get('os_label', '')})",
+            'model': model_hdr,
+            'gpu_renderer': gpu_hdr,
+            'package_name': '' if str(meta.get('HTTP_X_CLIENT_PLATFORM') or '').lower() == 'android' else WEB_PACKAGE_NAME,
+        }
+        profile = _extract_device_hw_profile(req_traits, request=request)
+        if net_ctx and net_ctx.get('ip_address'):
+            profile['ip_address'] = str(net_ctx['ip_address'])
+        matched_hw = _find_matching_canonical_hardware_id(profile, installation_id=clean_inst)
+        if matched_hw:
+            clean_hw = matched_hw
+
+    q_filter = Q()
+    if clean_inst:
+        q_filter |= Q(installation_id=clean_inst)
+    if clean_hw:
+        q_filter |= Q(fingerprint_hash=clean_hw) | Q(installation_id=clean_hw)
+
+    if q_filter:
+        blk = _filter_active_non_expired_block(DeviceBlock.objects.filter(q_filter, is_active=True))
+        if blk:
+            return blk
+
+    # مطابقة احتياطية للأندرويد (مثلاً عند فتح متصفح خفي من نفس هاتف الأندرويد المحظور)
+    if request is not None:
+        ctx = net_ctx or extract_network_context(request)
+        ip_addr = ctx.get('ip_address')
+        meta = getattr(request, 'META', {}) or {}
+        ua = str(meta.get('HTTP_USER_AGENT') or '')
+        os_fam = _resolve_os_family(
+            str(meta.get('HTTP_X_CLIENT_PLATFORM') or ''),
+            '',
+            ua,
+        )
+        if os_fam == 'android' and ip_addr:
+            req_model = extract_android_model_from_ua(
+                ua,
+                str(meta.get('HTTP_SEC_CH_UA_MODEL') or meta.get('HTTP_X_DEVICE_MODEL') or ''),
+            )
+            blocked_androids = RegisteredDevice.objects.filter(
+                trust_status=DeviceTrustStatus.BLOCKED,
+                last_ip=ip_addr,
+                os_name__icontains='android',
+            ).order_by('-last_active_at')[:10]
+            for bdev in blocked_androids:
+                cand_model = _clean_hw_token(bdev.model)
+                if not req_model or not cand_model or req_model == cand_model or cand_model in req_model:
+                    blk = _filter_active_non_expired_block(
+                        DeviceBlock.objects.filter(
+                            Q(device=bdev) | Q(installation_id=bdev.installation_id) | Q(fingerprint_hash=get_device_hardware_id(bdev)),
+                            is_active=True,
+                        )
+                    )
+                    if blk:
+                        return blk
+                    return DeviceBlock(
+                        device=bdev,
+                        user=bdev.user,
+                        installation_id=bdev.installation_id,
+                        fingerprint_hash=get_device_hardware_id(bdev),
+                        block_type='permanent',
+                        reason=bdev.revoked_reason or 'هذا الجهاز محظور إدارياً (تطبيق + متصفح).',
+                        is_active=True,
+                    )
+
     return None
 
 
@@ -855,10 +1238,12 @@ def detect_account_sharing(
 
 def serialize_device_summary(device: RegisteredDevice, current_installation_id: str = '') -> dict[str, Any]:
     active_sess = device.sessions.filter(status='active', expires_at__gt=timezone.now()).exists()
+    hw_id = get_device_hardware_id(device)
     return {
         'id': device.id,
         'device_uuid': str(device.device_uuid),
         'installation_id': device.installation_id,
+        'hardware_id': hw_id,
         'is_current_device': bool(current_installation_id and device.installation_id == current_installation_id),
         'device_name': device.device_name or f"{device.manufacturer} {device.model}".strip() or 'Android Device',
         'manufacturer': device.manufacturer,
@@ -904,7 +1289,7 @@ def register_or_update_device(
     """
     التدفق الكامل لتسجيل أو تحديث الجهاز:
     1) التحقق من صحة installation_id.
-    2) التحقق من عدم وجود حظر إداري DeviceBlock.
+    2) التحقق من عدم وجود حظر إداري DeviceBlock (مباشر أو عبر معرف العتاد الموحد DEV-XXXXXXXX).
     3) التحقق من حد الأجهزة المسموح (دون استبدال صامت).
     4) إنشاء/تحديث بصمة fp_v1 وسجل الانحراف وسجل IP.
     5) إنشاء أو تحديث DeviceSession وتقييم المخاطر.
@@ -935,7 +1320,26 @@ def register_or_update_device(
             }
     net_ctx = extract_network_context(request, integrity_signals=tamper_signals)
 
-    active_block = get_active_device_block(clean_id)
+    existing = (
+        RegisteredDevice.objects.select_for_update()
+        .filter(user=user, installation_id=clean_id)
+        .first()
+    )
+    canonical_hw_id = compute_canonical_hardware_id(
+        traits,
+        installation_id=clean_id,
+        request=request,
+        net_ctx=net_ctx,
+        existing_device=existing,
+    )
+    tamper_signals = {**tamper_signals, 'hardware_id': canonical_hw_id}
+
+    active_block = get_active_device_block(
+        clean_id,
+        hardware_id=canonical_hw_id,
+        request=request,
+        net_ctx=net_ctx,
+    )
     if active_block:
         record_security_event(
             event_type='blocked_device_attempt',
@@ -947,26 +1351,26 @@ def register_or_update_device(
             request=request,
             net_ctx=net_ctx,
             action_taken='denied_registration',
-            details={'block_id': active_block.id, 'reason': active_block.reason},
+            details={
+                'block_id': active_block.id,
+                'hardware_id': canonical_hw_id,
+                'reason': active_block.reason,
+            },
         )
         return {
             'allowed': False,
             'code': 'DEVICE_BLOCKED',
+            'hardware_id': canonical_hw_id,
             'error': f'هذا الجهاز محظور من استخدام المنصة: {active_block.reason}',
             'block_type': active_block.block_type,
             'expires_at': active_block.expires_at.isoformat() if active_block.expires_at else None,
         }
 
-    existing = (
-        RegisteredDevice.objects.select_for_update()
-        .filter(user=user, installation_id=clean_id)
-        .first()
-    )
-
     if existing and existing.trust_status == DeviceTrustStatus.BLOCKED:
         return {
             'allowed': False,
             'code': 'DEVICE_BLOCKED',
+            'hardware_id': canonical_hw_id,
             'error': 'تم حظر هذا الجهاز من قِبل إدارة المنصة.',
         }
 
@@ -1252,6 +1656,7 @@ def register_or_update_device(
         'allowed': True,
         'is_new_device': is_new_device,
         'device_limit': limit,
+        'hardware_id': canonical_hw_id,
         'device': serialize_device_summary(device, clean_id),
         'device_obj': device,
         'session_obj': session,
@@ -1261,20 +1666,20 @@ def register_or_update_device(
     }
 
 
-def check_device_allowed(user, installation_id: str) -> tuple[bool, str | None, str | None]:
+def check_device_allowed(user, installation_id: str, request=None) -> tuple[bool, str | None, str | None]:
     """
     فحص صارم قبل منح تصريح التشغيل المحمي أو الموارد الحساسة:
     يتحقق من الحظر الإداري، إلغاء تفويض الجهاز، أو التقييد المؤقت، وحد الأجهزة.
     """
     clean_id = str(installation_id or '').strip()
-    if not clean_id:
+    if not clean_id and request is None:
         return True, None, None
 
-    block = get_active_device_block(clean_id)
+    block = get_active_device_block(clean_id, request=request)
     if block:
         return False, 'DEVICE_BLOCKED', f'هذا الجهاز محظور: {block.reason}'
 
-    device = RegisteredDevice.objects.filter(user=user, installation_id=clean_id).first()
+    device = RegisteredDevice.objects.filter(user=user, installation_id=clean_id).first() if clean_id else None
     if device:
         if device.trust_status == DeviceTrustStatus.BLOCKED:
             return False, 'DEVICE_BLOCKED', 'تم حظر هذا الجهاز من قِبل الإدارة.'
@@ -1388,50 +1793,116 @@ def revoke_user_device(
     return device
 
 
+def _find_all_devices_for_hardware(
+    *,
+    hardware_id: str = '',
+    installation_id: str = '',
+    primary_device: RegisteredDevice | None = None,
+) -> list[RegisteredDevice]:
+    """يجمع كافة سجلات الأجهزة (تطبيق أندرويد + متصفح ويب + حسابات متعددة) المرتبطة بنفس الجهاز المادي."""
+    matched: list[RegisteredDevice] = []
+    seen_pks: set[int] = set()
+
+    def _add(dev: RegisteredDevice | None):
+        if dev is not None and dev.pk not in seen_pks:
+            seen_pks.add(dev.pk)
+            matched.append(dev)
+
+    _add(primary_device)
+    clean_inst = str(installation_id or (primary_device.installation_id if primary_device else '')).strip()
+    clean_hw = str(hardware_id or '').strip()
+    if not clean_hw and primary_device is not None:
+        clean_hw = get_device_hardware_id(primary_device)
+
+    if clean_inst:
+        for d in RegisteredDevice.objects.filter(installation_id=clean_inst):
+            _add(d)
+            if not clean_hw:
+                clean_hw = get_device_hardware_id(d)
+
+    if clean_hw:
+        for d in RegisteredDevice.objects.only(
+            'id', 'user_id', 'installation_id', 'device_name', 'os_name', 'cpu_arch',
+            'model', 'manufacturer', 'gpu_renderer', 'package_name',
+            'last_ip', 'last_active_at', 'integrity_signals', 'trust_status',
+            'is_active', 'revoked_at', 'revoked_reason', 'current_fingerprint',
+        ):
+            if get_device_hardware_id(d) == clean_hw:
+                _add(d)
+
+    return matched
+
+
 @transaction.atomic
 def block_device_admin(
     *,
     device: RegisteredDevice | None = None,
     installation_id: str = '',
+    hardware_id: str = '',
     admin_user,
     block_type: str = 'permanent',
     reason: str = 'Administrative security block',
     duration_hours: int = 24,
     request=None,
 ) -> DeviceBlock:
-    """حظر جهاز إدارياً (مؤقتاً أو دائماً) مع إبطال كافة جلساته فوراً."""
+    """حظر الجهاز المادي بالكامل (تطبيق + متصفح + جميع الحسابات المرتبطة) وإبطال كافة جلساته فوراً."""
     now = timezone.now()
-    clean_inst = installation_id or (device.installation_id if device else '')
+    clean_inst = str(installation_id or (device.installation_id if device else '')).strip()
+    resolved_hw = str(hardware_id or '').strip()
+    if not resolved_hw and device is not None:
+        resolved_hw = get_device_hardware_id(device)
+
+    linked_devices = _find_all_devices_for_hardware(
+        hardware_id=resolved_hw,
+        installation_id=clean_inst,
+        primary_device=device,
+    )
+    if device is None and linked_devices:
+        device = linked_devices[0]
+    if not resolved_hw and linked_devices:
+        resolved_hw = get_device_hardware_id(linked_devices[0])
+    if not clean_inst and linked_devices:
+        clean_inst = linked_devices[0].installation_id
+    if not clean_inst and resolved_hw:
+        clean_inst = resolved_hw
+
     target_user = device.user if device else None
     expires_at = now + timedelta(hours=max(int(duration_hours), 1)) if block_type == 'temporary' else None
+    norm_block_type = 'temporary' if block_type == 'temporary' else 'permanent'
 
     block = DeviceBlock.objects.create(
         device=device,
         user=target_user,
         installation_id=clean_inst,
-        fingerprint_hash=device.current_fingerprint if device else '',
-        block_type='temporary' if block_type == 'temporary' else 'permanent',
+        fingerprint_hash=resolved_hw or (device.current_fingerprint if device else ''),
+        block_type=norm_block_type,
         reason=reason[:255],
         is_active=True,
         blocked_by=admin_user,
         expires_at=expires_at,
     )
 
-    RegisteredDevice.objects.filter(installation_id=clean_inst).update(
-        trust_status=DeviceTrustStatus.BLOCKED,
-        is_active=False,
-        revoked_at=now,
-        revoked_reason=reason[:255],
-    )
-    DeviceSession.objects.filter(installation_id=clean_inst, status='active').update(
-        status='revoked',
-        ended_at=now,
-        revoked_reason='device_blocked_by_admin',
-    )
-    PlaybackSession.objects.filter(device_id=clean_inst, status='active').update(
-        status='revoked',
-        revoked_reason='device_blocked_by_admin',
-    )
+    all_inst_ids = {clean_inst} if clean_inst else set()
+    for d in linked_devices:
+        if d.installation_id:
+            all_inst_ids.add(d.installation_id)
+
+    if all_inst_ids:
+        RegisteredDevice.objects.filter(installation_id__in=all_inst_ids).update(
+            trust_status=DeviceTrustStatus.BLOCKED,
+            is_active=False,
+            revoked_at=now,
+            revoked_reason=reason[:255],
+        )
+        DeviceSession.objects.filter(installation_id__in=all_inst_ids, status='active').update(
+            status='revoked',
+            ended_at=now,
+            revoked_reason='device_blocked_by_admin',
+        )
+        PlaybackSession.objects.filter(device_id__in=all_inst_ids, status='active').update(
+            status='revoked',
+            revoked_reason='device_blocked_by_admin',
+        )
 
     record_security_event(
         event_type='device_blocked_by_admin',
@@ -1442,7 +1913,13 @@ def block_device_admin(
         installation_id=clean_inst,
         request=request,
         action_taken=f'{block_type}_block',
-        details={'block_id': block.id, 'reason': reason, 'admin_id': getattr(admin_user, 'id', None)},
+        details={
+            'block_id': block.id,
+            'hardware_id': resolved_hw,
+            'linked_installation_ids': sorted(all_inst_ids),
+            'reason': reason,
+            'admin_id': getattr(admin_user, 'id', None),
+        },
     )
     return block
 
@@ -1452,30 +1929,56 @@ def unblock_device_admin(
     *,
     device: RegisteredDevice | None = None,
     installation_id: str = '',
+    hardware_id: str = '',
     admin_user,
     reason: str = 'Unblocked by administrator',
     request=None,
 ) -> int:
-    """فك الحظر الإداري عن الجهاز واستعادة إمكانية استخدامه."""
+    """فك الحظر الإداري عن الجهاز المادي بالكامل (تطبيق + متصفح) واستعادة إمكانية استخدامه."""
     now = timezone.now()
-    clean_inst = installation_id or (device.installation_id if device else '')
-    qs = DeviceBlock.objects.filter(installation_id=clean_inst, is_active=True)
-    updated = qs.update(
-        is_active=False,
-        unblocked_at=now,
-        unblocked_by=admin_user,
-        unblock_reason=reason[:255],
-    )
-    RegisteredDevice.objects.filter(
+    clean_inst = str(installation_id or (device.installation_id if device else '')).strip()
+    resolved_hw = str(hardware_id or '').strip()
+    if not resolved_hw and device is not None:
+        resolved_hw = get_device_hardware_id(device)
+
+    linked_devices = _find_all_devices_for_hardware(
+        hardware_id=resolved_hw,
         installation_id=clean_inst,
-        trust_status=DeviceTrustStatus.BLOCKED,
-    ).update(
-        trust_status=DeviceTrustStatus.TRUSTED,
-        is_active=True,
-        requires_reauth=False,
-        revoked_at=None,
-        revoked_reason='',
+        primary_device=device,
     )
+    if not resolved_hw and linked_devices:
+        resolved_hw = get_device_hardware_id(linked_devices[0])
+    all_inst_ids = {clean_inst} if clean_inst else set()
+    for d in linked_devices:
+        if d.installation_id:
+            all_inst_ids.add(d.installation_id)
+
+    blk_q = Q()
+    if all_inst_ids:
+        blk_q |= Q(installation_id__in=all_inst_ids)
+    if resolved_hw:
+        blk_q |= Q(fingerprint_hash=resolved_hw) | Q(installation_id=resolved_hw)
+
+    updated = 0
+    if blk_q:
+        updated = DeviceBlock.objects.filter(blk_q, is_active=True).update(
+            is_active=False,
+            unblocked_at=now,
+            unblocked_by=admin_user,
+            unblock_reason=reason[:255],
+        )
+
+    if all_inst_ids:
+        RegisteredDevice.objects.filter(
+            installation_id__in=all_inst_ids,
+            trust_status=DeviceTrustStatus.BLOCKED,
+        ).update(
+            trust_status=DeviceTrustStatus.TRUSTED,
+            is_active=True,
+            requires_reauth=False,
+            revoked_at=None,
+            revoked_reason='',
+        )
     record_security_event(
         event_type='device_unblocked_by_admin',
         severity='low',
@@ -1485,7 +1988,13 @@ def unblock_device_admin(
         installation_id=clean_inst,
         request=request,
         action_taken='unblocked',
-        details={'unblocked_records': updated, 'reason': reason, 'admin_id': getattr(admin_user, 'id', None)},
+        details={
+            'unblocked_records': updated,
+            'hardware_id': resolved_hw,
+            'linked_installation_ids': sorted(all_inst_ids),
+            'reason': reason,
+            'admin_id': getattr(admin_user, 'id', None),
+        },
     )
     return updated
 
@@ -2290,5 +2799,382 @@ def enforce_web_lecture_playback(request, user, lecture, *, course_package=None)
         'revoked_concurrent_sessions': revoked_count,
         'sharing': sharing,
         'watermark': watermark,
+    }
+
+
+def _platform_tag_for_device(device: RegisteredDevice) -> str:
+    pkg = str(device.package_name or '').strip()
+    os_low = str(device.os_name or '').lower()
+    if pkg == WEB_PACKAGE_NAME or os_low.startswith('web'):
+        return 'web_browser'
+    if 'ios' in os_low:
+        return 'ios_app'
+    return 'android_app'
+
+
+def build_unified_devices_registry(
+    *,
+    search_query: str = '',
+    trust_filter: str = '',
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    """
+    يبني قائمة موحّدة ومُزالة التكرار للأجهزة المادية (جهاز واحد لكل هاتف/كمبيوتر فعلي)،
+    مع دمج الحسابات المتعددة وتطبيق الأندرويد والمتصفح تحت معرّف DEV-XXXXXXXX واحد.
+    """
+    q = str(search_query or '').strip().lower()
+    tf = str(trust_filter or '').strip().lower()
+
+    active_block_insts: set[str] = set()
+    active_block_hw_ids: set[str] = set()
+    block_reasons_by_key: dict[str, str] = {}
+    for blk in DeviceBlock.objects.filter(is_active=True).order_by('-created_at'):
+        if blk.installation_id:
+            active_block_insts.add(blk.installation_id)
+            block_reasons_by_key.setdefault(blk.installation_id, blk.reason)
+        if blk.fingerprint_hash:
+            active_block_hw_ids.add(blk.fingerprint_hash)
+            block_reasons_by_key.setdefault(blk.fingerprint_hash, blk.reason)
+
+    devices_qs = (
+        RegisteredDevice.objects
+        .select_related('user')
+        .order_by('-last_active_at')[:500]
+    )
+
+    groups: dict[str, dict[str, Any]] = {}
+    for dev in devices_qs:
+        hw_id = get_device_hardware_id(dev)
+        plat = _platform_tag_for_device(dev)
+        entry = groups.get(hw_id)
+
+        user_name = (dev.user.get_full_name() or '').strip() or dev.user.username or dev.user.email
+        user_info = {
+            'user_id': dev.user_id,
+            'full_name': user_name,
+            'username': dev.user.username,
+            'email': dev.user.email,
+            'role': getattr(dev.user, 'role', 'student'),
+            'is_banned': bool(getattr(dev.user, 'is_banned', False)),
+        }
+
+        if entry is None:
+            native_label = f"{dev.manufacturer} {dev.model}".strip()
+            display_name = native_label if plat != 'web_browser' and native_label else (dev.device_name or dev.model or 'Unknown Device')
+            entry = {
+                'hardware_id': hw_id,
+                'primary_device_id': dev.id,
+                'primary_installation_id': dev.installation_id,
+                'installation_ids': [],
+                'device_ids': [],
+                'display_name': display_name,
+                'manufacturer': dev.manufacturer,
+                'model': dev.model,
+                'os_summary': f"{dev.os_name} {dev.android_version}".strip(),
+                'platforms': [],
+                'linked_accounts': [],
+                '_seen_user_ids': set(),
+                'is_blocked': False,
+                'block_reason': '',
+                'trust_status': dev.trust_status,
+                'max_risk_score': int(dev.risk_score or 0),
+                'last_ip': dev.last_ip or '',
+                'last_country': dev.last_country or '',
+                'last_active_at': dev.last_active_at.isoformat() if dev.last_active_at else None,
+            }
+            groups[hw_id] = entry
+
+        # تفضيل الاسم الأصلي للهاتف (مثل Samsung SM-A546E) على اسم المتصفح عند اجتماع التطبيق والويب
+        if plat != 'web_browser':
+            native_label = f"{dev.manufacturer} {dev.model}".strip()
+            if native_label:
+                entry['display_name'] = native_label
+                entry['os_summary'] = f"{dev.os_name} {dev.android_version}".strip()
+                entry['primary_device_id'] = dev.id
+                entry['primary_installation_id'] = dev.installation_id
+
+        if dev.installation_id and dev.installation_id not in entry['installation_ids']:
+            entry['installation_ids'].append(dev.installation_id)
+        if dev.id not in entry['device_ids']:
+            entry['device_ids'].append(dev.id)
+        if plat not in entry['platforms']:
+            entry['platforms'].append(plat)
+        if dev.user_id not in entry['_seen_user_ids']:
+            entry['_seen_user_ids'].add(dev.user_id)
+            entry['linked_accounts'].append(user_info)
+
+        if (
+            dev.trust_status == DeviceTrustStatus.BLOCKED
+            or dev.installation_id in active_block_insts
+            or hw_id in active_block_hw_ids
+        ):
+            entry['is_blocked'] = True
+            entry['trust_status'] = DeviceTrustStatus.BLOCKED
+            if not entry['block_reason']:
+                entry['block_reason'] = (
+                    block_reasons_by_key.get(hw_id)
+                    or block_reasons_by_key.get(dev.installation_id)
+                    or dev.revoked_reason
+                    or 'محظور إدارياً'
+                )
+        elif not entry['is_blocked']:
+            rank = {'restricted': 3, 'suspicious': 2, 'pending': 1, 'trusted': 0, 'revoked': 0}
+            if rank.get(dev.trust_status, 0) > rank.get(entry['trust_status'], 0):
+                entry['trust_status'] = dev.trust_status
+
+        entry['max_risk_score'] = max(entry['max_risk_score'], int(dev.risk_score or 0))
+        if not entry['last_ip'] and dev.last_ip:
+            entry['last_ip'] = dev.last_ip
+
+    policy = SecurityPolicyConfig.load()
+    result: list[dict[str, Any]] = []
+    for entry in groups.values():
+        entry.pop('_seen_user_ids', None)
+        entry['accounts_count'] = len(entry['linked_accounts'])
+        entry['is_multi_account'] = entry['accounts_count'] > 1
+        entry['is_maintenance_approved'] = policy.is_device_maintenance_approved(
+            entry['hardware_id'],
+            *entry['installation_ids'],
+        )
+        entry['platform_labels'] = [
+            'تطبيق أندرويد' if p == 'android_app' else ('متصفح ويب' if p == 'web_browser' else 'تطبيق iOS')
+            for p in entry['platforms']
+        ]
+
+        if q:
+            haystack = ' '.join(
+                [
+                    entry['hardware_id'],
+                    entry['display_name'],
+                    entry['os_summary'],
+                    entry['last_ip'],
+                    *entry['installation_ids'],
+                    *[f"{a['full_name']} {a['username']} {a['email']}" for a in entry['linked_accounts']],
+                ]
+            ).lower()
+            if q not in haystack:
+                continue
+
+        if tf == 'blocked' and not entry['is_blocked']:
+            continue
+        elif tf == 'multi_account' and not entry['is_multi_account']:
+            continue
+        elif tf == 'maintenance_approved' and not entry['is_maintenance_approved']:
+            continue
+        elif tf and tf not in ('blocked', 'multi_account', 'maintenance_approved', 'all') and entry['trust_status'] != tf:
+            continue
+
+        result.append(entry)
+        if len(result) >= max(int(limit), 1):
+            break
+
+    return result
+
+
+def is_maintenance_admin_approved_device(
+    request=None,
+    *,
+    hardware_id: str = '',
+    installation_id: str = '',
+    policy: SecurityPolicyConfig | None = None,
+) -> bool:
+    """
+    يتحقق من اعتماد الجهاز من لوحة الإدارة للسماح بظهور زر (دخول الإدارة) في وضع الصيانة.
+    """
+    pol = policy or SecurityPolicyConfig.load()
+    approved_set = {x.upper() for x in pol.maintenance_approved_devices}
+    if not approved_set:
+        return False
+
+    identifiers: list[str] = []
+    if hardware_id:
+        identifiers.append(hardware_id)
+    if installation_id:
+        identifiers.append(installation_id)
+
+    if request is not None:
+        meta = getattr(request, 'META', {}) or {}
+        for h in ('HTTP_X_HARDWARE_ID', 'HTTP_X_DEVICE_ID', 'HTTP_X_INSTALLATION_ID'):
+            val = str(meta.get(h) or '').strip()
+            if val:
+                identifiers.append(val)
+        web_or_dev = _extract_web_or_device_id_from_request(request)
+        if web_or_dev:
+            identifiers.append(web_or_dev)
+
+    if pol.is_device_maintenance_approved(*identifiers):
+        return True
+
+    # إذا كان لدينا installation_id أو hardware_id، افحص أيضاً الأجهزة المرتبطة بنفس الجهاز المادي
+    clean_hw = str(hardware_id or '').strip()
+    clean_inst = str(installation_id or '').strip()
+    if clean_inst and not clean_hw:
+        dev = RegisteredDevice.objects.filter(installation_id=clean_inst).first()
+        if dev is not None:
+            clean_hw = get_device_hardware_id(dev)
+            if pol.is_device_maintenance_approved(clean_hw):
+                return True
+
+    if clean_hw:
+        for d in _find_all_devices_for_hardware(hardware_id=clean_hw, installation_id=clean_inst):
+            if pol.is_device_maintenance_approved(d.installation_id, get_device_hardware_id(d)):
+                return True
+
+    return False
+
+
+def evaluate_boot_security_gate(
+    request,
+    *,
+    client_signals: dict[str, Any] | None = None,
+    user=None,
+) -> dict[str, Any]:
+    """
+    بوابة التحقق الأولى قبل عبور شاشة التحميل للتطبيق والموقع:
+    تمنع الدخول نهائياً عند:
+    1) حظر الجهاز (تطبيق + متصفح عبر DEV-XXXXXXXX أو installation_id)
+    2) تشغيل VPN أو Proxy على الشبكة
+    3) فتح إعدادات المطور (Developer Options / ADB)
+    4) توجيه البورتات أو DNS غير طبيعي أو شهادة MITM
+    5) وضع الصيانة العام (لغير الإدارة)
+    """
+    from core.models import SiteSetting
+
+    sig = client_signals if isinstance(client_signals, dict) else {}
+    meta = getattr(request, 'META', {}) if request is not None else {}
+
+    def _hdr_bool(hdr_name: str, key: str) -> bool:
+        if key in sig:
+            return bool(sig.get(key))
+        return str(meta.get(hdr_name) or '').strip().lower() in ('1', 'true', 'yes', 'on')
+
+    merged_sig = {
+        'vpn_interface_active': _hdr_bool('HTTP_X_VPN_ACTIVE', 'vpn_interface_active'),
+        'developer_options_enabled': _hdr_bool('HTTP_X_DEV_OPTIONS', 'developer_options_enabled'),
+        'adb_enabled': _hdr_bool('HTTP_X_ADB_ENABLED', 'adb_enabled'),
+        'proxy_detected': _hdr_bool('HTTP_X_PROXY_DETECTED', 'proxy_detected'),
+        'port_forwarding_detected': _hdr_bool('HTTP_X_PORT_FORWARDING', 'port_forwarding_detected'),
+        'abnormal_dns_detected': _hdr_bool('HTTP_X_ABNORMAL_DNS', 'abnormal_dns_detected'),
+    }
+
+    net_ctx = extract_network_context(request, integrity_signals=merged_sig)
+    inst_id = _extract_web_or_device_id_from_request(request)
+    if not inst_id and is_web_client_request(request) and request is not None:
+        inst_id = get_or_create_web_installation_id(request)
+
+    hw_id = str(meta.get('HTTP_X_HARDWARE_ID') or '').strip()
+    if not hw_id and inst_id:
+        dev = RegisteredDevice.objects.filter(installation_id=inst_id).first()
+        if dev is not None:
+            hw_id = get_device_hardware_id(dev)
+    if not hw_id and request is not None:
+        ua = str(meta.get('HTTP_USER_AGENT') or '')
+        parsed = parse_web_user_agent(ua) if ua else {'os_label': ''}
+        is_native_android = 'dart/' in ua.lower() or str(meta.get('HTTP_X_CLIENT_PLATFORM') or '').lower() == 'android'
+        req_traits = {
+            'os_name': 'Android' if is_native_android else f"Web ({parsed.get('os_label', '')})",
+            'model': str(meta.get('HTTP_X_DEVICE_MODEL') or '').strip(),
+            'gpu_renderer': str(meta.get('HTTP_X_DEVICE_GPU') or '').strip(),
+            'package_name': '' if is_native_android else WEB_PACKAGE_NAME,
+        }
+        hw_id = compute_canonical_hardware_id(
+            req_traits,
+            installation_id=inst_id,
+            request=request,
+            net_ctx=net_ctx,
+        )
+
+    policy = SecurityPolicyConfig.load()
+    site_settings = SiteSetting.load()
+    can_admin_login = is_maintenance_admin_approved_device(
+        request,
+        hardware_id=hw_id,
+        installation_id=inst_id,
+        policy=policy,
+    )
+
+    # 1) فحص حظر الجهاز (شامل عبر التطبيق والمتصفح)
+    blk = get_active_device_block(
+        inst_id,
+        hardware_id=hw_id,
+        request=request,
+        net_ctx=net_ctx,
+    )
+    if blk:
+        return {
+            'boot_allowed': False,
+            'code': 'DEVICE_BLOCKED',
+            'title': 'هذا الجهاز محظور من استخدام المنصة',
+            'message': f'تم إيقاف هذا الجهاز عن استخدام التطبيق والموقع من قِبل الإدارة: {blk.reason}',
+            'hardware_id': blk.fingerprint_hash if str(blk.fingerprint_hash).startswith('DEV-') else hw_id,
+            'is_maintenance_mode': bool(site_settings.is_maintenance_mode),
+            'can_admin_login': False,
+        }
+
+    # 2) فحص VPN / Proxy IP
+    if policy.block_vpn_connections and (merged_sig['vpn_interface_active'] or net_ctx.get('is_vpn_or_proxy')):
+        return {
+            'boot_allowed': False,
+            'code': 'VPN_DETECTED',
+            'title': 'تم رصد اتصال VPN نشط',
+            'message': 'لا يُسمح بفتح التطبيق أو الموقع أثناء تشغيل الـ VPN. يرجى إيقاف الـ VPN تماماً ثم الضغط على إعادة المحاولة.',
+            'hardware_id': hw_id,
+            'is_maintenance_mode': bool(site_settings.is_maintenance_mode),
+            'can_admin_login': False,
+        }
+
+    # 3) فحص خيارات المطور وتصحيح USB (ADB)
+    if policy.block_developer_options and (merged_sig['developer_options_enabled'] or merged_sig['adb_enabled']):
+        return {
+            'boot_allowed': False,
+            'code': 'DEV_OPTIONS_ENABLED',
+            'title': 'إعدادات المطور مفتوحة',
+            'message': 'لحماية المحتوى، لا يعمل التطبيق أثناء تفعيل خيارات المطور (Developer Options) أو تصحيح USB. أغلقها من إعدادات الجهاز ثم أعد المحاولة.',
+            'hardware_id': hw_id,
+            'is_maintenance_mode': bool(site_settings.is_maintenance_mode),
+            'can_admin_login': False,
+        }
+
+    # 4) فحص توجيه البورتات أو DNS غير الطبيعي أو البروكسي المحلي
+    if policy.block_abnormal_dns_or_ports and (
+        merged_sig['proxy_detected']
+        or merged_sig['port_forwarding_detected']
+        or merged_sig['abnormal_dns_detected']
+    ):
+        return {
+            'boot_allowed': False,
+            'code': 'ABNORMAL_NETWORK_OR_DNS',
+            'title': 'تم رصد توجيه شبكة أو DNS غير طبيعي',
+            'message': 'تم اكتشاف تحويل لبورتات الشبكة أو بروكسي محلي أو خادم DNS غير قياسي. يرجى إعادة ضبط الشبكة والـ DNS على الوضع التلقائي وإغلاق أي أداة فحص.',
+            'hardware_id': hw_id,
+            'is_maintenance_mode': bool(site_settings.is_maintenance_mode),
+            'can_admin_login': False,
+        }
+
+    # 5) فحص وضع الصيانة العام
+    is_admin = bool(
+        user is not None
+        and getattr(user, 'is_authenticated', False)
+        and (getattr(user, 'is_superuser', False) or getattr(user, 'role', '') == 'admin')
+    )
+    if site_settings.is_maintenance_mode and not is_admin:
+        return {
+            'boot_allowed': False,
+            'code': 'MAINTENANCE_MODE',
+            'title': 'المنصة في وضع الصيانة حالياً',
+            'message': 'نقوم حالياً ببعض التحسينات والصيانة لخدمتكم بشكل أفضل. سنعود للعمل خلال وقت قصير.',
+            'hardware_id': hw_id,
+            'is_maintenance_mode': True,
+            'can_admin_login': can_admin_login,
+        }
+
+    return {
+        'boot_allowed': True,
+        'code': 'OK',
+        'title': '',
+        'message': '',
+        'hardware_id': hw_id,
+        'is_maintenance_mode': bool(site_settings.is_maintenance_mode),
+        'can_admin_login': can_admin_login,
     }
 

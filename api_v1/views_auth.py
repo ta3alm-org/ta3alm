@@ -70,12 +70,10 @@ def _resolve_subject_input(raw_subject):
 
 
 def ensure_user_role_profile(user) -> None:
-    """يضمن وجود ملف الدور المرتبط بالمستخدم (طالب / معلم / مساعد) ومنع تباين الجداول."""
+    """يضمن وجود ملف الدور للطالب والمساعد عند الإنشاء (بينما يُنشأ ملف المعلم فقط بعد استكمال البيانات ثم مراجعة الإدارة)."""
     if not user or not getattr(user, 'pk', None):
         return
-    if user.role == 'teacher':
-        TeacherProfile.objects.get_or_create(user=user)
-    elif user.role == 'student':
+    if user.role == 'student':
         StudentProfile.objects.get_or_create(user=user, defaults={'parent_phone': ''})
     elif user.role == 'assistant':
         AssistantProfile.objects.get_or_create(user=user, defaults={'phone': user.phone or ''})
@@ -435,6 +433,7 @@ class CompleteProfileAPIView(APIView):
 
         user.save()
 
+        pending_teacher_review = False
         if user.role == 'student':
             parent_phone = str(request.data.get('parent_phone', '')).strip()
             if not parent_phone or not parent_phone.isdigit() or len(parent_phone) < 11:
@@ -455,21 +454,24 @@ class CompleteProfileAPIView(APIView):
             if subject is None:
                 return Response({'error': 'المادة المختارة غير موجودة.'}, status=status.HTTP_404_NOT_FOUND)
 
-            default_plan = (
-                SubscriptionPlan.objects.filter(is_default=True).first()
-                or SubscriptionPlan.objects.order_by('price').first()
-            )
-            tp, _ = TeacherProfile.objects.update_or_create(
+            # لا يُمنح المعلم باقة أو ظهوراً مباشراً عند التسجيل؛ يظل قيد المراجعة حتى موافقة الإدارة
+            tp, created = TeacherProfile.objects.get_or_create(
                 user=user,
                 defaults={
                     'bio': bio,
                     'subject': subject,
-                    'subscription_end_date': timezone.now() + timedelta(days=30),
-                    'is_trial_used': True,
-                    'current_plan': default_plan,
+                    'is_approved': False,
+                    'subscription_end_date': None,
+                    'is_trial_used': False,
+                    'current_plan': None,
                 },
             )
+            if not created:
+                tp.bio = bio
+                tp.subject = subject
+                tp.save(update_fields=['bio', 'subject'])
             if not tp.is_approved:
+                pending_teacher_review = True
                 _notify_admins_teacher_pending(tp)
 
         elif user.role == 'assistant':
@@ -483,10 +485,16 @@ class CompleteProfileAPIView(APIView):
             user=user,
             installation_id=_extract_installation_id(request),
             activity_type='complete_profile',
-            metadata={'role': user.role},
+            metadata={'role': user.role, 'pending_teacher_review': pending_teacher_review},
+        )
+        msg = (
+            'تم إرسال طلب انضمامك كمعلم بنجاح! حسابك الآن قيد المراجعة من قِبل الإدارة وسيتم تفعيله وإشعارك فور الموافقة.'
+            if pending_teacher_review
+            else f'تم استكمال البيانات بنجاح! أهلاً بك يا {user.first_name}'
         )
         return Response({
-            'message': f'تم استكمال البيانات بنجاح! أهلاً بك يا {user.first_name}',
+            'message': msg,
+            'pending_teacher_review': pending_teacher_review,
             'user': UserDetailSerializer(user, context={'request': request}).data,
         }, status=status.HTTP_200_OK)
 

@@ -147,8 +147,23 @@ class MaintenanceMiddleware:
         except Exception:
             is_maintenance = False
 
-        if is_maintenance and not (request.user.is_authenticated and request.user.is_superuser):
-            return render(request, 'core/maintenance.html', status=503)
+        if is_maintenance and not (
+            request.user.is_authenticated
+            and (request.user.is_superuser or getattr(request.user, 'role', '') == 'admin')
+        ):
+            try:
+                from api_v1.device_security_service import evaluate_boot_security_gate
+                gate = evaluate_boot_security_gate(request, user=request.user if request.user.is_authenticated else None)
+            except Exception:
+                gate = {
+                    'boot_allowed': False,
+                    'code': 'MAINTENANCE_MODE',
+                    'title': 'المنصة في وضع الصيانة حالياً',
+                    'message': 'نقوم حالياً ببعض التحديثات والتحسينات لجعل تجربتك أفضل. سنعود للعمل خلال وقت قصير جداً.',
+                    'hardware_id': '',
+                    'can_admin_login': False,
+                }
+            return render(request, 'core/security_boot_gate.html', {'gate': gate}, status=503)
 
         return self.get_response(request)
 
@@ -262,7 +277,9 @@ class ApiSecurityAndActivityAuditMiddleware:
         '/api/v1/auth/google/callback/',
     )
     SKIP_BLOCK_CHECK_PATHS = (
+        '/api/v1/auth/login/',
         '/api/v1/auth/logout/',
+        '/api/v1/public/metadata/',
         '/api/v1/public/app-version/',
         '/api/v1/public/app-update/',
         '/api/v1/security/events/report/',
@@ -341,20 +358,39 @@ class ApiSecurityAndActivityAuditMiddleware:
         ).strip()
         resolved_user = self._resolve_api_user(request)
 
-        # 1) رفض أي جهاز محظور إدارياً أو أمنياً
-        if device_id and not any(request.path.startswith(p) for p in self.SKIP_BLOCK_CHECK_PATHS):
+        # 1) فحص بوابة البداية والحظر العابر للمنصات (جهاز محظور / VPN / خيارات مطور / DNS أو بورت / صيانة)
+        is_exempt_gate = any(
+            request.path.startswith(p)
+            for p in (
+                '/api/v1/auth/logout/',
+                '/api/v1/public/metadata/',
+                '/api/v1/public/app-version/',
+                '/api/v1/public/app-update/',
+                '/api/v1/security/events/report/',
+            )
+        )
+        if not is_exempt_gate:
             try:
-                from api_v1.device_security_service import get_active_device_block
-                blk = get_active_device_block(device_id)
-                if blk:
-                    return JsonResponse(
-                        {
-                            'error': f'هذا الجهاز محظور من استخدام المنصة: {blk.reason}',
-                            'code': 'DEVICE_BLOCKED',
-                            'blocked': True,
-                        },
-                        status=403,
-                    )
+                from api_v1.device_security_service import evaluate_boot_security_gate
+                gate = evaluate_boot_security_gate(request, user=resolved_user)
+                if not gate.get('boot_allowed'):
+                    code = gate.get('code') or 'BOOT_SECURITY_BLOCKED'
+                    # أثناء وضع الصيانة نسمح لمحاولة تسجيل الدخول فقط من الأجهزة المعتمدة لدى الإدارة
+                    if not (
+                        code == 'MAINTENANCE_MODE'
+                        and bool(gate.get('can_admin_login'))
+                        and request.path.startswith('/api/v1/auth/login/')
+                    ):
+                        http_st = 503 if code == 'MAINTENANCE_MODE' else 403
+                        return JsonResponse(
+                            {
+                                'error': gate.get('message') or gate.get('title') or 'تم منع الوصول لأسباب أمنية.',
+                                'code': code,
+                                'hardware_id': gate.get('hardware_id', ''),
+                                'blocked': code != 'MAINTENANCE_MODE',
+                            },
+                            status=http_st,
+                        )
             except Exception:
                 pass
 
@@ -422,6 +458,12 @@ class ApiSecurityAndActivityAuditMiddleware:
                 except Exception:
                     pass
 
+        try:
+            from api_v1.security_engine import maybe_trigger_hourly_ai_audit_async
+            maybe_trigger_hourly_ai_audit_async()
+        except Exception:
+            pass
+
         return response
 
 
@@ -484,29 +526,78 @@ class WebDeviceSecurityMiddleware:
         if any(request.path.startswith(p) or path_no_lang.startswith(p) for p in self.SKIP_PREFIXES):
             return self.get_response(request)
 
+        from api_v1.device_security_service import (
+            build_web_device_info,
+            check_device_allowed,
+            evaluate_boot_security_gate,
+            get_or_create_web_installation_id,
+            register_or_update_device,
+            verify_web_device_live_consistency,
+        )
+        from api_v1.models import DeviceSession
+
         user = getattr(request, 'user', None)
+        is_admin = bool(
+            user is not None
+            and user.is_authenticated
+            and (getattr(user, 'is_superuser', False) or getattr(user, 'role', '') == 'admin')
+        )
+        is_json_req = bool(
+            (request.content_type and 'application/json' in request.content_type)
+            or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        )
+        installation_id = get_or_create_web_installation_id(request)
+
+        # فحص بوابة البداية للويب للجميع (بما في ذلك الزوار قبل تسجيل الدخول)
+        if not is_admin:
+            try:
+                boot_gate = evaluate_boot_security_gate(
+                    request,
+                    user=user if (user is not None and user.is_authenticated) else None,
+                )
+            except Exception:
+                boot_gate = {'boot_allowed': True}
+            if not boot_gate.get('boot_allowed'):
+                gate_code = boot_gate.get('code') or 'BOOT_SECURITY_BLOCKED'
+                allow_maintenance_login = (
+                    gate_code == 'MAINTENANCE_MODE'
+                    and bool(boot_gate.get('can_admin_login'))
+                    and (path_no_lang.startswith('/accounts/login/') or path_no_lang.startswith('/accounts/logout/'))
+                )
+                if not allow_maintenance_login:
+                    if user is not None and user.is_authenticated and gate_code == 'DEVICE_BLOCKED':
+                        request.session.pop('web_device_registered_id', None)
+                        request.session.pop('web_device_session_uuid', None)
+                        logout(request)
+                    http_st = 503 if gate_code == 'MAINTENANCE_MODE' else 403
+                    if is_json_req:
+                        return self._apply_security_headers(
+                            request,
+                            JsonResponse(
+                                {
+                                    'ok': False,
+                                    'code': gate_code,
+                                    'error': boot_gate.get('message', ''),
+                                    'hardware_id': boot_gate.get('hardware_id', ''),
+                                },
+                                status=http_st,
+                            ),
+                        )
+                    resp = render(
+                        request,
+                        'core/security_boot_gate.html',
+                        {'gate': boot_gate, 'installation_id': installation_id},
+                        status=http_st,
+                    )
+                    return self._apply_security_headers(request, resp)
+
         if (
             user is not None
             and user.is_authenticated
-            and not getattr(user, 'is_superuser', False)
-            and getattr(user, 'role', '') != 'admin'
+            and not is_admin
             and not getattr(user, 'is_banned', False)
         ):
-            from api_v1.device_security_service import (
-                build_web_device_info,
-                check_device_allowed,
-                get_or_create_web_installation_id,
-                register_or_update_device,
-                verify_web_device_live_consistency,
-            )
-            from api_v1.models import DeviceSession
-
-            installation_id = get_or_create_web_installation_id(request)
             is_exempt = any(path_no_lang.startswith(p) for p in self.EXEMPT_PATHS)
-            is_json_req = bool(
-                (request.content_type and 'application/json' in request.content_type)
-                or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
-            )
 
             if request.session.get('web_device_registered_id') != installation_id:
                 if not request.session.session_key:
@@ -529,22 +620,28 @@ class WebDeviceSecurityMiddleware:
                         request.session.pop('web_device_session_uuid', None)
                         logout(request)
                         if is_json_req:
-                            from django.http import JsonResponse
                             return self._apply_security_headers(request, JsonResponse({'ok': False, 'code': code, 'error': result.get('error', '')}, status=403))
-                        if not path_no_lang.startswith('/banned/'):
-                            return self._apply_security_headers(request, redirect('banned_page'))
+                        gate = {
+                            'boot_allowed': False,
+                            'code': 'DEVICE_BLOCKED',
+                            'title': 'هذا الجهاز محظور من استخدام المنصة',
+                            'message': result.get('error') or 'تم حظر هذا الجهاز من قِبل إدارة المنصة.',
+                            'hardware_id': result.get('hardware_id', ''),
+                        }
+                        return self._apply_security_headers(
+                            request,
+                            render(request, 'core/security_boot_gate.html', {'gate': gate, 'installation_id': installation_id}, status=403),
+                        )
                     elif code == 'WEB_FINGERPRINT_MISMATCH':
                         request.session.pop('web_device_registered_id', None)
                         request.session.pop('web_device_session_uuid', None)
                         logout(request)
                         if is_json_req:
-                            from django.http import JsonResponse
                             return self._apply_security_headers(request, JsonResponse({'ok': False, 'code': code, 'error': result.get('error', '')}, status=403))
                         return self._apply_security_headers(request, redirect('account_login'))
                     else:
                         request.session['web_device_limit_error'] = result.get('error')
                         if is_json_req:
-                            from django.http import JsonResponse
                             return self._apply_security_headers(request, JsonResponse({'ok': False, 'code': code, 'error': result.get('error', '')}, status=403))
                         if not is_exempt:
                             return self._apply_security_headers(request, redirect('web_trusted_devices'))
@@ -553,7 +650,7 @@ class WebDeviceSecurityMiddleware:
                 if not live_ok:
                     allowed, code, err = False, live_code, live_err
                 else:
-                    allowed, code, err = check_device_allowed(user, installation_id)
+                    allowed, code, err = check_device_allowed(user, installation_id, request=request)
                 sess_uuid = request.session.get('web_device_session_uuid')
                 session_revoked_remotely = False
                 if sess_uuid:
@@ -570,7 +667,6 @@ class WebDeviceSecurityMiddleware:
                     request.session.pop('web_device_session_uuid', None)
                     logout(request)
                     if is_json_req:
-                        from django.http import JsonResponse
                         return self._apply_security_headers(
                             request,
                             JsonResponse({'ok': False, 'code': code or 'SESSION_REVOKED', 'error': err or ''}, status=403),
@@ -583,12 +679,20 @@ class WebDeviceSecurityMiddleware:
                         request.session.pop('web_device_session_uuid', None)
                         logout(request)
                         if is_json_req:
-                            from django.http import JsonResponse
                             return self._apply_security_headers(request, JsonResponse({'ok': False, 'code': code, 'error': err or ''}, status=403))
-                        return self._apply_security_headers(request, redirect('banned_page'))
+                        gate = {
+                            'boot_allowed': False,
+                            'code': 'DEVICE_BLOCKED',
+                            'title': 'هذا الجهاز محظور من استخدام المنصة',
+                            'message': err or 'تم حظر هذا الجهاز من قِبل إدارة المنصة.',
+                            'hardware_id': '',
+                        }
+                        return self._apply_security_headers(
+                            request,
+                            render(request, 'core/security_boot_gate.html', {'gate': gate, 'installation_id': installation_id}, status=403),
+                        )
                     request.session['web_device_limit_error'] = err
                     if is_json_req:
-                        from django.http import JsonResponse
                         return self._apply_security_headers(request, JsonResponse({'ok': False, 'code': code, 'error': err or ''}, status=403))
                     if not is_exempt:
                         return self._apply_security_headers(request, redirect('web_trusted_devices'))

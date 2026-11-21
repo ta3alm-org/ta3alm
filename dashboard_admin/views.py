@@ -287,8 +287,10 @@ def update_app_release_settings(request):
 def manage_users(request):
     ctx = _base_context(request)
 
-    for u in User.objects.filter(role='teacher', teacher_profile__isnull=True):
-        TeacherProfile.objects.get_or_create(user=u)
+    for u in User.objects.filter(role='teacher', teacher_profile__isnull=True).exclude(
+        Q(custom_id__isnull=True) | Q(custom_id='')
+    ):
+        TeacherProfile.objects.get_or_create(user=u, defaults={'is_approved': False})
     for u in User.objects.filter(role='student', student_profile__isnull=True):
         StudentProfile.objects.get_or_create(user=u, defaults={'parent_phone': ''})
     for u in User.objects.filter(role='assistant', assistant_profile__isnull=True):
@@ -381,10 +383,22 @@ def user_action(request):
             tp = target.teacher_profile
             tp.is_approved = True
             tp.approved_at = timezone.now()
-            tp.save(update_fields=['is_approved', 'approved_at'])
-            notify_user(target, 'تم اعتماد حسابك كمعلم', 'وافقت الإدارة على ظهور ملفك للطلاب على منصة تعلّم.', link='/teacher/')
+            update_fields = ['is_approved', 'approved_at']
+            if not tp.is_trial_used and not tp.subscription_end_date:
+                default_plan = (
+                    SubscriptionPlan.objects.filter(is_default=True).first()
+                    or SubscriptionPlan.objects.order_by('price').first()
+                )
+                if default_plan:
+                    tp.current_plan = default_plan
+                    update_fields.append('current_plan')
+                tp.subscription_end_date = timezone.now() + timedelta(days=30)
+                tp.is_trial_used = True
+                update_fields.extend(['subscription_end_date', 'is_trial_used'])
+            tp.save(update_fields=update_fields)
+            notify_user(target, 'تم اعتماد حسابك كمعلم', 'وافقت الإدارة على ظهور ملفك للطلاب وتفعيل لوحة المعلم الخاصة بك.', link='/teacher/')
             AuditLog.log(request, AuditLog.ACTION_EDIT_USER, target_label=f"اعتماد معلم: {target.get_full_name()}", target_id=target.id)
-            messages.success(request, f"تم اعتماد المعلم {target.get_full_name()}.")
+            messages.success(request, f"تم اعتماد المعلم {target.get_full_name()} وتفعيل حسابه.")
 
     elif action == 'unapprove_teacher':
         if hasattr(target, 'teacher_profile'):
@@ -1251,9 +1265,21 @@ def security_dashboard(request):
         )
     ).order_by('-created_at')[:20]
 
+    unified_devices = []
+    try:
+        from api_v1.device_security_service import build_unified_devices_registry
+        unified_devices = build_unified_devices_registry(
+            search_query=q,
+            trust_filter=trust_filter,
+            limit=120,
+        )
+    except Exception:
+        unified_devices = []
+
     ctx.update({
         'policy': policy,
         'devices': devices_qs[:60],
+        'unified_devices': unified_devices,
         'events': events_qs[:60],
         'active_sessions': active_sessions_qs[:40],
         'active_blocks': active_blocks_qs[:40],
@@ -1264,7 +1290,8 @@ def security_dashboard(request):
         'event_status_filter': event_status_filter,
         'trust_choices': DeviceTrustStatus.choices,
         'stats': {
-            'total_devices': RegisteredDevice.objects.count(),
+            'total_devices': len(unified_devices) if not (q or trust_filter) else RegisteredDevice.objects.count(),
+            'unique_physical_devices': len(unified_devices),
             'active_devices': RegisteredDevice.objects.filter(is_active=True).count(),
             'suspicious_devices': RegisteredDevice.objects.filter(
                 trust_status__in=[DeviceTrustStatus.SUSPICIOUS, DeviceTrustStatus.RESTRICTED]
@@ -1340,6 +1367,7 @@ def security_admin_action(request):
     if action == 'block_device':
         device_id = request.POST.get('device_id')
         inst_id = (request.POST.get('installation_id') or '').strip()
+        hw_id = (request.POST.get('hardware_id') or '').strip()
         device = RegisteredDevice.objects.filter(id=device_id).first() if device_id else None
         if not device and inst_id:
             device = RegisteredDevice.objects.filter(installation_id=inst_id).first()
@@ -1348,11 +1376,12 @@ def security_admin_action(request):
             duration_hours = max(int(request.POST.get('duration_hours') or 24), 1)
         except ValueError:
             duration_hours = 24
-        reason = (request.POST.get('reason') or 'حظر إداري من لوحة التحكم').strip()
-        if device or inst_id:
+        reason = (request.POST.get('reason') or 'حظر إداري من لوحة التحكم (تطبيق + متصفح)').strip()
+        if device or inst_id or hw_id:
             blk = block_device_admin(
                 device=device,
-                installation_id=inst_id or (device.installation_id if device else ''),
+                installation_id=inst_id or (device.installation_id if device else hw_id),
+                hardware_id=hw_id,
                 admin_user=request.user,
                 block_type=block_type,
                 reason=reason,
@@ -1362,11 +1391,11 @@ def security_admin_action(request):
             AuditLog.log(
                 request,
                 AuditLog.ACTION_BLOCK_DEVICE,
-                target_label=blk.installation_id,
+                target_label=hw_id or blk.fingerprint_hash or blk.installation_id,
                 target_id=device.id if device else None,
-                details={'block_type': block_type, 'reason': reason, 'duration_hours': duration_hours},
+                details={'block_type': block_type, 'hardware_id': hw_id or blk.fingerprint_hash, 'reason': reason, 'duration_hours': duration_hours},
             )
-            messages.success(request, f"تم حظر الجهاز ({blk.installation_id}) وإبطال جلساته.")
+            messages.success(request, f"تم حظر الجهاز ({hw_id or blk.fingerprint_hash or blk.installation_id}) على التطبيق والمتصفح وإبطال جلساته.")
         else:
             messages.error(request, "تعذر العثور على الجهاز المطلوب حظره.")
 
@@ -1374,16 +1403,20 @@ def security_admin_action(request):
         block_id = request.POST.get('block_id')
         device_id = request.POST.get('device_id')
         inst_id = (request.POST.get('installation_id') or '').strip()
+        hw_id = (request.POST.get('hardware_id') or '').strip()
         device = RegisteredDevice.objects.filter(id=device_id).first() if device_id else None
-        if block_id and not inst_id:
+        if block_id and not inst_id and not hw_id:
             blk = get_object_or_404(DeviceBlock, id=block_id)
             inst_id = blk.installation_id
+            if str(blk.fingerprint_hash or '').startswith('DEV-'):
+                hw_id = blk.fingerprint_hash
             device = device or blk.device
         reason = (request.POST.get('reason') or 'رفع الحظر بواسطة الإدارة').strip()
-        if inst_id or device:
+        if inst_id or device or hw_id:
             count = unblock_device_admin(
                 device=device,
                 installation_id=inst_id,
+                hardware_id=hw_id,
                 admin_user=request.user,
                 reason=reason,
                 request=request,
@@ -1391,11 +1424,11 @@ def security_admin_action(request):
             AuditLog.log(
                 request,
                 AuditLog.ACTION_UNBLOCK_DEVICE,
-                target_label=inst_id or (device.installation_id if device else ''),
+                target_label=hw_id or inst_id or (device.installation_id if device else ''),
                 target_id=device.id if device else None,
-                details={'unblocked_count': count, 'reason': reason},
+                details={'unblocked_count': count, 'hardware_id': hw_id, 'reason': reason},
             )
-            messages.success(request, "تم فك حظر الجهاز بنجاح.")
+            messages.success(request, "تم فك حظر الجهاز (التطبيق والمتصفح) بنجاح.")
         else:
             messages.error(request, "بيانات الجهاز غير كافية لفك الحظر.")
 
@@ -1499,6 +1532,11 @@ def security_admin_action(request):
                 setattr(policy, field, max(int(raw_v), 1))
         policy.enforce_device_limits = request.POST.get('enforce_device_limits') == 'on'
         policy.enforce_screen_capture_policy = request.POST.get('enforce_screen_capture_policy') == 'on'
+        policy.set_boot_guard_flags(
+            block_vpn=request.POST.get('block_vpn_connections') == 'on',
+            block_dev_options=request.POST.get('block_developer_options') == 'on',
+            block_abnormal_net=request.POST.get('block_abnormal_dns_or_ports') == 'on',
+        )
         policy.save()
         AuditLog.log(
             request,
@@ -1508,6 +1546,43 @@ def security_admin_action(request):
             details={'student_device_limit': policy.student_device_limit},
         )
         messages.success(request, "تم حفظ إعدادات سياسة الأمان وحدود الأجهزة.")
+
+    elif action == 'toggle_maintenance_device':
+        hw_id = (request.POST.get('hardware_id') or '').strip()
+        inst_id = (request.POST.get('installation_id') or '').strip()
+        device_id = request.POST.get('device_id')
+        if not hw_id and device_id:
+            dev = RegisteredDevice.objects.filter(id=device_id).first()
+            if dev is not None:
+                from api_v1.device_security_service import get_device_hardware_id
+                hw_id = get_device_hardware_id(dev)
+        if not hw_id and inst_id:
+            dev = RegisteredDevice.objects.filter(installation_id=inst_id).first()
+            if dev is not None:
+                from api_v1.device_security_service import get_device_hardware_id
+                hw_id = get_device_hardware_id(dev)
+        target_ident = hw_id or inst_id
+        if not target_ident:
+            messages.error(request, "يجب تحديد معرّف الجهاز المادي DEV-XXXX.")
+        else:
+            policy = SecurityPolicyConfig.load()
+            raw_approved = request.POST.get('approved')
+            if raw_approved is not None:
+                approved = str(raw_approved).lower() in ('1', 'true', 'yes', 'on')
+            else:
+                approved = not policy.is_device_maintenance_approved(target_ident)
+            policy.set_device_maintenance_approval(target_ident, approved=approved)
+            policy.save()
+            AuditLog.log(
+                request,
+                AuditLog.ACTION_SECURITY_POLICY,
+                target_label=target_ident,
+                details={'action': 'toggle_maintenance_device', 'approved': approved},
+            )
+            messages.success(
+                request,
+                f"تم {'اعتماد' if approved else 'إلغاء اعتماد'} الجهاز ({target_ident}) لظهور زر دخول الإدارة في وضع الصيانة.",
+            )
 
     elif action == 'prune_telemetry':
         res = prune_expired_telemetry()

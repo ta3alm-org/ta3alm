@@ -98,27 +98,28 @@ def complete_profile(request):
                 )
 
             elif user.role == 'teacher':
-                default_plan = (
-                    SubscriptionPlan.objects.filter(is_default=True).first()
-                    or SubscriptionPlan.objects.order_by('price').first()
-                )
-                tp, _ = TeacherProfile.objects.update_or_create(
+                tp, created = TeacherProfile.objects.get_or_create(
                     user=saved_user,
                     defaults={
-                        'bio':                  form.cleaned_data.get('bio', ''),
-                        'subject':              form.cleaned_data['subject'],
-                        'subscription_end_date': timezone.now() + timedelta(days=30),
-                        'is_trial_used':        True,
-                        'current_plan':         default_plan,
+                        'bio': form.cleaned_data.get('bio', ''),
+                        'subject': form.cleaned_data['subject'],
+                        'is_approved': False,
+                        'subscription_end_date': None,
+                        'is_trial_used': False,
+                        'current_plan': None,
                     },
                 )
+                if not created:
+                    tp.bio = form.cleaned_data.get('bio', '')
+                    tp.subject = form.cleaned_data['subject']
+                    tp.save(update_fields=['bio', 'subject'])
                 try:
                     from core.notifications_service import notify_users_bulk
                     admins = User.objects.filter(Q(is_superuser=True) | Q(role='admin'), is_active=True)
                     notify_users_bulk(
                         admins,
                         'طلب اعتماد معلم جديد',
-                        f"سجّل المعلم {saved_user.get_full_name() or saved_user.email} وهو بانتظار موافقتك للظهور على المنصة.",
+                        f"سجّل المعلم {saved_user.get_full_name() or saved_user.email} وهو بانتظار موافقتك للظهور وتفعيل الحساب.",
                         link='/admin-panel/users/',
                     )
                 except Exception:

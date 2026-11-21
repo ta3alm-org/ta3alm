@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "حسابك قيد المراجعة | منصة تعلّم" %}{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-7 col-lg-6">
+            <div class="card border-0 shadow-lg rounded-4 overflow-hidden">
+                <div class="card-body p-4 p-md-5 text-center">
+                    <div class="mx-auto mb-3 d-inline-flex align-items-center justify-content-center rounded-circle bg-warning bg-opacity-10 text-warning" style="width:84px;height:84px;">
+                        <i class="bi bi-hourglass-split fs-1"></i>
+                    </div>
+                    <h2 class="fw-bold mb-3">{% trans "طلب انضمامك كمعلم قيد المراجعة" %}</h2>
+                    <p class="text-muted fs-6 mb-4" style="line-height:1.8;">
+                        {% trans "شكراً لانضمامك إلى منصة تعلّم! يتم الآن مراجعة بيانات حسابك من قِبل إدارة المنصة، ولن يتم إدراجك أو تفعيل لوحة المعلم إلا بعد موافقة الإدارة. سيصلك إشعار فور الاعتماد." %}
+                    </p>
+                    <div class="d-flex flex-wrap gap-2 justify-content-center">
+                        <a href="{% url 'teacher_dashboard' %}" class="btn btn-primary px-4 fw-bold">
+                            <i class="bi bi-arrow-clockwise me-1"></i>{% trans "تحديث حالة الطلب" %}
+                        </a>
+                        <a href="{% url 'home' %}" class="btn btn-outline-secondary px-4">
+                            <i class="bi bi-house-door me-1"></i>{% trans "الصفحة الرئيسية" %}
+                        </a>
+                        <a href="{% url 'account_logout' %}" class="btn btn-outline-danger px-4">
+                            <i class="bi bi-box-arrow-left me-1"></i>{% trans "تسجيل الخروج" %}
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
