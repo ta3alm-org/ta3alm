@@ -64,6 +64,14 @@ def get_active_device_block(
     clean_inst = str(installation_id or '').strip()
     clean_hw = str(hardware_id or '').strip()
 
+    # مسار فائق السرعة: إذا لم يوجد أي حظر نشط في النظام حالياً نخرج فوراً بدون أي مسح للجداول
+    has_any_blocks = (
+        DeviceBlock.objects.filter(is_active=True).exists()
+        or RegisteredDevice.objects.filter(trust_status=DeviceTrustStatus.BLOCKED).exists()
+    )
+    if not has_any_blocks:
+        return None
+
     if not clean_hw and request is not None:
         clean_hw = str(request.META.get('HTTP_X_HARDWARE_ID') or '').strip()
 

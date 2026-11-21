@@ -3,6 +3,7 @@ Extracted from api_v1/views_admin.py.
 """
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status
@@ -30,17 +31,32 @@ from api_v1.models import UserSecurityProfile
 User = get_user_model()
 
 
-def _backfill_missing_user_profiles() -> None:
+def _backfill_missing_user_profiles(*, force: bool = False) -> None:
     """ضمان وجود سجل Profile للحسابات المكتملة في قاعدة البيانات دون تفعيل حسابات المعلمين غير المستكملة."""
-    completed_teachers = User.objects.filter(role='teacher', teacher_profile__isnull=True).exclude(
-        Q(custom_id__isnull=True) | Q(custom_id='')
+    if not force and not cache.add('ta3alm:admin:backfill_profiles_done', 1, timeout=300):
+        return
+    missing_teachers = list(
+        User.objects.filter(role='teacher', teacher_profile__isnull=True).exclude(
+            Q(custom_id__isnull=True) | Q(custom_id='')
+        )
     )
-    for u in completed_teachers:
-        TeacherProfile.objects.get_or_create(user=u, defaults={'is_approved': False})
-    for u in User.objects.filter(role='student', student_profile__isnull=True):
-        StudentProfile.objects.get_or_create(user=u, defaults={'parent_phone': ''})
-    for u in User.objects.filter(role='assistant', assistant_profile__isnull=True):
-        AssistantProfile.objects.get_or_create(user=u, defaults={'phone': u.phone or ''})
+    if missing_teachers:
+        TeacherProfile.objects.bulk_create(
+            [TeacherProfile(user=u, is_approved=False) for u in missing_teachers],
+            ignore_conflicts=True,
+        )
+    missing_students = list(User.objects.filter(role='student', student_profile__isnull=True))
+    if missing_students:
+        StudentProfile.objects.bulk_create(
+            [StudentProfile(user=u, parent_phone='') for u in missing_students],
+            ignore_conflicts=True,
+        )
+    missing_assistants = list(User.objects.filter(role='assistant', assistant_profile__isnull=True))
+    if missing_assistants:
+        AssistantProfile.objects.bulk_create(
+            [AssistantProfile(user=u, phone=u.phone or '') for u in missing_assistants],
+            ignore_conflicts=True,
+        )
 
 
 class AdminDashboardAPIView(APIView):

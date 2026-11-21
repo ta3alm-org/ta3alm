@@ -44,13 +44,22 @@ class SecurityPolicyConfig(models.Model):
         verbose_name = 'Security Policy Config'
         verbose_name_plural = 'Security Policy Config'
 
+    CACHE_KEY = 'ta3alm:singleton:security_policy_v1'
+
     def save(self, *args, **kwargs):
+        from django.core.cache import cache
         self.pk = 1
         super().save(*args, **kwargs)
+        cache.set(self.CACHE_KEY, self, timeout=60)
 
     @classmethod
     def load(cls) -> 'SecurityPolicyConfig':
+        from django.core.cache import cache
+        cached = cache.get(cls.CACHE_KEY)
+        if cached is not None:
+            return cached
         obj, _ = cls.objects.get_or_create(pk=1)
+        cache.set(cls.CACHE_KEY, obj, timeout=60)
         return obj
 
     def _boot_guard_flags(self) -> dict:

@@ -89,14 +89,24 @@ class JWTAndTokenAuthentication(authentication.BaseAuthentication):
         if scheme == 'bearer':
             # محاولة فك JWT أولاً، ولو كان DRF Token مرسلاً كـ Bearer نقبله أيضاً للتسهيل
             if '.' in raw_token:
-                payload = decode_jwt_token(raw_token, expected_type='access')
-                user_id = payload.get('user_id')
-                try:
-                    user = User.objects.get(id=user_id, is_active=True)
-                except User.DoesNotExist:
-                    raise exceptions.AuthenticationFailed('المستخدم غير موجود أو غير مفعل.')
-                if user.is_banned:
-                    raise exceptions.PermissionDenied('تم حظر حسابك من قِبل إدارة المنصة.')
+                cached = getattr(request, '_cached_api_jwt_user', None)
+                if (
+                    isinstance(cached, tuple)
+                    and len(cached) == 3
+                    and cached[0] == raw_token
+                    and cached[1] is not None
+                    and not cached[1].is_banned
+                ):
+                    user, payload = cached[1], cached[2]
+                else:
+                    payload = decode_jwt_token(raw_token, expected_type='access')
+                    user_id = payload.get('user_id')
+                    try:
+                        user = User.objects.get(id=user_id, is_active=True)
+                    except User.DoesNotExist:
+                        raise exceptions.AuthenticationFailed('المستخدم غير موجود أو غير مفعل.')
+                    if user.is_banned:
+                        raise exceptions.PermissionDenied('تم حظر حسابك من قِبل إدارة المنصة.')
                 self._enforce_device_and_session(request, user, payload)
                 return (user, payload)
             else:
@@ -123,12 +133,13 @@ class JWTAndTokenAuthentication(authentication.BaseAuthentication):
         ).strip()
 
         if inst_id:
-            active_block = get_active_device_block(inst_id)
-            if active_block:
-                raise exceptions.PermissionDenied({
-                    'error': f'تم حظر هذا الجهاز من قِبل إدارة المنصة: {active_block.reason}',
-                    'code': 'DEVICE_BLOCKED',
-                })
+            if not getattr(request, '_boot_gate_checked', False):
+                active_block = get_active_device_block(inst_id)
+                if active_block:
+                    raise exceptions.PermissionDenied({
+                        'error': f'تم حظر هذا الجهاز من قِبل إدارة المنصة: {active_block.reason}',
+                        'code': 'DEVICE_BLOCKED',
+                    })
 
             reg_dev = RegisteredDevice.objects.filter(user=user, installation_id=inst_id).first()
             if reg_dev:

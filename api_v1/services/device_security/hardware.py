@@ -8,6 +8,8 @@ import hmac
 import re
 from datetime import timedelta
 from typing import Any
+from django.core.cache import cache
+from django.db.models import Q
 from django.utils import timezone
 from api_v1.models import RegisteredDevice
 
@@ -142,7 +144,46 @@ def _find_matching_canonical_hardware_id(
     web_hw_sig = profile.get('web_hw_sig', '')
     ip_addr = profile.get('ip_address', '')
 
-    candidates = RegisteredDevice.objects.only(
+    cache_key = None
+    if exclude_pk is None:
+        raw_cache = f"{clean_inst}|{os_fam}|{model_tok}|{gpu_core}|{web_hw_sig}|{ip_addr}"
+        cache_key = f"ta3alm:hw_match:{hashlib.sha1(raw_cache.encode('utf-8')).hexdigest()}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached or None
+
+    # 1) فحص سريع ومباشر عبر installation_id (استعلام مفهرس واحد)
+    if clean_inst:
+        exact_qs = RegisteredDevice.objects.filter(installation_id=clean_inst).only(
+            'id', 'installation_id', 'integrity_signals'
+        )
+        if exclude_pk:
+            exact_qs = exact_qs.exclude(pk=exclude_pk)
+        exact_dev = exact_qs.order_by('-last_active_at').first()
+        if exact_dev is not None:
+            sigs = exact_dev.integrity_signals if isinstance(exact_dev.integrity_signals, dict) else {}
+            cand_hw_id = str(sigs.get('hardware_id') or '').strip()
+            if cand_hw_id.startswith('DEV-'):
+                if cache_key:
+                    cache.set(cache_key, cand_hw_id, timeout=120)
+                return cand_hw_id
+
+    # لا ننفذ استعلام مسح إذا لم تتوافر سمات ربط حقيقية
+    if not (ip_addr or model_tok or web_hw_sig):
+        if cache_key:
+            cache.set(cache_key, '', timeout=60)
+        return None
+
+    # 2) استعلام مستهدف ومحدود العدد بدلاً من سحب 350 صفاً في كل طلب
+    filter_q = Q()
+    if ip_addr:
+        filter_q |= Q(last_ip=ip_addr)
+    if model_tok and len(model_tok) >= 3:
+        filter_q |= Q(model__icontains=model_tok[:20])
+    if web_hw_sig:
+        filter_q |= Q(os_name__startswith='Web')
+
+    candidates_qs = RegisteredDevice.objects.filter(filter_q).only(
         'id',
         'installation_id',
         'os_name',
@@ -154,43 +195,46 @@ def _find_matching_canonical_hardware_id(
         'last_ip',
         'last_active_at',
         'integrity_signals',
-    ).order_by('-last_active_at')[:350]
+    )
+    if exclude_pk:
+        candidates_qs = candidates_qs.exclude(pk=exclude_pk)
+    candidates = candidates_qs.order_by('-last_active_at')[:25]
 
     recent_cutoff = timezone.now() - timedelta(days=30)
+    matched_hw: str | None = None
     for dev in candidates:
-        if exclude_pk and dev.pk == exclude_pk:
-            continue
         sigs = dev.integrity_signals if isinstance(dev.integrity_signals, dict) else {}
         cand_hw_id = str(sigs.get('hardware_id') or '').strip()
         if not cand_hw_id.startswith('DEV-'):
             continue
 
-        # 1) نفس installation_id على أي حساب
-        if clean_inst and dev.installation_id == clean_inst:
-            return cand_hw_id
-
         cand_prof = _extract_device_hw_profile(device=dev)
         if cand_prof['os_family'] != os_fam:
             continue
 
-        # 2) تطابق Web hardware signature الصارم لنفس المتصفح أو التصفح الخفي
+        # تطابق Web hardware signature الصارم لنفس المتصفح أو التصفح الخفي
         if web_hw_sig and cand_prof['web_hw_sig'] and web_hw_sig == cand_prof['web_hw_sig']:
-            return cand_hw_id
+            matched_hw = cand_hw_id
+            break
 
-        # 3) الربط العابر للمنصات على الأندرويد (تطبيق أندرويد <-> متصفح أندرويد على نفس الهاتف)
+        # الربط العابر للمنصات على الأندرويد (تطبيق أندرويد <-> متصفح أندرويد على نفس الهاتف)
         if os_fam == 'android':
             same_model = bool(model_tok and cand_prof['model_token'] and model_tok == cand_prof['model_token'])
             same_gpu = bool(gpu_core and cand_prof['gpu_core'] and (gpu_core == cand_prof['gpu_core'] or gpu_core in cand_prof['gpu_core'] or cand_prof['gpu_core'] in gpu_core))
             same_ip = bool(ip_addr and cand_prof['ip_address'] and ip_addr == cand_prof['ip_address'])
 
             if same_model and (same_gpu or same_ip):
-                return cand_hw_id
+                matched_hw = cand_hw_id
+                break
             if same_ip and dev.last_active_at and dev.last_active_at >= recent_cutoff:
                 # إذا تطابق نفس الـ IP ونظام Android و(GPU متطابق أو المتصفح أخفى الموديل بكلمة K)
                 if same_gpu or not model_tok or not cand_prof['model_token']:
-                    return cand_hw_id
+                    matched_hw = cand_hw_id
+                    break
 
-    return None
+    if cache_key:
+        cache.set(cache_key, matched_hw or '', timeout=120 if matched_hw else 45)
+    return matched_hw
 
 
 def compute_canonical_hardware_id(
@@ -304,13 +348,26 @@ def _find_all_devices_for_hardware(
                 clean_hw = get_device_hardware_id(d)
 
     if clean_hw:
-        for d in RegisteredDevice.objects.only(
+        hw_qs = RegisteredDevice.objects.filter(
+            integrity_signals__hardware_id=clean_hw
+        ).only(
             'id', 'user_id', 'installation_id', 'device_name', 'os_name', 'cpu_arch',
             'model', 'manufacturer', 'gpu_renderer', 'package_name',
             'last_ip', 'last_active_at', 'integrity_signals', 'trust_status',
             'is_active', 'revoked_at', 'revoked_reason', 'current_fingerprint',
-        ):
-            if get_device_hardware_id(d) == clean_hw:
-                _add(d)
+        )
+        for d in hw_qs:
+            _add(d)
+        if not matched:
+            for d in RegisteredDevice.objects.only(
+                'id', 'user_id', 'installation_id', 'device_name', 'os_name', 'cpu_arch',
+                'model', 'manufacturer', 'gpu_renderer', 'package_name',
+                'last_ip', 'last_active_at', 'integrity_signals', 'trust_status',
+                'is_active', 'revoked_at', 'revoked_reason', 'current_fingerprint',
+            ).order_by('-last_active_at')[:60]:
+                sigs = d.integrity_signals if isinstance(d.integrity_signals, dict) else {}
+                saved_hw = str(sigs.get('hardware_id') or '').strip()
+                if saved_hw == clean_hw:
+                    _add(d)
 
     return matched

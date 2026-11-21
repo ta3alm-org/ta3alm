@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from typing import Any
+from django.core.cache import cache
 from django.db.models import Q
 from django.utils import timezone
 from api_v1.device_security_service import (
@@ -225,7 +226,28 @@ def record_behavioral_activity(
         ]
     )
 
-    risk_info = compute_behavioral_risk(user, recent_signal_tag=signal_tag, risk_delta=risk_delta)
+    should_recompute_risk = bool(
+        signal_tag
+        or risk_delta > 0
+        or activity_type == 'login_failed'
+        or profile.analyzed_at is None
+        or not cache.get(f'ta3alm:behav_risk_fresh:{user.id}')
+    )
+    if should_recompute_risk:
+        risk_info = compute_behavioral_risk(user, recent_signal_tag=signal_tag, risk_delta=risk_delta)
+        cache.set(f'ta3alm:behav_risk_fresh:{user.id}', 1, timeout=60)
+    else:
+        reasons = (
+            profile.last_signals.get('reasons', [])
+            if isinstance(profile.last_signals, dict)
+            else []
+        )
+        risk_info = {
+            'score': profile.behavior_risk_score,
+            'level': profile.behavior_risk_level,
+            'reasons': reasons,
+            'profile': profile,
+        }
 
     policy = SecurityPolicyConfig.load()
     enforcement_result = None

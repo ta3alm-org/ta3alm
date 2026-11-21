@@ -40,14 +40,8 @@ User = get_user_model()
 def manage_users(request):
     ctx = _base_context(request)
 
-    for u in User.objects.filter(role='teacher', teacher_profile__isnull=True).exclude(
-        Q(custom_id__isnull=True) | Q(custom_id='')
-    ):
-        TeacherProfile.objects.get_or_create(user=u, defaults={'is_approved': False})
-    for u in User.objects.filter(role='student', student_profile__isnull=True):
-        StudentProfile.objects.get_or_create(user=u, defaults={'parent_phone': ''})
-    for u in User.objects.filter(role='assistant', assistant_profile__isnull=True):
-        AssistantProfile.objects.get_or_create(user=u, defaults={'phone': u.phone or ''})
+    from api_v1.views.admin.dashboard import _backfill_missing_user_profiles
+    _backfill_missing_user_profiles()
 
     query = request.GET.get('q', '').strip()
     role_filter = request.GET.get('role', '')

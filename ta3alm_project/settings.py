@@ -270,6 +270,8 @@ if active_postgres_url:
             'PASSWORD': url.password or '',
             'HOST': url.hostname or 'localhost',
             'PORT': url.port or 5432,
+            'CONN_MAX_AGE': 60,
+            'CONN_HEALTH_CHECKS': True,
             'OPTIONS': {
                 'sslmode': 'require',
                 'connect_timeout': 10,
@@ -285,6 +287,8 @@ elif not force_sqlite and (raw_use_sqlite in ('false', '0', 'no') or os.environ.
             'PASSWORD': os.environ.get('DB_PASSWORD', ''),
             'HOST': os.environ.get('DB_HOST', 'localhost'),
             'PORT': os.environ.get('DB_PORT', '5432'),
+            'CONN_MAX_AGE': 60,
+            'CONN_HEALTH_CHECKS': True,
             'OPTIONS': {
                 'sslmode': 'require',
                 'connect_timeout': 10,

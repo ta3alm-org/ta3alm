@@ -293,14 +293,22 @@ class ZohoMailConfig(models.Model):
     def __str__(self):
         return f"إعدادات Zoho Mail ({self.get_effective_support_email()})"
 
+    CACHE_KEY = 'ta3alm:singleton:zoho_mail_config_v1'
+
     def save(self, *args, **kwargs):
+        from django.core.cache import cache
         self.pk = 1
         super().save(*args, **kwargs)
+        cache.set(self.CACHE_KEY, self, timeout=60)
 
     @classmethod
     def load(cls):
-        import os
+        from django.core.cache import cache
+        cached = cache.get(cls.CACHE_KEY)
+        if cached is not None:
+            return cached
         obj, _ = cls.objects.get_or_create(pk=1)
+        cache.set(cls.CACHE_KEY, obj, timeout=60)
         return obj
 
     def get_effective_client_id(self):

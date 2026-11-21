@@ -94,6 +94,11 @@ def evaluate_boot_security_gate(
     """
     from core.models import SiteSetting
 
+    if request is not None and client_signals is None:
+        cached_gate = getattr(request, '_cached_boot_security_gate', None)
+        if cached_gate is not None:
+            return cached_gate
+
     sig = client_signals if isinstance(client_signals, dict) else {}
     meta = getattr(request, 'META', {}) if request is not None else {}
 
@@ -222,7 +227,7 @@ def evaluate_boot_security_gate(
             'can_admin_login': can_admin_login,
         }
 
-    return {
+    result = {
         'boot_allowed': True,
         'code': 'OK',
         'title': '',
@@ -231,3 +236,6 @@ def evaluate_boot_security_gate(
         'is_maintenance_mode': bool(site_settings.is_maintenance_mode),
         'can_admin_login': can_admin_login,
     }
+    if request is not None and client_signals is None:
+        request._cached_boot_security_gate = result
+    return result

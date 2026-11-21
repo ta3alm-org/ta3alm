@@ -60,7 +60,10 @@ class ApiSecurityAndActivityAuditMiddleware:
                     from api_v1.authentication import decode_jwt_token
                     payload = decode_jwt_token(raw_token, expected_type='access')
                     User = get_user_model()
-                    return User.objects.filter(id=payload.get('user_id'), is_active=True).first()
+                    resolved = User.objects.filter(id=payload.get('user_id'), is_active=True).first()
+                    if resolved is not None and not getattr(resolved, 'is_banned', False):
+                        request._cached_api_jwt_user = (raw_token, resolved, payload)
+                    return resolved
                 except Exception:
                     return None
         return None
@@ -139,6 +142,7 @@ class ApiSecurityAndActivityAuditMiddleware:
                             },
                             status=http_st,
                         )
+                request._boot_gate_checked = True
             except Exception:
                 pass
 

@@ -136,7 +136,10 @@ class SiteSetting(models.Model):
             'release_notes': (self.android_update_release_notes or '').strip(),
         }
 
+    CACHE_KEY = 'ta3alm:singleton:site_setting_v1'
+
     def save(self, *args, **kwargs):
+        from django.core.cache import cache
         self.pk = 1
         self.platform_commission_percentage = max(
             0, min(100, int(self.platform_commission_percentage or 0))
@@ -149,10 +152,16 @@ class SiteSetting(models.Model):
             normalized = self.normalize_file_sha256(self.android_apk_sha256)
             self.android_apk_sha256 = normalized
         super().save(*args, **kwargs)
+        cache.set(self.CACHE_KEY, self, timeout=60)
 
     @classmethod
     def load(cls):
-        obj, created = cls.objects.get_or_create(pk=1)
+        from django.core.cache import cache
+        cached = cache.get(cls.CACHE_KEY)
+        if cached is not None:
+            return cached
+        obj, _ = cls.objects.get_or_create(pk=1)
+        cache.set(cls.CACHE_KEY, obj, timeout=60)
         return obj
 
 
