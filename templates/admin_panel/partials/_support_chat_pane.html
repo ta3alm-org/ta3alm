@@ -14,8 +14,9 @@
                 </span>
             </div>
             <div class="ap-xs ap-muted">
-                {{ active_thread.user.email }}{% if active_thread.user.phone %} · {{ active_thread.user.phone }}{% endif
-                %}{% if active_thread.user.custom_id %} · {{ active_thread.user.custom_id }}{% endif %}
+                {{ active_thread.user.email }}
+                {% if active_thread.user.phone %} · {{ active_thread.user.phone }}{% endif %}
+                {% if active_thread.user.custom_id %} · {{ active_thread.user.custom_id }}{% endif %}
             </div>
         </div>
     </div>
@@ -27,9 +28,11 @@
         </a>
         {% endif %}
         <form id="apChatStatusForm" method="POST" action="{% url 'admin_panel:support_chat_thread' active_thread.id %}"
-            class="ap-inline-flex" data-ajax-form data-chat-status-form="1" {% if active_thread.status !='closed' %}
+            class="ap-inline-flex" data-ajax-form data-chat-status-form="1"
+            {% if active_thread.status != 'closed' %}
             data-confirm="هل تريد إغلاق هذه المحادثة؟ سيتمكن المستخدم من إعادة فتحها إذا أرسل رسالة جديدة."
-            data-confirm-title="إغلاق المحادثة" data-confirm-variant="warning" {% endif %}>
+            data-confirm-title="إغلاق المحادثة" data-confirm-variant="warning"
+            {% endif %}>
             {% csrf_token %}
             {% if active_thread.status == 'closed' %}
             <input type="hidden" name="action" value="reopen">
@@ -53,8 +56,9 @@
     <div class="ap-chat-bubble-row {% if m.is_from_admin %}is-me{% else %}is-peer{% endif %}" data-msg-id="{{ m.id }}">
         <div class="ap-chat-bubble">
             <div class="ap-chat-bubble-sender">
-                <span>{% if m.is_from_admin %}الإدارة ({{ m.sender.get_full_name|default:m.sender.email }}){% else %}{{
-                    m.sender.get_full_name|default:m.sender.email }}{% endif %}</span>
+                <span>
+                    {% if m.is_from_admin %}الإدارة ({{ m.sender.get_full_name|default:m.sender.email }}){% else %}{{ m.sender.get_full_name|default:m.sender.email }}{% endif %}
+                </span>
                 {% if m.via_notification_reply %}
                 <span class="ap-badge ap-badge-warning">رد من الإشعارات</span>
                 {% endif %}
