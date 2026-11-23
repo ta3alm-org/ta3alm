@@ -1,241 +1,277 @@
 {% extends 'admin_panel/base_admin.html' %}
 {% load i18n %}
 
-{% block page_title %}الإحصاءات الرئيسية{% endblock %}
+{% block page_title %}لوحة القيادة{% endblock %}
+{% block body_page %}dashboard{% endblock %}
 {% block nav_dashboard %}active{% endblock %}
-{% block breadcrumb %}<span class="sep">/</span><span class="current">الإحصاءات</span>{% endblock %}
+{% block breadcrumb %}<span class="sep">/</span><span class="current">لوحة القيادة</span>{% endblock %}
 
 {% block content %}
-
-<!-- Page Header -->
-<div class="page-header d-flex align-items-center justify-content-between">
+<div class="ap-page-header">
     <div>
-        <h1><i class="bi bi-speedometer2 me-2" style="color:var(--admin-accent);"></i>لوحة القيادة</h1>
-        <p>مرحباً {{ request.user.get_full_name|default:request.user.email }} 👋</p>
+        <h1 class="ap-page-title"><i class="bi bi-grid-1x2"></i> لوحة القيادة</h1>
+        <p class="ap-page-subtitle">مرحباً {{ request.user.get_full_name|default:request.user.email }} — ملخص أداء المنصة والإعدادات السريعة</p>
     </div>
     {% if is_owner %}
-    <div class="d-flex gap-2 flex-wrap align-items-center">
-        <form method="POST" action="{% url 'admin_panel:update_platform_commission' %}" class="d-flex align-items-center gap-2 bg-white border rounded px-2 py-1">
+    <div class="ap-page-actions">
+        <form method="POST" action="{% url 'admin_panel:update_platform_commission' %}" data-ajax-form
+              class="ap-flex ap-items-center ap-gap-2" style="background:var(--bg-surface); border:1px solid var(--border-default); padding:4px 10px; border-radius:var(--radius-sm);">
             {% csrf_token %}
-            <label for="commissionInput" class="small fw-bold mb-0 text-muted">عمولة المنصة (%)</label>
-            <input id="commissionInput" type="number" name="platform_commission_percentage" min="0" max="100" value="{{ site_settings.platform_commission_percentage }}" class="form-control form-control-sm" style="width:72px;" required>
-            <button type="submit" class="btn btn-sm btn-primary fw-bold">حفظ</button>
+            <label for="commissionInput" class="ap-xs ap-muted ap-strong">عمولة المنصة (%)</label>
+            <input id="commissionInput" type="number" name="platform_commission_percentage" min="0" max="100"
+                   value="{{ site_settings.platform_commission_percentage }}"
+                   class="ap-input ap-input-sm" style="width:74px;" required>
+            <button type="submit" class="ap-btn ap-btn-sm ap-btn-primary">حفظ</button>
         </form>
-        <form method="POST" action="{% url 'admin_panel:toggle_maintenance' %}">
+        <form method="POST" action="{% url 'admin_panel:toggle_maintenance' %}"
+              data-ajax-form data-maintenance-form="1"
+              data-confirm="هل تريد تبديل حالة وضع الصيانة على المنصة؟"
+              data-confirm-title="وضع الصيانة"
+              data-confirm-variant="warning">
             {% csrf_token %}
-            <button type="submit" class="btn btn-sm fw-bold px-4
-                {% if site_settings.is_maintenance_mode %}btn-danger{% else %}btn-outline-secondary{% endif %}">
-                <i class="bi bi-tools me-1"></i>
-                {% if site_settings.is_maintenance_mode %}إيقاف الصيانة{% else %}تفعيل الصيانة{% endif %}
+            <button type="submit" id="dashboardMaintBtn"
+                    class="ap-btn ap-btn-sm {% if site_settings.is_maintenance_mode %}ap-btn-danger{% else %}ap-btn-secondary{% endif %}">
+                <i class="bi bi-tools"></i>
+                <span data-maint-label>{% if site_settings.is_maintenance_mode %}إيقاف الصيانة{% else %}تفعيل الصيانة{% endif %}</span>
             </button>
         </form>
     </div>
     {% endif %}
-
 </div>
 
-<!-- Stat Cards -->
-<div class="row g-3 mb-4">
-    <div class="col-6 col-lg-3">
-        <div class="stat-card">
-            <div class="stat-icon" style="background:#e8f4fd; color:#0d6efd;">
-                <i class="bi bi-person-video3"></i>
-            </div>
-            <div class="stat-number">{{ total_teachers }}</div>
-            <div class="stat-label">معلم مسجّل</div>
-            <div class="stat-change up">
-                <i class="bi bi-arrow-up-circle-fill me-1"></i>{{ active_teachers_count }} نشط
-            </div>
+<!-- KPI Stat Cards -->
+<div class="ap-kpi-grid">
+    <div class="ap-stat">
+        <div class="ap-stat-top">
+            <span class="ap-stat-label">إجمالي المعلمين</span>
+            <span class="ap-stat-icon"><i class="bi bi-person-video3"></i></span>
+        </div>
+        <div class="ap-stat-value">{{ total_teachers }}</div>
+        <div class="ap-stat-sub is-positive">
+            <i class="bi bi-check-circle"></i> {{ active_teachers_count }} اشتراك ساري
         </div>
     </div>
-    <div class="col-6 col-lg-3">
-        <div class="stat-card">
-            <div class="stat-icon" style="background:#e8fdf4; color:#0f9b58;">
-                <i class="bi bi-mortarboard-fill"></i>
-            </div>
-            <div class="stat-number">{{ total_students }}</div>
-            <div class="stat-label">طالب مسجّل</div>
+
+    <div class="ap-stat">
+        <div class="ap-stat-top">
+            <span class="ap-stat-label">الطلاب المسجلون</span>
+            <span class="ap-stat-icon"><i class="bi bi-mortarboard"></i></span>
         </div>
+        <div class="ap-stat-value">{{ total_students }}</div>
+        <div class="ap-stat-sub">إجمالي حسابات الطلاب</div>
     </div>
-    <div class="col-6 col-lg-3">
-        <div class="stat-card">
-            <div class="stat-icon" style="background:#fff8e1; color:#f5a623;">
-                <i class="bi bi-person-badge-fill"></i>
-            </div>
-            <div class="stat-number">{{ total_assistants }}</div>
-            <div class="stat-label">مساعد</div>
+
+    <div class="ap-stat">
+        <div class="ap-stat-top">
+            <span class="ap-stat-label">المساعدون</span>
+            <span class="ap-stat-icon"><i class="bi bi-person-badge"></i></span>
         </div>
+        <div class="ap-stat-value">{{ total_assistants }}</div>
+        <div class="ap-stat-sub">حسابات المساعدين المفعلة</div>
     </div>
-    <div class="col-6 col-lg-3">
-        <div class="stat-card">
-            <div class="stat-icon" style="background:#fde8ea; color:#e94560;">
-                <i class="bi bi-patch-check-fill"></i>
-            </div>
-            <div class="stat-number">{{ active_teachers_count }}</div>
-            <div class="stat-label">اشتراك ساري</div>
+
+    <div class="ap-stat">
+        <div class="ap-stat-top">
+            <span class="ap-stat-label">الاشتراكات النشطة</span>
+            <span class="ap-stat-icon"><i class="bi bi-patch-check"></i></span>
         </div>
+        <div class="ap-stat-value">{{ active_teachers_count }}</div>
+        <div class="ap-stat-sub">باقات سارية حالياً</div>
     </div>
 </div>
 
-<!-- Status + Audit Log -->
-<div class="row g-3">
-
-    <!-- Quick Actions -->
-    <div class="col-lg-4">
-        <div class="admin-card h-100">
-            <div class="admin-card-header">
-                <span class="admin-card-title"><i class="bi bi-lightning-fill me-2" style="color:var(--admin-gold);"></i>إجراءات سريعة</span>
-            </div>
-            <div class="p-3 d-flex flex-column gap-2">
+<!-- Quick Actions & Recent Activity -->
+<div class="ap-split-4-8 ap-mb-6">
+    <div class="ap-card">
+        <div class="ap-card-header">
+            <h2 class="ap-card-title"><i class="bi bi-lightning"></i> وصول سريع</h2>
+        </div>
+        <div class="ap-card-body">
+            <div class="ap-quick-links">
                 {% if can_manage_users %}
-                <a href="{% url 'admin_panel:manage_users' %}" class="btn btn-light text-start fw-600">
-                    <i class="bi bi-people-fill me-2 text-primary"></i> إدارة المستخدمين
+                <a href="{% url 'admin_panel:manage_users' %}" class="ap-quick-link">
+                    <span class="ap-quick-link-start"><i class="bi bi-people"></i> إدارة المستخدمين</span>
+                    <i class="bi bi-chevron-left ap-muted ap-xs"></i>
                 </a>
-                <a href="{% url 'admin_panel:send_notifications' %}" class="btn btn-light text-start fw-600">
-                    <i class="bi bi-bell-fill me-2" style="color:#6f42c1;"></i> إرسال إشعار مخصص
+                <a href="{% url 'admin_panel:send_notifications' %}" class="ap-quick-link">
+                    <span class="ap-quick-link-start"><i class="bi bi-bell"></i> إرسال إشعار مخصص</span>
+                    <i class="bi bi-chevron-left ap-muted ap-xs"></i>
+                </a>
+                <a href="{% url 'admin_panel:security_dashboard' %}" class="ap-quick-link">
+                    <span class="ap-quick-link-start"><i class="bi bi-shield-lock"></i> مركز الأمان والحماية</span>
+                    <i class="bi bi-chevron-left ap-muted ap-xs"></i>
+                </a>
+                <a href="{% url 'admin_panel:error_reports' %}" class="ap-quick-link">
+                    <span class="ap-quick-link-start">
+                        <i class="bi bi-bug"></i> تقارير الأخطاء التقنية
+                        {% if client_errors_unresolved_count > 0 %}
+                        <span class="ap-badge ap-badge-danger">{{ client_errors_unresolved_count }}</span>
+                        {% endif %}
+                    </span>
+                    <i class="bi bi-chevron-left ap-muted ap-xs"></i>
+                </a>
+                {% endif %}
+                {% if can_manage_support %}
+                <a href="{% url 'admin_panel:support_chat' %}" class="ap-quick-link">
+                    <span class="ap-quick-link-start">
+                        <i class="bi bi-chat-dots"></i> شات الدعم المباشر
+                        {% if support_chat_unread_count > 0 %}
+                        <span class="ap-badge ap-badge-danger">{{ support_chat_unread_count }}</span>
+                        {% endif %}
+                    </span>
+                    <i class="bi bi-chevron-left ap-muted ap-xs"></i>
                 </a>
                 {% endif %}
                 {% if can_view_finance %}
-                <a href="{% url 'admin_panel:finance_report' %}" class="btn btn-light text-start fw-600">
-                    <i class="bi bi-cash-stack me-2 text-success"></i> التقارير المالية
+                <a href="{% url 'admin_panel:finance_report' %}" class="ap-quick-link">
+                    <span class="ap-quick-link-start"><i class="bi bi-bar-chart-line"></i> التقارير المالية</span>
+                    <i class="bi bi-chevron-left ap-muted ap-xs"></i>
                 </a>
-                <a href="{% url 'admin_panel:withdrawals' %}" class="btn btn-light text-start fw-600">
-                    <i class="bi bi-bank me-2 text-warning"></i> طلبات السحب
+                <a href="{% url 'admin_panel:withdrawals' %}" class="ap-quick-link">
+                    <span class="ap-quick-link-start"><i class="bi bi-bank"></i> طلبات السحب</span>
+                    <i class="bi bi-chevron-left ap-muted ap-xs"></i>
                 </a>
                 {% endif %}
                 {% if can_manage_plans %}
-                <a href="{% url 'admin_panel:manage_plans' %}" class="btn btn-light text-start fw-600">
-                    <i class="bi bi-tags-fill me-2" style="color:var(--admin-accent);"></i> إدارة الباقات
+                <a href="{% url 'admin_panel:manage_plans' %}" class="ap-quick-link">
+                    <span class="ap-quick-link-start"><i class="bi bi-tags"></i> إدارة الباقات</span>
+                    <i class="bi bi-chevron-left ap-muted ap-xs"></i>
                 </a>
                 {% endif %}
                 {% if is_owner %}
-                <a href="{% url 'admin_panel:manage_staff' %}" class="btn btn-light text-start fw-600">
-                    <i class="bi bi-person-badge-fill me-2 text-danger"></i> فريق الإدارة
+                <a href="{% url 'admin_panel:manage_staff' %}" class="ap-quick-link">
+                    <span class="ap-quick-link-start"><i class="bi bi-person-badge"></i> فريق الإدارة</span>
+                    <i class="bi bi-chevron-left ap-muted ap-xs"></i>
                 </a>
                 {% endif %}
-                <hr class="my-1">
-                <a href="{% url 'home' %}" target="_blank" class="btn btn-light text-start fw-600">
-                    <i class="bi bi-box-arrow-up-left me-2 text-secondary"></i> فتح الموقع
+                <div class="ap-divider"></div>
+                <a href="{% url 'home' %}" target="_blank" rel="noopener" class="ap-quick-link">
+                    <span class="ap-quick-link-start"><i class="bi bi-globe"></i> عرض الموقع الرئيسي</span>
+                    <i class="bi bi-box-arrow-up-left ap-muted ap-xs"></i>
                 </a>
             </div>
         </div>
     </div>
 
-    <!-- Audit Log -->
-    <div class="col-lg-8">
-        <div class="admin-card h-100">
-            <div class="admin-card-header">
-                <span class="admin-card-title"><i class="bi bi-journal-text me-2" style="color:var(--admin-accent);"></i>آخر الأحداث الإدارية</span>
-                {% if is_owner %}
-                <a href="{% url 'admin_panel:audit_log' %}" class="btn btn-sm btn-outline-secondary">
-                    عرض الكل
-                </a>
-                {% endif %}
-            </div>
-            <div class="admin-card-body">
-                {% if recent_logs %}
-                {% for log in recent_logs %}
-                {% with action=log.action %}
-                <div class="audit-item">
-                    <div class="audit-dot"
-                         style="background:
-                             {% if action == 'ban_user' or action == 'delete_user' %}#e94560
-                             {% elif action == 'renew_subscription' or action == 'unban_user' %}#0f9b58
-                             {% elif action == 'toggle_maintenance' %}#f5a623
-                             {% else %}#0d6efd{% endif %};">
+    <div class="ap-card">
+        <div class="ap-card-header">
+            <h2 class="ap-card-title"><i class="bi bi-journal-text"></i> آخر الأحداث الإدارية</h2>
+            {% if is_owner %}
+            <a href="{% url 'admin_panel:audit_log' %}" class="ap-btn ap-btn-sm ap-btn-secondary">عرض السجل الكامل</a>
+            {% endif %}
+        </div>
+        <div class="ap-card-body-flush">
+            {% if recent_logs %}
+            {% for log in recent_logs %}
+            {% with action=log.action %}
+            <div class="ap-timeline-item">
+                <div class="ap-timeline-dot
+                    {% if action == 'ban_user' or action == 'delete_user' or action == 'block_device' %}is-danger
+                    {% elif action == 'renew_subscription' or action == 'unban_user' %}is-success
+                    {% elif action == 'toggle_maintenance' %}is-warning
+                    {% else %}is-info{% endif %}">
+                </div>
+                <div style="flex:1; min-width:0;">
+                    <div class="ap-sm ap-strong">
+                        {{ log.get_action_display }}
+                        {% if log.target_label %}<span class="ap-muted" style="font-weight:400;">— {{ log.target_label }}</span>{% endif %}
                     </div>
-                    <div class="flex-grow-1">
-                        <div class="fw-600" style="font-size:0.875rem;">
-                            {{ log.get_action_display }}
-                            {% if log.target_label %}<span class="text-muted">— {{ log.target_label }}</span>{% endif %}
-                        </div>
-                        <div class="text-muted" style="font-size:0.75rem;">
-                            {{ log.admin.get_full_name|default:log.admin.email|default:"—" }}
-                            · {{ log.created_at|date:"j M Y H:i" }}
-                        </div>
+                    <div class="ap-xs ap-subtle-text ap-mt-1">
+                        {{ log.admin.get_full_name|default:log.admin.email|default:"—" }} · {{ log.created_at|date:"j M Y H:i" }}
                     </div>
                 </div>
-                {% endwith %}
-                {% endfor %}
-                {% else %}
-                <div class="empty-state">
-                    <i class="bi bi-journal-x"></i>
-                    لا توجد أحداث بعد
-                </div>
-                {% endif %}
             </div>
+            {% endwith %}
+            {% endfor %}
+            {% else %}
+            <div class="ap-empty">
+                <i class="bi bi-journal-x"></i>
+                <p class="ap-empty-title">لا توجد أحداث مسجّلة بعد</p>
+            </div>
+            {% endif %}
         </div>
     </div>
-
-    {% if is_owner %}
-    <div class="col-12">
-        <div class="admin-card">
-            <div class="admin-card-header flex-wrap gap-2">
-                <span class="admin-card-title"><i class="bi bi-android2 me-2 text-success"></i>إدارة رابط APK (GitHub Releases) والتحديثات الداخلية</span>
-                <div class="d-flex align-items-center gap-2">
-                    <span class="badge bg-secondary">أحدث بناء: {{ site_settings.android_latest_version_code }} ({{ site_settings.android_latest_version_name }})</span>
-                    <a href="{% url 'admin_panel:app_release_settings' %}" class="btn btn-sm btn-outline-primary fw-bold">
-                        <i class="bi bi-sliders me-1"></i> صفحة الإدارة والتشخيص الكاملة
-                    </a>
-                </div>
-            </div>
-            <form method="POST" action="{% url 'admin_panel:update_app_release_settings' %}" enctype="multipart/form-data" class="p-3">
-                {% csrf_token %}
-                <div class="row g-3">
-                    <div class="col-12">
-                        <label class="form-label small fw-bold">رابط تحميل APK المباشر من GitHub Releases (يوفر مساحة السيرفر والباندويث)</label>
-                        <input type="url" name="android_apk_url" value="{{ site_settings.android_apk_url }}" class="form-control" dir="ltr" placeholder="https://github.com/USERNAME/REPO/releases/download/v1.1.0/app-release.apk">
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label small fw-bold">رقم البناء الأحدث (Version Code)</label>
-                        <input type="number" name="android_latest_version_code" min="1" value="{{ site_settings.android_latest_version_code }}" class="form-control" required>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label small fw-bold">أقل رقم بناء مسموح (Min Build)</label>
-                        <input type="number" name="android_min_required_version_code" min="1" value="{{ site_settings.android_min_required_version_code }}" class="form-control" required>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label small fw-bold">اسم الإصدار (Version Name)</label>
-                        <input type="text" name="android_latest_version_name" value="{{ site_settings.android_latest_version_name }}" class="form-control" dir="ltr" required>
-                    </div>
-                    <div class="col-md-3 d-flex align-items-end">
-                        <div class="form-check form-switch mb-2">
-                            <input class="form-check-input" type="checkbox" id="forceUpdateSwitch" name="android_force_update" value="1" {% if site_settings.android_force_update %}checked{% endif %}>
-                            <label class="form-check-label fw-bold small" for="forceUpdateSwitch">إجبار الفتح على أعلى إصدار فقط</label>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label small fw-bold">بصمة SHA-256 لملف APK نفسه (اختياري — من GitHub أو Get-FileHash، وليس apksigner)</label>
-                        <input type="text" name="android_apk_sha256" value="{{ site_settings.android_apk_sha256 }}" class="form-control font-monospace" dir="ltr" maxlength="128" placeholder="sha256:... أو 64 حرف Hex (أو اتركه فارغاً)">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label small fw-bold">بصمة شهادة توقيع التطبيق SHA-256 (من apksigner — لـ App Links)</label>
-                        <input type="text" name="android_assetlinks_sha256" value="{{ site_settings.android_assetlinks_sha256 }}" class="form-control font-monospace" dir="ltr" placeholder="AA:BB:CC:... (تُدمج مع متغير البيئة)">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label small fw-bold">ملاحظات التحديث</label>
-                        <input type="text" name="android_update_release_notes" value="{{ site_settings.android_update_release_notes }}" class="form-control" placeholder="تحسينات أمنية وتحديثات جديدة...">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label small fw-bold">أو رفع ملف APK على الخادم (اختياري)</label>
-                        <input type="file" name="android_apk_file" accept=".apk,application/vnd.android.package-archive" class="form-control">
-                        {% if site_settings.android_apk_file %}
-                        <div class="d-flex justify-content-between align-items-center mt-1">
-                            <small class="text-success">مرفوع حالياً: {{ site_settings.android_apk_file.name }}</small>
-                            <label class="small text-danger fw-bold"><input type="checkbox" name="clear_uploaded_apk" value="1"> حذف المرفوع</label>
-                        </div>
-                        {% endif %}
-                    </div>
-                    <div class="col-12 d-flex justify-content-end">
-                        <button type="submit" class="btn btn-primary fw-bold px-4">
-                            <i class="bi bi-cloud-arrow-up-fill me-1"></i> حفظ ونشر إعدادات التحديث
-                        </button>
-                    </div>
-                </div>
-            </form>
-        </div>
-    </div>
-    {% endif %}
-
 </div>
+
+{% if is_owner %}
+<div class="ap-card">
+    <div class="ap-card-header">
+        <h2 class="ap-card-title"><i class="bi bi-phone"></i> إعدادات إصدار الأندرويد ورابط APK</h2>
+        <div class="ap-flex ap-items-center ap-gap-2 ap-wrap">
+            <span class="ap-badge ap-badge-neutral" id="dashboardApkBuildBadge">
+                أحدث بناء: {{ site_settings.android_latest_version_code }} ({{ site_settings.android_latest_version_name }})
+            </span>
+            <a href="{% url 'admin_panel:app_release_settings' %}" class="ap-btn ap-btn-sm ap-btn-secondary">
+                <i class="bi bi-sliders"></i> الصفحة الكاملة والتشخيص
+            </a>
+        </div>
+    </div>
+    <form method="POST" action="{% url 'admin_panel:update_app_release_settings' %}" enctype="multipart/form-data"
+          data-ajax-form class="ap-card-body">
+        {% csrf_token %}
+        <div class="ap-form-grid">
+            <div class="ap-field ap-col-full">
+                <label class="ap-label" for="dashApkUrl">رابط تحميل APK المباشر (GitHub Releases)</label>
+                <input id="dashApkUrl" type="url" name="android_apk_url" value="{{ site_settings.android_apk_url }}"
+                       class="ap-input ap-ltr" placeholder="https://github.com/USERNAME/REPO/releases/download/v1.1.0/app-release.apk">
+            </div>
+            <div class="ap-field">
+                <label class="ap-label" for="dashVerCode">رقم البناء الأحدث (Version Code)</label>
+                <input id="dashVerCode" type="number" name="android_latest_version_code" min="1"
+                       value="{{ site_settings.android_latest_version_code }}" class="ap-input" required>
+            </div>
+            <div class="ap-field">
+                <label class="ap-label" for="dashMinCode">أقل رقم بناء مسموح (Min Build)</label>
+                <input id="dashMinCode" type="number" name="android_min_required_version_code" min="1"
+                       value="{{ site_settings.android_min_required_version_code }}" class="ap-input" required>
+            </div>
+            <div class="ap-field">
+                <label class="ap-label" for="dashVerName">اسم الإصدار (Version Name)</label>
+                <input id="dashVerName" type="text" name="android_latest_version_name"
+                       value="{{ site_settings.android_latest_version_name }}" class="ap-input ap-ltr" required>
+            </div>
+            <div class="ap-field">
+                <label class="ap-label">التحديث الإجباري</label>
+                <label class="ap-switch-row" for="forceUpdateSwitch">
+                    <span class="ap-switch-label ap-xs">إجبار الفتح على أعلى إصدار فقط</span>
+                    <input class="ap-switch" type="checkbox" id="forceUpdateSwitch" name="android_force_update" value="1"
+                           {% if site_settings.android_force_update %}checked{% endif %}>
+                </label>
+            </div>
+            <div class="ap-field">
+                <label class="ap-label" for="dashApkSha">بصمة SHA-256 لملف APK (اختياري)</label>
+                <input id="dashApkSha" type="text" name="android_apk_sha256" value="{{ site_settings.android_apk_sha256 }}"
+                       class="ap-input ap-mono ap-ltr" maxlength="128" placeholder="sha256:... أو 64 حرف Hex">
+            </div>
+            <div class="ap-field">
+                <label class="ap-label" for="dashAssetlinksSha">بصمة شهادة App Links SHA-256</label>
+                <input id="dashAssetlinksSha" type="text" name="android_assetlinks_sha256" value="{{ site_settings.android_assetlinks_sha256 }}"
+                       class="ap-input ap-mono ap-ltr" placeholder="AA:BB:CC:...">
+            </div>
+            <div class="ap-field">
+                <label class="ap-label" for="dashReleaseNotes">ملاحظات التحديث</label>
+                <input id="dashReleaseNotes" type="text" name="android_update_release_notes"
+                       value="{{ site_settings.android_update_release_notes }}" class="ap-input"
+                       placeholder="تحسينات أمنية وتحديثات جديدة...">
+            </div>
+            <div class="ap-field">
+                <label class="ap-label" for="dashApkFile">أو رفع ملف APK على الخادم (اختياري)</label>
+                <input id="dashApkFile" type="file" name="android_apk_file" accept=".apk,application/vnd.android.package-archive" class="ap-input">
+                {% if site_settings.android_apk_file %}
+                <div class="ap-flex ap-justify-between ap-items-center ap-xs ap-mt-1">
+                    <span class="ap-text-success">مرفوع: {{ site_settings.android_apk_file.name }}</span>
+                    <label class="ap-text-danger ap-strong"><input type="checkbox" name="clear_uploaded_apk" value="1"> حذف المرفوع</label>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="ap-flex ap-justify-end ap-mt-4">
+            <button type="submit" class="ap-btn ap-btn-primary">
+                <i class="bi bi-cloud-arrow-up"></i> حفظ ونشر إعدادات التحديث
+            </button>
+        </div>
+    </form>
+</div>
+{% endif %}
 {% endblock %}

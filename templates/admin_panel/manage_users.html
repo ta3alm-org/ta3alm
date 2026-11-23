@@ -2,367 +2,78 @@
 {% load i18n %}
 
 {% block page_title %}إدارة المستخدمين{% endblock %}
+{% block body_page %}users{% endblock %}
 {% block nav_users %}active{% endblock %}
-{% block breadcrumb %}
-<span class="sep">/</span><span class="current">إدارة المستخدمين</span>
-{% endblock %}
+{% block breadcrumb %}<span class="sep">/</span><span class="current">إدارة المستخدمين</span>{% endblock %}
 
 {% block content %}
-<div class="page-header d-flex align-items-center justify-content-between">
+<div class="ap-page-header">
     <div>
-        <h1><i class="bi bi-people-fill me-2" style="color:var(--admin-accent);"></i>إدارة المستخدمين</h1>
-        <p>{{ teachers|length }} معلم · {{ students|length }} طالب · {{ assistants|length }} مساعد</p>
+        <h1 class="ap-page-title"><i class="bi bi-people"></i> إدارة المستخدمين</h1>
+        <p class="ap-page-subtitle" id="usersSummaryCounts">
+            {{ teachers|length }} معلم · {{ students|length }} طالب · {{ assistants|length }} مساعد
+        </p>
     </div>
-    <!-- Search -->
-    <form method="GET" class="admin-search">
-        <i class="bi bi-search text-muted"></i>
-        <input type="text" name="q" placeholder="ابحث (اسم، هاتف، إيميل)..." value="{{ query|default:'' }}">
-        <button type="submit">بحث</button>
-        {% if query %}<a href="{% url 'admin_panel:manage_users' %}" class="btn btn-sm btn-light">✕</a>{% endif %}
-    </form>
+
+    <div class="ap-page-actions">
+        <form method="GET" action="{% url 'admin_panel:manage_users' %}" id="usersFilterForm"
+              data-live-filter-form data-filter-target="#usersPartialContainer"
+              class="ap-flex ap-items-center ap-gap-2">
+            <input type="hidden" name="tab" value="{{ active_tab|default:'teachers' }}">
+            <div class="ap-search-box">
+                <i class="bi bi-search"></i>
+                <input type="text" name="q" class="ap-search-input"
+                       placeholder="ابحث بالاسم، الهاتف، أو الإيميل..." value="{{ query|default:'' }}">
+                {% if query %}
+                <button type="button" class="ap-search-clear" data-filter-reset title="مسح البحث">
+                    <i class="bi bi-x"></i>
+                </button>
+                {% endif %}
+            </div>
+            <button type="submit" class="ap-btn ap-btn-secondary ap-btn-sm">بحث</button>
+        </form>
+    </div>
 </div>
 
-<!-- Tabs -->
-<ul class="nav nav-pills mb-4 gap-2" id="usersTab">
-    <li class="nav-item">
-        <button class="nav-link active fw-bold px-4" data-bs-toggle="tab" data-bs-target="#tab-teachers">
-            <i class="bi bi-person-video3 me-1"></i> المعلمون ({{ teachers|length }})
-        </button>
-    </li>
-    <li class="nav-item">
-        <button class="nav-link fw-bold px-4" data-bs-toggle="tab" data-bs-target="#tab-students">
-            <i class="bi bi-mortarboard me-1"></i> الطلاب ({{ students|length }})
-        </button>
-    </li>
-    <li class="nav-item">
-        <button class="nav-link fw-bold px-4" data-bs-toggle="tab" data-bs-target="#tab-assistants">
-            <i class="bi bi-person-badge me-1"></i> المساعدون ({{ assistants|length }})
-        </button>
-    </li>
-</ul>
+<div id="usersPartialContainer">
+    {% include 'admin_panel/partials/_users_table.html' %}
+</div>
 
-<div class="tab-content">
-
-    <!-- ══════════════ TEACHERS ══════════════ -->
-    <div class="tab-pane fade show active" id="tab-teachers">
-        <div class="admin-card">
-            <div class="table-responsive">
-                <table class="admin-table">
-                    <thead>
-                        <tr>
-                            <th>المعلم</th>
-                            <th>الهاتف</th>
-                            <th>الباقة</th>
-                            <th>الاشتراك</th>
-                            <th>الرصيد</th>
-                            <th>الحالة</th>
-                            <th>إجراءات</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for t in teachers %}
-                        <tr>
-                            <td>
-                                <div class="d-flex align-items-center gap-2">
-                                    {% if t.image %}
-                                    <img src="{{ t.image.url }}" alt="{{ t.user.get_full_name }}" class="user-avatar" style="object-fit:cover;padding:0;border:1px solid rgba(0,0,0,0.08);">
-                                    {% else %}
-                                    <div class="user-avatar" style="background: hsl({{ t.user.id|stringformat:'d' }}00, 60%, 50%);">
-                                        {{ t.user.first_name|slice:":1" }}
-                                    </div>
-                                    {% endif %}
-                                    <div>
-                                        <div class="fw-bold" style="font-size:0.875rem;">
-                                            {{ t.user.get_full_name }}
-                                        </div>
-                                        <div class="text-muted" style="font-size:0.75rem;">{{ t.user.email }}</div>
-                                    </div>
-                                </div>
-                            </td>
-                            <td class="text-muted" style="direction:ltr;">{{ t.user.phone|default:"—" }}</td>
-                            <td>
-                                <span class="role-badge role-teacher">{{ t.current_plan.name|default:"—" }}</span>
-                            </td>
-                            <td>
-                                {% if t.has_active_subscription %}
-                                    <span class="role-badge status-active">
-                                        <i class="bi bi-check-circle-fill me-1"></i>{{ t.days_remaining }} يوم
-                                    </span>
-                                {% else %}
-                                    <span class="role-badge status-expired">منتهي</span>
-                                {% endif %}
-                            </td>
-                            <td class="fw-bold" style="color:var(--admin-success);">
-                                {% if t.wallet %}{{ t.wallet.balance }} EGP{% else %}—{% endif %}
-                            </td>
-                            <td>
-                                {% if t.user.is_banned %}
-                                    <span class="role-badge status-banned"><i class="bi bi-slash-circle me-1"></i>محظور</span>
-                                {% elif t.is_approved %}
-                                    <span class="role-badge status-active"><i class="bi bi-patch-check-fill me-1"></i>معتمد</span>
-                                {% else %}
-                                    <span class="role-badge status-expired"><i class="bi bi-hourglass-split me-1"></i>بانتظار الموافقة</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <div class="d-flex gap-1 align-items-center">
-                                    {% if can_manage_users %}
-                                    <form method="POST" action="{% url 'admin_panel:user_action' %}" class="d-inline">
-                                        {% csrf_token %}
-                                        <input type="hidden" name="user_id" value="{{ t.user.id }}">
-                                        <input type="hidden" name="action" value="{% if t.is_approved %}unapprove_teacher{% else %}approve_teacher{% endif %}">
-                                        <button type="submit" class="action-btn {% if t.is_approved %}action-btn-ban{% else %}action-btn-renew{% endif %}"
-                                                title="{% if t.is_approved %}سحب الاعتماد{% else %}موافقة واعتماد المعلم{% endif %}">
-                                            <i class="bi bi-{% if t.is_approved %}eye-slash-fill{% else %}check-circle-fill{% endif %}"></i>
-                                        </button>
-                                    </form>
-                                    <!-- تجديد مجاني -->
-                                    <button class="action-btn action-btn-renew"
-                                            data-bs-toggle="modal"
-                                            data-bs-target="#renewModal{{ t.user.id }}"
-                                            title="تجديد مجاني">
-                                        <i class="bi bi-gift-fill"></i>
-                                    </button>
-                                    <!-- تعديل -->
-                                    <a href="{% url 'admin_panel:edit_user' t.user.id %}"
-                                       class="action-btn action-btn-edit" title="تعديل">
-                                        <i class="bi bi-pencil-fill"></i>
-                                    </a>
-                                    <!-- إرسال إشعار -->
-                                    <a href="{% url 'admin_panel:send_notifications' %}?mode=users&user_id={{ t.user.id }}"
-                                       class="action-btn action-btn-notify" title="إرسال إشعار مخصص">
-                                        <i class="bi bi-bell-fill"></i>
-                                    </a>
-                                    <!-- حظر / رفع -->
-                                    <form method="POST" action="{% url 'admin_panel:user_action' %}" class="d-inline">
-                                        {% csrf_token %}
-                                        <input type="hidden" name="user_id" value="{{ t.user.id }}">
-                                        <input type="hidden" name="action" value="{% if t.user.is_banned %}unban{% else %}ban{% endif %}">
-                                        <button type="submit" class="action-btn action-btn-ban"
-                                                title="{% if t.user.is_banned %}رفع الحظر{% else %}حظر{% endif %}">
-                                            <i class="bi bi-{% if t.user.is_banned %}unlock-fill{% else %}slash-circle-fill{% endif %}"></i>
-                                        </button>
-                                    </form>
-                                    {% endif %}
-                                    <!-- حذف — owner فقط -->
-                                    {% if can_delete_users %}
-                                    <form method="POST" action="{% url 'admin_panel:user_action' %}" class="d-inline"
-                                          onsubmit="return confirm('حذف نهائي لـ {{ t.user.get_full_name }}؟ لا يمكن التراجع!');">
-                                        {% csrf_token %}
-                                        <input type="hidden" name="user_id" value="{{ t.user.id }}">
-                                        <input type="hidden" name="action" value="delete">
-                                        <button type="submit" class="action-btn action-btn-delete" title="حذف نهائي">
-                                            <i class="bi bi-trash-fill"></i>
-                                        </button>
-                                    </form>
-                                    {% endif %}
-                                </div>
-                            </td>
-                        </tr>
-
-                        <!-- Renew Modal -->
-                        <div class="modal fade" id="renewModal{{ t.user.id }}" tabindex="-1">
-                            <div class="modal-dialog modal-dialog-centered">
-                                <div class="modal-content" style="border-radius:16px; border:none;">
-                                    <div class="modal-header border-0 pb-0">
-                                        <h5 class="modal-title fw-bold">
-                                            <i class="bi bi-gift-fill text-success me-2"></i>تجديد اشتراك {{ t.user.first_name }}
-                                        </h5>
-                                        <button class="btn-close" data-bs-dismiss="modal"></button>
-                                    </div>
-                                    <form method="POST" action="{% url 'admin_panel:user_action' %}">
-                                        {% csrf_token %}
-                                        <div class="modal-body pt-2">
-                                            <input type="hidden" name="user_id" value="{{ t.user.id }}">
-                                            <input type="hidden" name="action" value="renew_free">
-                                            <p class="text-muted small">تمديد الاشتراك 30 يوماً مجاناً. اختر الباقة:</p>
-                                            <select name="plan_id" class="form-select" required>
-                                                {% for p in all_plans %}
-                                                <option value="{{ p.id }}"
-                                                    {% if t.current_plan.id == p.id %}selected{% endif %}>
-                                                    {{ p.name }} — {{ p.student_limit }} طالب
-                                                </option>
-                                                {% endfor %}
-                                            </select>
-                                        </div>
-                                        <div class="modal-footer border-0">
-                                            <button type="button" class="btn btn-light" data-bs-dismiss="modal">إلغاء</button>
-                                            <button type="submit" class="btn btn-success fw-bold px-4">
-                                                <i class="bi bi-check-circle me-1"></i>تجديد
-                                            </button>
-                                        </div>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-                        {% empty %}
-                        <tr><td colspan="7">
-                            <div class="empty-state"><i class="bi bi-person-x"></i>لا يوجد معلمون</div>
-                        </td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+<!-- Shared Renew Subscription Slide-Over Drawer -->
+<div class="ap-drawer" id="apRenewDrawer" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="ap-overlay-backdrop" data-drawer-close></div>
+    <div class="ap-drawer-panel">
+        <div class="ap-drawer-header">
+            <h3 class="ap-modal-title"><i class="bi bi-gift"></i> تجديد اشتراك <span id="apRenewTeacherName"></span></h3>
+            <button type="button" class="ap-icon-btn" data-drawer-close aria-label="إغلاق">
+                <i class="bi bi-x-lg"></i>
+            </button>
         </div>
-    </div><!-- /teachers -->
-
-    <!-- ══════════════ STUDENTS ══════════════ -->
-    <div class="tab-pane fade" id="tab-students">
-        <div class="admin-card">
-            <div class="table-responsive">
-                <table class="admin-table">
-                    <thead>
-                        <tr>
-                            <th>الطالب</th>
-                            <th>هاتف الطالب</th>
-                            <th>هاتف ولي الأمر</th>
-                            <th>الكود</th>
-                            <th>الحالة</th>
-                            <th>إجراءات</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for s in students %}
-                        <tr>
-                            <td>
-                                <div class="d-flex align-items-center gap-2">
-                                    <div class="user-avatar" style="background:#0f9b58;">
-                                        {{ s.user.first_name|slice:":1" }}
-                                    </div>
-                                    <div>
-                                        <div class="fw-bold" style="font-size:0.875rem;">{{ s.user.get_full_name }}</div>
-                                        <div class="text-muted" style="font-size:0.75rem;">{{ s.user.email }}</div>
-                                    </div>
-                                </div>
-                            </td>
-                            <td style="direction:ltr;">{{ s.user.phone|default:"—" }}</td>
-                            <td style="direction:ltr;">{{ s.parent_phone|default:"—" }}</td>
-                            <td><code style="font-size:0.8rem;">{{ s.user.custom_id|default:"—" }}</code></td>
-                            <td>
-                                {% if s.user.is_banned %}
-                                    <span class="role-badge status-banned">محظور</span>
-                                {% else %}
-                                    <span class="role-badge status-active">نشط</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <div class="d-flex gap-1">
-                                    {% if can_manage_users %}
-                                    <a href="{% url 'admin_panel:edit_user' s.user.id %}"
-                                       class="action-btn action-btn-edit" title="تعديل">
-                                        <i class="bi bi-pencil-fill"></i>
-                                    </a>
-                                    <a href="{% url 'admin_panel:send_notifications' %}?mode=users&user_id={{ s.user.id }}"
-                                       class="action-btn action-btn-notify" title="إرسال إشعار مخصص">
-                                        <i class="bi bi-bell-fill"></i>
-                                    </a>
-                                    <form method="POST" action="{% url 'admin_panel:user_action' %}" class="d-inline">
-                                        {% csrf_token %}
-                                        <input type="hidden" name="user_id" value="{{ s.user.id }}">
-                                        <input type="hidden" name="action" value="{% if s.user.is_banned %}unban{% else %}ban{% endif %}">
-                                        <button class="action-btn action-btn-ban">
-                                            <i class="bi bi-{% if s.user.is_banned %}unlock-fill{% else %}slash-circle-fill{% endif %}"></i>
-                                        </button>
-                                    </form>
-                                    {% endif %}
-                                    {% if can_delete_users %}
-                                    <form method="POST" action="{% url 'admin_panel:user_action' %}" class="d-inline"
-                                          onsubmit="return confirm('حذف نهائي لـ {{ s.user.get_full_name }}؟');">
-                                        {% csrf_token %}
-                                        <input type="hidden" name="user_id" value="{{ s.user.id }}">
-                                        <input type="hidden" name="action" value="delete">
-                                        <button class="action-btn action-btn-delete"><i class="bi bi-trash-fill"></i></button>
-                                    </form>
-                                    {% endif %}
-                                </div>
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr><td colspan="6"><div class="empty-state"><i class="bi bi-person-x"></i>لا يوجد طلاب</div></td></tr>
+        <form method="POST" action="{% url 'admin_panel:user_action' %}" id="apRenewForm"
+              data-ajax-form data-close-overlay="1" style="display:flex; flex-direction:column; flex:1;">
+            {% csrf_token %}
+            <input type="hidden" name="user_id" id="apRenewUserId" value="">
+            <input type="hidden" name="action" value="renew_free">
+            <div class="ap-drawer-body">
+                <p class="ap-muted ap-sm ap-mb-4">
+                    تمديد الاشتراك لمدة 30 يوماً مجاناً من تاريخ اليوم أو بعد نهاية الاشتراك الحالي.
+                </p>
+                <div class="ap-field">
+                    <label class="ap-label" for="apRenewPlanSelect">اختر الباقة</label>
+                    <select name="plan_id" id="apRenewPlanSelect" class="ap-select" required>
+                        {% for p in all_plans %}
+                        <option value="{{ p.id }}">{{ p.name }} — {{ p.student_limit }} طالب ({{ p.price }} EGP)</option>
                         {% endfor %}
-                    </tbody>
-                </table>
+                    </select>
+                </div>
             </div>
-        </div>
-    </div><!-- /students -->
-
-    <!-- ══════════════ ASSISTANTS ══════════════ -->
-    <div class="tab-pane fade" id="tab-assistants">
-        <div class="admin-card">
-            <div class="table-responsive">
-                <table class="admin-table">
-                    <thead>
-                        <tr>
-                            <th>المساعد</th>
-                            <th>الهاتف</th>
-                            <th>الكود</th>
-                            <th>الحالة</th>
-                            <th>إجراءات</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for a in assistants %}
-                        <tr>
-                            <td>
-                                <div class="d-flex align-items-center gap-2">
-                                    <div class="user-avatar" style="background:#f5a623;">
-                                        {{ a.user.first_name|slice:":1" }}
-                                    </div>
-                                    <div>
-                                        <div class="fw-bold" style="font-size:0.875rem;">{{ a.user.get_full_name }}</div>
-                                        <div class="text-muted" style="font-size:0.75rem;">{{ a.user.email }}</div>
-                                    </div>
-                                </div>
-                            </td>
-                            <td style="direction:ltr;">{{ a.phone|default:"—" }}</td>
-                            <td><code style="font-size:0.8rem;">{{ a.user.custom_id|default:"—" }}</code></td>
-                            <td>
-                                {% if a.user.is_banned %}
-                                    <span class="role-badge status-banned">محظور</span>
-                                {% else %}
-                                    <span class="role-badge status-active">نشط</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <div class="d-flex gap-1">
-                                    {% if can_manage_users %}
-                                    <a href="{% url 'admin_panel:edit_user' a.user.id %}"
-                                       class="action-btn action-btn-edit" title="تعديل">
-                                        <i class="bi bi-pencil-fill"></i>
-                                    </a>
-                                    <a href="{% url 'admin_panel:send_notifications' %}?mode=users&user_id={{ a.user.id }}"
-                                       class="action-btn action-btn-notify" title="إرسال إشعار مخصص">
-                                        <i class="bi bi-bell-fill"></i>
-                                    </a>
-                                    <form method="POST" action="{% url 'admin_panel:user_action' %}" class="d-inline">
-                                        {% csrf_token %}
-                                        <input type="hidden" name="user_id" value="{{ a.user.id }}">
-                                        <input type="hidden" name="action" value="{% if a.user.is_banned %}unban{% else %}ban{% endif %}">
-                                        <button class="action-btn action-btn-ban">
-                                            <i class="bi bi-{% if a.user.is_banned %}unlock-fill{% else %}slash-circle-fill{% endif %}"></i>
-                                        </button>
-                                    </form>
-                                    {% endif %}
-                                    {% if can_delete_users %}
-                                    <form method="POST" action="{% url 'admin_panel:user_action' %}" class="d-inline"
-                                          onsubmit="return confirm('حذف نهائي؟');">
-                                        {% csrf_token %}
-                                        <input type="hidden" name="user_id" value="{{ a.user.id }}">
-                                        <input type="hidden" name="action" value="delete">
-                                        <button class="action-btn action-btn-delete"><i class="bi bi-trash-fill"></i></button>
-                                    </form>
-                                    {% endif %}
-                                </div>
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr><td colspan="5"><div class="empty-state"><i class="bi bi-person-x"></i>لا يوجد مساعدون</div></td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+            <div class="ap-drawer-footer">
+                <button type="button" class="ap-btn ap-btn-secondary" data-drawer-close>إلغاء</button>
+                <button type="submit" class="ap-btn ap-btn-primary">
+                    <i class="bi bi-check-circle"></i> تأكيد التجديد 30 يوماً
+                </button>
             </div>
-        </div>
-    </div><!-- /assistants -->
-
-</div><!-- /tab-content -->
+        </form>
+    </div>
+</div>
 {% endblock %}

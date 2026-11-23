@@ -109,3 +109,7 @@ from dashboard_admin.views.notifications import (
     notifications_recipient_preview,
     send_notifications,
 )
+from dashboard_admin.views.support_chat_and_errors import (
+    admin_error_reports,
+    admin_support_chat,
+)

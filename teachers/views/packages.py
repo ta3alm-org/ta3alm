@@ -3,6 +3,7 @@ Extracted from teachers/views.py.
 """
 
 from assistants.models import AssistantJob
+from django.db import DataError
 from django.shortcuts import (
     render,
     redirect,
@@ -362,20 +363,35 @@ def add_lecture_to_package(request, package_id):
     if not package: return redirect('home')
     
     if request.method == 'POST':
-        title = request.POST.get('title')
-        link = request.POST.get('video_link')
-        desc = request.POST.get('description')
-        
-        # إنشاء محاضرة (بدون مجموعة)
-        lecture = Lecture.objects.create(
-            group=None, # لا مجموعة
-            title=title,
-            video_link=link,
-            description=desc
-        )
-        
-        package.lectures.add(lecture)
-        messages.success(request, "تم إنشاء المحاضرة في الحزمة.")
+        title = (request.POST.get('title') or '').strip()
+        link = Lecture.normalize_video_link(request.POST.get('video_link') or '')
+        desc = (request.POST.get('description') or '').strip()
+
+        if not title or not link:
+            messages.error(request, "يرجى إدخال عنوان المحاضرة ورابط الفيديو.")
+            return redirect('teacher_package_detail', package_id=package.id)
+        if len(title) > 200:
+            messages.error(request, "عنوان المحاضرة طويل جداً (الحد الأقصى 200 حرف).")
+            return redirect('teacher_package_detail', package_id=package.id)
+        if len(link) > 2000:
+            messages.error(request, "رابط الفيديو طويل جداً (الحد الأقصى 2000 حرف).")
+            return redirect('teacher_package_detail', package_id=package.id)
+
+        try:
+            # إنشاء محاضرة (بدون مجموعة)
+            lecture = Lecture.objects.create(
+                group=None, # لا مجموعة
+                title=title,
+                video_link=link,
+                description=desc
+            )
+            package.lectures.add(lecture)
+            messages.success(request, "تم إنشاء المحاضرة في الحزمة.")
+        except DataError:
+            messages.error(
+                request,
+                "الرابط أو العنوان أطول من الحد المسموح به في قاعدة البيانات حالياً. يرجى استخدام رابط أقصر أو تطبيق تحديثات قاعدة البيانات (migrate).",
+            )
         
     return redirect('teacher_package_detail', package_id=package.id)
 
@@ -386,21 +402,37 @@ def add_exam_to_package(request, package_id):
     if not package: return redirect('home')
     
     if request.method == 'POST':
-        title = request.POST.get('title')
-        duration = request.POST.get('duration')
-        
-        # إنشاء امتحان (بدون مجموعة)
-        exam = Exam.objects.create(
-            group=None,
-            title=title,
-            duration_minutes=duration,
-            is_active=False # مغلق حتى تضيف أسئلة
-        )
-        
-        package.exams.add(exam)
-        messages.success(request, "تم إنشاء الامتحان. أضف الأسئلة الآن.")
-        
-        # توجيه لصفحة إدارة الامتحان لإضافة الأسئلة
-        return redirect('exam_manage', exam_id=exam.id)
+        title = (request.POST.get('title') or '').strip()
+        if not title:
+            messages.error(request, "يرجى إدخال عنوان الامتحان.")
+            return redirect('teacher_package_detail', package_id=package.id)
+        if len(title) > 200:
+            messages.error(request, "عنوان الامتحان طويل جداً (الحد الأقصى 200 حرف).")
+            return redirect('teacher_package_detail', package_id=package.id)
+
+        try:
+            duration_val = int(request.POST.get('duration') or 30)
+        except (TypeError, ValueError):
+            messages.error(request, "يرجى إدخال مدة صحيحة للامتحان.")
+            return redirect('teacher_package_detail', package_id=package.id)
+        if duration_val < 1:
+            messages.error(request, "مدة الامتحان يجب أن تكون دقيقة واحدة على الأقل.")
+            return redirect('teacher_package_detail', package_id=package.id)
+
+        try:
+            # إنشاء امتحان (بدون مجموعة)
+            exam = Exam.objects.create(
+                group=None,
+                title=title,
+                duration_minutes=duration_val,
+                is_active=False # مغلق حتى تضيف أسئلة
+            )
+            package.exams.add(exam)
+            messages.success(request, "تم إنشاء الامتحان. أضف الأسئلة الآن.")
+            
+            # توجيه لصفحة إدارة الامتحان لإضافة الأسئلة
+            return redirect('exam_manage', exam_id=exam.id)
+        except DataError:
+            messages.error(request, "بيانات الامتحان أطول من الحد المسموح به.")
         
     return redirect('teacher_package_detail', package_id=package.id)

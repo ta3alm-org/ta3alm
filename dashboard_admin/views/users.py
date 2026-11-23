@@ -28,7 +28,15 @@ from dashboard_admin.forms import (
     AdminAssistantEditForm,
 )
 
+from django.template.loader import render_to_string
+
 from dashboard_admin.views.base import _base_context
+from dashboard_admin.views.ajax import (
+    ajax_error,
+    ajax_success,
+    form_errors_dict,
+    is_ajax_request,
+)
 
 User = get_user_model()
 
@@ -45,8 +53,11 @@ def manage_users(request):
 
     query = request.GET.get('q', '').strip()
     role_filter = request.GET.get('role', '')
+    active_tab = request.GET.get('tab', '').strip() or 'teachers'
+    if active_tab not in ('teachers', 'students', 'assistants'):
+        active_tab = 'teachers'
 
-    teachers   = TeacherProfile.objects.select_related('user', 'current_plan').order_by('-id')
+    teachers   = TeacherProfile.objects.select_related('user', 'current_plan', 'wallet').order_by('-id')
     students   = StudentProfile.objects.select_related('user').order_by('-id')
     assistants = AssistantProfile.objects.select_related('user').order_by('-id')
 
@@ -68,7 +79,24 @@ def manage_users(request):
         'all_plans':   SubscriptionPlan.objects.all(),
         'query':       query,
         'role_filter': role_filter,
+        'active_tab':  active_tab,
     })
+
+    if is_ajax_request(request) and request.GET.get('partial') == '1':
+        html = render_to_string('admin_panel/partials/_users_table.html', ctx, request=request)
+        return ajax_success(
+            data={
+                'html': html,
+                'active_tab': active_tab,
+                'query': query,
+                'counts': {
+                    'teachers': teachers.count(),
+                    'students': students.count(),
+                    'assistants': assistants.count(),
+                },
+            }
+        )
+
     return render(request, 'admin_panel/manage_users.html', ctx)
 
 
@@ -78,6 +106,8 @@ def manage_users(request):
 @moderator_required
 def user_action(request):
     if request.method != 'POST':
+        if is_ajax_request(request):
+            return ajax_error("طريقة الطلب غير مدعومة.", status=405)
         return redirect('admin_panel:manage_users')
 
     user_id = request.POST.get('user_id')
@@ -85,18 +115,26 @@ def user_action(request):
 
     try:
         target = User.objects.get(id=user_id)
-    except User.DoesNotExist:
-        messages.error(request, "المستخدم غير موجود.")
+    except (User.DoesNotExist, TypeError, ValueError):
+        msg = "المستخدم غير موجود."
+        if is_ajax_request(request):
+            return ajax_error(msg, status=404)
+        messages.error(request, msg)
         return redirect('admin_panel:manage_users')
 
     # حماية: لا يُمسّ المالك أو الـ superuser
     if target.is_superuser:
-        messages.error(request, "لا يمكن التأثير على حساب المالك.")
+        msg = "لا يمكن التأثير على حساب المالك."
+        if is_ajax_request(request):
+            return ajax_error(msg, status=403)
+        messages.error(request, msg)
         return redirect('admin_panel:manage_users')
 
     # حماية: المشرف لا يستطيع حذف مستخدمين
     requester_profile = getattr(request.user, 'admin_profile', None)
     can_delete = request.user.is_superuser or (requester_profile and requester_profile.can_delete_users)
+
+    extra_data = {'user_id': target.id, 'action': action}
 
     if action == 'ban':
         target.is_banned = True
@@ -104,7 +142,11 @@ def user_action(request):
         AuditLog.log(request, AuditLog.ACTION_BAN,
                      target_label=f"{target.get_full_name()} ({target.email})",
                      target_id=target.id)
-        messages.warning(request, f"تم حظر {target.get_full_name() or target.email}.")
+        msg = f"تم حظر {target.get_full_name() or target.email}."
+        if is_ajax_request(request):
+            extra_data['is_banned'] = True
+            return ajax_success(msg, data=extra_data)
+        messages.warning(request, msg)
 
     elif action == 'unban':
         target.is_banned = False
@@ -112,18 +154,29 @@ def user_action(request):
         AuditLog.log(request, AuditLog.ACTION_UNBAN,
                      target_label=f"{target.get_full_name()} ({target.email})",
                      target_id=target.id)
-        messages.success(request, f"تم رفع الحظر عن {target.get_full_name() or target.email}.")
+        msg = f"تم رفع الحظر عن {target.get_full_name() or target.email}."
+        if is_ajax_request(request):
+            extra_data['is_banned'] = False
+            return ajax_success(msg, data=extra_data)
+        messages.success(request, msg)
 
     elif action == 'delete':
         if not can_delete:
-            messages.error(request, "ليس لديك صلاحية حذف المستخدمين.")
+            msg = "ليس لديك صلاحية حذف المستخدمين."
+            if is_ajax_request(request):
+                return ajax_error(msg, status=403)
+            messages.error(request, msg)
         else:
             name = target.get_full_name() or target.email
             AuditLog.log(request, AuditLog.ACTION_DELETE,
                          target_label=name, target_id=target.id,
                          details={'role': target.role, 'email': target.email})
             target.delete()
-            messages.error(request, f"تم حذف المستخدم «{name}» وجميع بياناته نهائياً.")
+            msg = f"تم حذف المستخدم «{name}» وجميع بياناته نهائياً."
+            if is_ajax_request(request):
+                extra_data['deleted'] = True
+                return ajax_success(msg, data=extra_data)
+            messages.error(request, msg)
 
     elif action == 'approve_teacher':
         if hasattr(target, 'teacher_profile'):
@@ -145,7 +198,19 @@ def user_action(request):
             tp.save(update_fields=update_fields)
             notify_user(target, 'تم اعتماد حسابك كمعلم', 'وافقت الإدارة على ظهور ملفك للطلاب وتفعيل لوحة المعلم الخاصة بك.', link='/teacher/')
             AuditLog.log(request, AuditLog.ACTION_EDIT_USER, target_label=f"اعتماد معلم: {target.get_full_name()}", target_id=target.id)
-            messages.success(request, f"تم اعتماد المعلم {target.get_full_name()} وتفعيل حسابه.")
+            msg = f"تم اعتماد المعلم {target.get_full_name()} وتفعيل حسابه."
+            if is_ajax_request(request):
+                extra_data.update({
+                    'is_approved': True,
+                    'is_banned': target.is_banned,
+                    'days_remaining': tp.days_remaining() if callable(getattr(tp, 'days_remaining', None)) else tp.days_remaining,
+                    'subscription_active': tp.has_active_subscription(),
+                    'plan_name': tp.current_plan.name if tp.current_plan else '',
+                })
+                return ajax_success(msg, data=extra_data)
+            messages.success(request, msg)
+        elif is_ajax_request(request):
+            return ajax_error("هذا المستخدم ليس معلماً.", status=400)
 
     elif action == 'unapprove_teacher':
         if hasattr(target, 'teacher_profile'):
@@ -154,11 +219,20 @@ def user_action(request):
             tp.approved_at = None
             tp.save(update_fields=['is_approved', 'approved_at'])
             AuditLog.log(request, AuditLog.ACTION_EDIT_USER, target_label=f"إلغاء اعتماد معلم: {target.get_full_name()}", target_id=target.id)
-            messages.warning(request, f"تم سحب اعتماد المعلم {target.get_full_name()}.")
+            msg = f"تم سحب اعتماد المعلم {target.get_full_name()}."
+            if is_ajax_request(request):
+                extra_data.update({'is_approved': False, 'is_banned': target.is_banned})
+                return ajax_success(msg, data=extra_data)
+            messages.warning(request, msg)
+        elif is_ajax_request(request):
+            return ajax_error("هذا المستخدم ليس معلماً.", status=400)
 
     elif action == 'renew_free':
         if not hasattr(target, 'teacher_profile'):
-            messages.error(request, "هذا المستخدم ليس معلماً.")
+            msg = "هذا المستخدم ليس معلماً."
+            if is_ajax_request(request):
+                return ajax_error(msg, status=400)
+            messages.error(request, msg)
         else:
             teacher  = target.teacher_profile
             plan_id  = request.POST.get('plan_id')
@@ -182,7 +256,19 @@ def user_action(request):
                          target_label=target.get_full_name(),
                          target_id=target.id,
                          details={'plan': teacher.current_plan.name if teacher.current_plan else '-'})
-            messages.success(request, f"تم تجديد اشتراك {target.get_full_name()}.")
+            msg = f"تم تجديد اشتراك {target.get_full_name()}."
+            if is_ajax_request(request):
+                extra_data.update({
+                    'days_remaining': teacher.days_remaining() if callable(getattr(teacher, 'days_remaining', None)) else teacher.days_remaining,
+                    'subscription_active': teacher.has_active_subscription(),
+                    'plan_name': teacher.current_plan.name if teacher.current_plan else '—',
+                })
+                return ajax_success(msg, data=extra_data)
+            messages.success(request, msg)
+
+    else:
+        if is_ajax_request(request):
+            return ajax_error("إجراء غير معروف.", status=400)
 
     return redirect('admin_panel:manage_users')
 
@@ -202,6 +288,11 @@ def edit_user(request, user_id):
             from accounts.models import OneTimeLoginLink
             link = OneTimeLoginLink.objects.create(user=target)
             login_url = request.build_absolute_uri('/login/auto/' + str(link.token) + '/')
+            if is_ajax_request(request):
+                return ajax_success(
+                    "تم توليد رابط الدخول المباشر بنجاح.",
+                    data={'magic_link': login_url},
+                )
             request.session['one_time_link'] = login_url
             return redirect('admin_panel:edit_user', user_id=target.id)
 
@@ -213,9 +304,15 @@ def edit_user(request, user_id):
                 AuditLog.log(request, AuditLog.ACTION_EDIT_USER,
                              target_label=f"تغيير كلمة مرور {target.get_full_name()}",
                              target_id=target.id)
-                messages.success(request, "تم تغيير كلمة المرور بنجاح.")
+                msg = "تم تغيير كلمة المرور بنجاح."
+                if is_ajax_request(request):
+                    return ajax_success(msg)
+                messages.success(request, msg)
             else:
-                messages.error(request, "يرجى إدخال كلمة مرور جديدة.")
+                msg = "يرجى إدخال كلمة مرور جديدة."
+                if is_ajax_request(request):
+                    return ajax_error(msg, errors={'new_password': [msg]}, status=400)
+                messages.error(request, msg)
             return redirect('admin_panel:edit_user', user_id=target.id)
 
         user_form = AdminUserEditForm(request.POST, instance=target)
@@ -227,7 +324,10 @@ def edit_user(request, user_id):
                 teacher_form.save()
                 AuditLog.log(request, AuditLog.ACTION_EDIT_USER,
                              target_label=target.get_full_name(), target_id=target.id)
-                messages.success(request, "تم تعديل بيانات المعلم.")
+                msg = "تم تعديل بيانات المعلم."
+                if is_ajax_request(request):
+                    return ajax_success(msg, data={'full_name': target.get_full_name() or target.username, 'email': target.email})
+                messages.success(request, msg)
                 return redirect('admin_panel:manage_users')
 
         elif target.role == 'student' and hasattr(target, 'student_profile'):
@@ -237,7 +337,10 @@ def edit_user(request, user_id):
                 student_form.save()
                 AuditLog.log(request, AuditLog.ACTION_EDIT_USER,
                              target_label=target.get_full_name(), target_id=target.id)
-                messages.success(request, "تم تعديل بيانات الطالب.")
+                msg = "تم تعديل بيانات الطالب."
+                if is_ajax_request(request):
+                    return ajax_success(msg, data={'full_name': target.get_full_name() or target.username, 'email': target.email})
+                messages.success(request, msg)
                 return redirect('admin_panel:manage_users')
 
         elif target.role == 'assistant' and hasattr(target, 'assistant_profile'):
@@ -247,13 +350,25 @@ def edit_user(request, user_id):
                 assistant_form.save()
                 AuditLog.log(request, AuditLog.ACTION_EDIT_USER,
                              target_label=target.get_full_name(), target_id=target.id)
-                messages.success(request, "تم تعديل بيانات المساعد.")
+                msg = "تم تعديل بيانات المساعد."
+                if is_ajax_request(request):
+                    return ajax_success(msg, data={'full_name': target.get_full_name() or target.username, 'email': target.email})
+                messages.success(request, msg)
                 return redirect('admin_panel:manage_users')
         else:
             if user_form.is_valid():
                 user_form.save()
-                messages.success(request, "تم التعديل.")
+                msg = "تم التعديل."
+                if is_ajax_request(request):
+                    return ajax_success(msg, data={'full_name': target.get_full_name() or target.username, 'email': target.email})
+                messages.success(request, msg)
                 return redirect('admin_panel:manage_users')
+
+        if is_ajax_request(request):
+            merged_errors = form_errors_dict(user_form)
+            for extra_form in (teacher_form, student_form, assistant_form):
+                merged_errors.update(form_errors_dict(extra_form))
+            return ajax_error("يرجى تصحيح الأخطاء في النموذج.", errors=merged_errors, status=400)
     else:
         user_form = AdminUserEditForm(instance=target)
         if target.role == 'teacher' and hasattr(target, 'teacher_profile'):

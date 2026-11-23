@@ -1,80 +1,37 @@
 {% extends 'admin_panel/base_admin.html' %}
 {% load i18n %}
+
 {% block page_title %}سجل الأحداث{% endblock %}
 {% block nav_audit %}active{% endblock %}
 {% block breadcrumb %}<span class="sep">/</span><span class="current">سجل الأحداث</span>{% endblock %}
 
 {% block content %}
-<div class="page-header d-flex align-items-center justify-content-between">
+<div class="ap-page-header">
     <div>
-        <h1><i class="bi bi-journal-text me-2" style="color:var(--admin-accent);"></i>سجل الأحداث الإدارية</h1>
-        <p>تتبع كل الإجراءات التي يقوم بها المسؤولون على المنصة</p>
+        <h1 class="ap-page-title"><i class="bi bi-journal-text"></i> سجل الأحداث الإدارية</h1>
+        <p class="ap-page-subtitle">متابعة دقيقة لكل الإجراءات التي يقوم بها مسؤولو المنصة</p>
     </div>
-    <!-- Filter -->
-    <form method="GET" class="admin-search" style="width:auto;">
-        <i class="bi bi-funnel text-muted"></i>
-        <select name="action" class="form-select border-0" style="min-width:180px; background:transparent; font-family:'Cairo',sans-serif;">
-            <option value="">كل الأحداث</option>
-            {% for value, label in action_choices %}
-            <option value="{{ value }}" {% if action_filter == value %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-        </select>
-        <button type="submit">تصفية</button>
-        {% if action_filter %}<a href="{% url 'admin_panel:audit_log' %}" class="btn btn-sm btn-light">✕</a>{% endif %}
-    </form>
+
+    <div class="ap-page-actions">
+        <form method="GET" action="{% url 'admin_panel:audit_log' %}"
+              data-live-filter-form data-filter-target="#auditLogContainer"
+              class="ap-flex ap-items-center ap-gap-2">
+            <select name="action" class="ap-select ap-select-sm" style="min-width:210px;" aria-label="تصفية حسب نوع الحدث">
+                <option value="">كل الأحداث</option>
+                {% for value, label in action_choices %}
+                <option value="{{ value }}" {% if action_filter == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            {% if action_filter %}
+            <button type="button" class="ap-btn ap-btn-sm ap-btn-secondary" data-filter-reset>إلغاء التصفية</button>
+            {% endif %}
+        </form>
+    </div>
 </div>
 
-<div class="admin-card">
-    <div class="admin-card-body">
-        {% for log in logs %}
-        {% with action=log.action %}
-        <div class="audit-item">
-            <!-- Dot -->
-            <div class="audit-dot"
-                 style="background:
-                     {% if action == 'ban_user' or action == 'delete_user' %}#e94560
-                     {% elif action == 'unban_user' or action == 'renew_subscription' %}#0f9b58
-                     {% elif action == 'toggle_maintenance' %}#f5a623
-                     {% elif action == 'appoint_admin' or action == 'remove_admin' %}#9c27b0
-                     {% else %}#0d6efd{% endif %};">
-            </div>
-
-            <!-- Content -->
-            <div class="flex-grow-1">
-                <div class="d-flex align-items-center gap-2 flex-wrap">
-                    <span class="fw-bold" style="font-size:0.875rem;">{{ log.get_action_display }}</span>
-                    {% if log.target_label %}
-                    <span class="text-muted" style="font-size:0.85rem;">— {{ log.target_label }}</span>
-                    {% endif %}
-                </div>
-                <div class="d-flex gap-3 mt-1 flex-wrap" style="font-size:0.75rem; color:#aaa;">
-                    <span><i class="bi bi-person me-1"></i>{{ log.admin.get_full_name|default:log.admin.email|default:"محذوف" }}</span>
-                    <span><i class="bi bi-calendar me-1"></i>{{ log.created_at|date:"j M Y H:i" }}</span>
-                    {% if log.ip_address %}<span style="direction:ltr;"><i class="bi bi-router me-1"></i>{{ log.ip_address }}</span>{% endif %}
-                </div>
-                {% if log.details %}
-                <div class="mt-1">
-                    {% for k, v in log.details.items %}
-                    <code style="font-size:0.72rem; background:#f5f6fa; padding:2px 6px; border-radius:4px; margin-left:4px;">
-                        {{ k }}: {{ v }}
-                    </code>
-                    {% endfor %}
-                </div>
-                {% endif %}
-            </div>
-
-            <!-- Time badge -->
-            <div class="text-muted" style="font-size:0.72rem; white-space:nowrap;">
-                {{ log.created_at|date:"H:i" }}
-            </div>
-        </div>
-        {% endwith %}
-        {% empty %}
-        <div class="empty-state py-5">
-            <i class="bi bi-journal-x"></i>
-            لا توجد أحداث مسجّلة
-        </div>
-        {% endfor %}
+<div class="ap-card">
+    <div class="ap-card-body-flush" id="auditLogContainer">
+        {% include 'admin_panel/partials/_audit_list.html' %}
     </div>
 </div>
 {% endblock %}

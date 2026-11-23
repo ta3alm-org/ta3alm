@@ -4,6 +4,8 @@ Extracted from core/signals.py.
 from __future__ import annotations
 
 import logging
+from django.contrib.auth import get_user_model
+from django.core.exceptions import ObjectDoesNotExist
 from django.db.models.signals import (
     post_delete,
     post_save,
@@ -107,11 +109,26 @@ def _notify_assistant_job_events(sender, instance, created, **kwargs):
 @receiver(post_delete, sender='assistants.AssistantJob')
 def _notify_assistant_job_removed(sender, instance, **kwargs):
     try:
+        User = get_user_model()
+        origin = kwargs.get('origin')
+        if isinstance(origin, User) or getattr(origin, 'model', None) is User:
+            return
+        from assistants.models import AssistantProfile
+        if isinstance(origin, AssistantProfile) or getattr(origin, 'model', None) is AssistantProfile:
+            if not User.objects.filter(pk=getattr(origin, 'user_id', None)).exists():
+                return
         if not instance.assistant_id or not instance.teacher_id:
             return
-        teacher_name = _user_display_name(instance.teacher.user)
+        try:
+            assistant_user = instance.assistant.user
+            teacher_user = instance.teacher.user
+        except ObjectDoesNotExist:
+            return
+        if not assistant_user or not User.objects.filter(pk=assistant_user.pk).exists():
+            return
+        teacher_name = _user_display_name(teacher_user)
         notify_user(
-            instance.assistant.user,
+            assistant_user,
             'إنهاء الارتباط كمساعد معلم',
             f"تم إيقاف أو إنهاء ارتباط عملك مع أ. {teacher_name}.",
             link='/assistants/dashboard/',
@@ -163,10 +180,20 @@ def _notify_admin_staff_assigned(sender, instance, created, **kwargs):
 @receiver(post_delete, sender='dashboard_admin.AdminProfile')
 def _notify_admin_staff_removed(sender, instance, **kwargs):
     try:
+        User = get_user_model()
+        origin = kwargs.get('origin')
+        if isinstance(origin, User) or getattr(origin, 'model', None) is User:
+            return
         if not instance.user_id:
             return
+        try:
+            target_user = instance.user
+        except ObjectDoesNotExist:
+            return
+        if not target_user or not User.objects.filter(pk=instance.user_id).exists():
+            return
         notify_user(
-            instance.user,
+            target_user,
             'تحديث الصلاحيات الإدارية',
             'تمت إزالة صلاحياتك من الفريق الإداري للمنصة.',
             link='/notifications/all/',

@@ -52,6 +52,9 @@ class LectureForm(forms.ModelForm):
             
         }
 
+    def clean_video_link(self):
+        return Lecture.normalize_video_link(self.cleaned_data.get('video_link', ''))
+
 
 
 class TeacherSettingsForm(forms.ModelForm):

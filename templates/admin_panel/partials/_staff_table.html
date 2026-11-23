@@ -1,0 +1,72 @@
+<div class="ap-table-wrap">
+    <table class="ap-table">
+        <thead>
+            <tr>
+                <th>المسؤول</th>
+                <th>الدور</th>
+                <th>الحالة</th>
+                <th>عيَّنه</th>
+                <th>تاريخ التعيين</th>
+                <th class="ap-cell-actions">إجراءات</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for s in staff_list %}
+            <tr>
+                <td>
+                    <div class="ap-user-cell">
+                        <div class="ap-avatar">{{ s.user.first_name|slice:":1"|upper|default:"A" }}</div>
+                        <div>
+                            <div class="ap-user-cell-name">{{ s.user.get_full_name|default:s.user.username }}</div>
+                            <div class="ap-user-cell-sub">{{ s.user.email }}</div>
+                        </div>
+                    </div>
+                </td>
+                <td>
+                    <span class="ap-badge {% if s.admin_role == 'owner' %}ap-badge-accent{% elif s.admin_role == 'moderator' %}ap-badge-info{% elif s.admin_role == 'support' %}ap-badge-success{% else %}ap-badge-warning{% endif %}">
+                        {{ s.get_admin_role_display }}
+                    </span>
+                </td>
+                <td>
+                    {% if s.is_active_admin %}
+                    <span class="ap-badge ap-badge-success"><span class="ap-dot"></span>نشط</span>
+                    {% else %}
+                    <span class="ap-badge ap-badge-neutral"><span class="ap-dot"></span>موقوف</span>
+                    {% endif %}
+                </td>
+                <td class="ap-muted ap-sm">{{ s.appointed_by.get_full_name|default:"النظام" }}</td>
+                <td class="ap-muted ap-sm">{{ s.appointed_at|date:"j M Y" }}</td>
+                <td class="ap-cell-actions">
+                    <div class="ap-inline-flex ap-items-center ap-gap-1">
+                        <a href="{% url 'admin_panel:edit_user' s.user.id %}" class="ap-btn ap-btn-sm ap-btn-secondary" title="تعديل الإعدادات وكلمة المرور">
+                            <i class="bi bi-gear"></i> إعدادات
+                        </a>
+                        <form method="POST" action="{% url 'admin_panel:manage_staff' %}"
+                              data-ajax-form data-staff-form="1"
+                              data-confirm="هل تريد إزالة «{{ s.user.get_full_name|default:s.user.email }}» من فريق الإدارة؟"
+                              data-confirm-title="إزالة مسؤول"
+                              data-confirm-variant="danger"
+                              data-confirm-ok="إزالة">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="remove">
+                            <input type="hidden" name="profile_id" value="{{ s.id }}">
+                            <button type="submit" class="ap-icon-btn" title="إزالة" style="color:var(--danger);">
+                                <i class="bi bi-person-dash"></i>
+                            </button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="6">
+                    <div class="ap-empty">
+                        <i class="bi bi-people"></i>
+                        <p class="ap-empty-title">لا يوجد مسؤولون مُعيَّنون بعد</p>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>

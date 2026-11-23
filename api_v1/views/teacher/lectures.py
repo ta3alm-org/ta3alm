@@ -5,6 +5,7 @@ Extracted from api_v1/views_teacher.py.
 import os
 import uuid
 from django.core.files.storage import default_storage
+from django.db import DataError
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -47,18 +48,28 @@ class TeacherGroupLecturesAPIView(APIView):
             return Response({'error': 'ليس لديك صلاحية لإضافة محاضرات.'}, status=status.HTTP_403_FORBIDDEN)
 
         title = str(request.data.get('title', '')).strip()
-        video_link = str(request.data.get('video_link', '')).strip()
+        video_link = Lecture.normalize_video_link(request.data.get('video_link', ''))
         description = str(request.data.get('description', '')).strip()
 
         if not title or not video_link:
             return Response({'error': 'عنوان المحاضرة ورابط الفيديو مطلوبان.'}, status=status.HTTP_400_BAD_REQUEST)
+        if len(title) > 200:
+            return Response({'error': 'عنوان المحاضرة طويل جداً (الحد الأقصى 200 حرف).'}, status=status.HTTP_400_BAD_REQUEST)
+        if len(video_link) > 2000:
+            return Response({'error': 'رابط الفيديو طويل جداً (الحد الأقصى 2000 حرف).'}, status=status.HTTP_400_BAD_REQUEST)
 
-        lecture = Lecture.objects.create(
-            group=group,
-            title=title,
-            video_link=video_link,
-            description=description,
-        )
+        try:
+            lecture = Lecture.objects.create(
+                group=group,
+                title=title,
+                video_link=video_link,
+                description=description,
+            )
+        except DataError:
+            return Response(
+                {'error': 'الرابط أو العنوان أطول من الحد المسموح به في قاعدة البيانات حالياً. يرجى استخدام رابط أقصر أو تطبيق تحديثات قاعدة البيانات (migrate).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         return Response({
             'message': 'تم نشر المحاضرة بنجاح!',
             'lecture': LectureSerializer(lecture).data,
@@ -161,6 +172,8 @@ class TeacherPDFsAPIView(APIView):
 
         if not title:
             return Response({'error': 'عنوان الملف مطلوب.'}, status=status.HTTP_400_BAD_REQUEST)
+        if len(title) > 200:
+            return Response({'error': 'عنوان الملف طويل جداً (الحد الأقصى 200 حرف).'}, status=status.HTTP_400_BAD_REQUEST)
 
         group = None
         package = None
@@ -192,11 +205,23 @@ class TeacherPDFsAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if group is not None:
-            pdf = PDFFile.objects.create(group=group, title=title, link=resolved_link)
-        else:
-            pdf = PDFFile.objects.create(group=None, title=title, link=resolved_link)
-            package.pdfs.add(pdf)
+        if len(resolved_link) > 2000:
+            return Response(
+                {'error': 'رابط الملف طويل جداً (الحد الأقصى 2000 حرف).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            if group is not None:
+                pdf = PDFFile.objects.create(group=group, title=title, link=resolved_link)
+            else:
+                pdf = PDFFile.objects.create(group=None, title=title, link=resolved_link)
+                package.pdfs.add(pdf)
+        except DataError:
+            return Response(
+                {'error': 'رابط الملف أو اسمه أطول من الحد المسموح به في قاعدة البيانات حالياً.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         return Response({
             'message': 'تم إضافة الملف بنجاح.',

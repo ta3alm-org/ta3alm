@@ -21,7 +21,14 @@ from students.models import PackageEnrollment
 from dashboard_admin.models import AuditLog
 from dashboard_admin.decorators import finance_required
 
+from django.template.loader import render_to_string
+
 from dashboard_admin.views.base import _base_context
+from dashboard_admin.views.ajax import (
+    ajax_error,
+    ajax_success,
+    is_ajax_request,
+)
 
 
 # ==========================================================
@@ -37,7 +44,8 @@ def finance_report(request):
     if query:
         transactions = transactions.filter(
             Q(teacher__user__first_name__icontains=query) |
-            Q(teacher__user__phone__icontains=query)       |
+            Q(teacher__user__last_name__icontains=query)  |
+            Q(teacher__user__phone__icontains=query)      |
             Q(transaction_id__icontains=query)
         )
 
@@ -48,6 +56,16 @@ def finance_report(request):
         'total_revenue': total_revenue,
         'query': query,
     })
+    if is_ajax_request(request) and request.GET.get('partial') == '1':
+        html = render_to_string('admin_panel/partials/_finance_table.html', ctx, request=request)
+        return ajax_success(
+            data={
+                'html': html,
+                'total_revenue': str(total_revenue),
+                'count': transactions.count(),
+                'query': query,
+            }
+        )
     return render(request, 'admin_panel/finance_report.html', ctx)
 
 
@@ -74,7 +92,10 @@ def withdrawals(request):
         with transaction.atomic():
             req = get_object_or_404(WithdrawRequest.objects.select_for_update(), id=req_id)
             if req.status != WithdrawRequest.STATUS_PENDING:
-                messages.warning(request, "تمت معالجة طلب السحب هذا مسبقاً.")
+                msg = "تمت معالجة طلب السحب هذا مسبقاً."
+                if is_ajax_request(request):
+                    return ajax_error(msg, status=409)
+                messages.warning(request, msg)
                 return redirect('admin_panel:withdrawals')
 
             if req_action == 'reject':
@@ -93,7 +114,17 @@ def withdrawals(request):
                     target_id=req.id,
                     details={'amount': str(req.amount), 'reason': reason},
                 )
-                messages.info(request, f"تم رفض طلب السحب وإعادة {req.amount} EGP إلى محفظة المعلم.")
+                msg = f"تم رفض طلب السحب وإعادة {req.amount} EGP إلى محفظة المعلم."
+                if is_ajax_request(request):
+                    return ajax_success(
+                        msg,
+                        data={
+                            'req_id': req.id,
+                            'status': req.status,
+                            'rejection_reason': req.rejection_reason,
+                        },
+                    )
+                messages.info(request, msg)
             else:
                 req.status = WithdrawRequest.STATUS_PAID
                 req.is_paid = True
@@ -106,7 +137,17 @@ def withdrawals(request):
                     target_id=req.id,
                     details={'amount': str(req.amount)},
                 )
-                messages.success(request, f"تم تسجيل تحويل {req.amount} EGP.")
+                msg = f"تم تسجيل تحويل {req.amount} EGP."
+                if is_ajax_request(request):
+                    return ajax_success(
+                        msg,
+                        data={
+                            'req_id': req.id,
+                            'status': req.status,
+                            'rejection_reason': '',
+                        },
+                    )
+                messages.success(request, msg)
         return redirect('admin_panel:withdrawals')
 
     ctx['requests'] = withdraw_requests
@@ -162,11 +203,19 @@ def manual_payments(request):
                          target_label=f"دفع يدوي {payment.id}",
                          target_id=payment.id,
                          details={'status': 'approved'})
-            messages.success(request, "تم قبول طلب الدفع بنجاح وتفعيل الاشتراك/الحزمة.")
+            msg = "تم قبول طلب الدفع بنجاح وتفعيل الاشتراك/الحزمة."
+            if is_ajax_request(request):
+                return ajax_success(msg, data={'payment_id': payment.id, 'status': payment.status})
+            messages.success(request, msg)
         elif action == 'reject':
             payment.status = 'rejected'
             payment.save()
-            messages.warning(request, "تم رفض طلب الدفع.")
+            msg = "تم رفض طلب الدفع."
+            if is_ajax_request(request):
+                return ajax_success(msg, data={'payment_id': payment.id, 'status': payment.status})
+            messages.warning(request, msg)
+        elif is_ajax_request(request):
+            return ajax_error("إجراء غير معروف.", status=400)
 
         return redirect('admin_panel:manual_payments')
 

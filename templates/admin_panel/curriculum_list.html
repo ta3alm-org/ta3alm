@@ -1,72 +1,95 @@
 {% extends 'admin_panel/base_admin.html' %}
-{% block title %}إدارة المناهج والدروس | الإدارة{% endblock %}
+{% load i18n %}
+
+{% block page_title %}المناهج والدروس{% endblock %}
+{% block body_page %}curriculum{% endblock %}
 {% block nav_curriculum %}active{% endblock %}
-{% block breadcrumb %}
-<span class="sep">/</span> <span class="current">المناهج والدروس</span>
-{% endblock %}
+{% block breadcrumb %}<span class="sep">/</span><span class="current">المناهج والدروس</span>{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h4 class="mb-0 fw-bold" style="color:var(--admin-primary)">إدارة المناهج (الوحدات والدروس)</h4>
-    <a href="{% url 'admin_panel:curriculum_unit_create' %}" class="btn btn-primary px-4 fw-bold" style="border-radius: 10px;">
-        <i class="bi bi-plus-lg me-1"></i> إضافة وحدة جديدة
-    </a>
+<div class="ap-page-header">
+    <div>
+        <h1 class="ap-page-title"><i class="bi bi-journal-bookmark"></i> إدارة المناهج (الوحدات والدروس)</h1>
+        <p class="ap-page-subtitle">{{ units|length }} وحدة دراسية مسجلة</p>
+    </div>
+    <div class="ap-page-actions">
+        <a href="{% url 'admin_panel:curriculum_unit_create' %}" class="ap-btn ap-btn-primary">
+            <i class="bi bi-plus-lg"></i> إضافة وحدة جديدة
+        </a>
+    </div>
 </div>
 
-<div class="admin-card">
-    <div class="admin-card-header">
-        <h5 class="admin-card-title mb-0">الوحدات الدراسية المسجلة</h5>
+<div class="ap-card" data-table-scope="curriculum">
+    <div class="ap-toolbar">
+        <span class="ap-strong ap-sm">الوحدات الدراسية المسجلة</span>
+        <div class="ap-search-box">
+            <i class="bi bi-search"></i>
+            <input type="text" class="ap-search-input" data-table-search placeholder="بحث باسم الوحدة، المادة، أو الصف...">
+        </div>
     </div>
-    <div class="admin-card-body p-0">
-        <div class="table-responsive">
-            <table class="table admin-table mb-0 align-middle">
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>الصف الدراسي</th>
-                        <th>الترم</th>
-                        <th>المادة</th>
-                        <th>اسم الوحدة</th>
-                        <th>عدد الدروس</th>
-                        <th>الترتيب</th>
-                        <th class="text-center">الإجراءات</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for unit in units %}
-                    <tr>
-                        <td><span class="text-muted fw-bold">{{ unit.id }}</span></td>
-                        <td><span class="badge bg-light text-dark border">{{ unit.get_grade_display }}</span></td>
-                        <td><span class="badge bg-light text-dark border">{{ unit.get_term_display }}</span></td>
-                        <td class="fw-bold text-primary">{{ unit.subject.name }}</td>
-                        <td class="fw-bold">{{ unit.title }}</td>
-                        <td>
-                            <span class="badge bg-primary rounded-pill">{{ unit.lessons.count }} دروس</span>
-                        </td>
-                        <td>{{ unit.order }}</td>
-                        <td class="text-center">
-                            <a href="{% url 'admin_panel:curriculum_unit_edit' unit.id %}" class="btn btn-sm btn-outline-primary rounded-3" title="تعديل">
-                                <i class="bi bi-pencil-square"></i> تعديل
+    <div class="ap-table-wrap">
+        <table class="ap-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th data-sort-col="1">الصف الدراسي</th>
+                    <th data-sort-col="2">الترم</th>
+                    <th data-sort-col="3">المادة</th>
+                    <th data-sort-col="4">اسم الوحدة</th>
+                    <th>عدد الدروس</th>
+                    <th data-sort-col="6">الترتيب</th>
+                    <th class="ap-cell-actions">إجراءات</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for unit in units %}
+                <tr data-row>
+                    <td class="ap-muted ap-xs">{{ unit.id }}</td>
+                    <td><span class="ap-badge ap-badge-neutral">{{ unit.get_grade_display }}</span></td>
+                    <td><span class="ap-badge ap-badge-neutral">{{ unit.get_term_display }}</span></td>
+                    <td class="ap-strong ap-sm">{{ unit.subject.name }}</td>
+                    <td class="ap-strong">{{ unit.title }}</td>
+                    <td><span class="ap-badge ap-badge-accent">{{ unit.lessons.count }} دروس</span></td>
+                    <td data-sort-val="{{ unit.order }}">{{ unit.order }}</td>
+                    <td class="ap-cell-actions">
+                        <div class="ap-inline-flex ap-gap-1">
+                            <a href="{% url 'admin_panel:curriculum_unit_edit' unit.id %}" class="ap-btn ap-btn-sm ap-btn-secondary">
+                                <i class="bi bi-pencil"></i> تعديل
                             </a>
-                            <form action="{% url 'admin_panel:curriculum_unit_delete' unit.id %}" method="POST" class="d-inline" onsubmit="return confirm('هل أنت متأكد من حذف هذه الوحدة وجميع دروسها؟ لا يمكن التراجع عن هذا الإجراء!');">
+                            <form action="{% url 'admin_panel:curriculum_unit_delete' unit.id %}" method="POST"
+                                  data-ajax-form data-curriculum-delete="1"
+                                  data-confirm="هل أنت متأكد من حذف الوحدة «{{ unit.title }}» وجميع دروسها؟ لا يمكن التراجع!"
+                                  data-confirm-title="حذف وحدة دراسية"
+                                  data-confirm-variant="danger"
+                                  data-confirm-ok="حذف الوحدة">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-sm btn-outline-danger rounded-3" title="حذف">
+                                <button type="submit" class="ap-icon-btn" title="حذف الوحدة" style="color:var(--danger);">
                                     <i class="bi bi-trash"></i>
                                 </button>
                             </form>
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="8" class="text-center py-5 text-muted">
-                            <i class="bi bi-journal-x fs-1 d-block mb-3"></i>
-                            لا توجد أي وحدات دراسية مضافة حتى الآن.
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="ap-empty">
+                            <i class="bi bi-journal-x"></i>
+                            <p class="ap-empty-title">لا توجد أي وحدات دراسية مضافة حتى الآن</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+                <tr data-client-empty class="ap-hidden">
+                    <td colspan="8">
+                        <div class="ap-empty">
+                            <i class="bi bi-search"></i>
+                            <p class="ap-empty-title">لا توجد وحدات مطابقة للبحث</p>
+                        </div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
     </div>
 </div>
 {% endblock %}

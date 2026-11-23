@@ -27,6 +27,9 @@ _CACHED_STATE: tuple[tuple[str, str], str, object] | None = None  # (key, projec
 def resolve_android_channel(title: str, link: str | None = None) -> str:
     """يطابق منطق اختيار قناة الإشعارات داخل Ta3almNotificationHelper.kt."""
     text = f"{str(title or '').lower()} {str(link or '').lower()}"
+    if '/support/chat' in str(link or '').lower():
+        return 'ta3alm_support_chat'
+
     security_markers = (
         '/devices',
         '/security',
@@ -159,12 +162,37 @@ def _get_credentials_and_project():
 
 
 def _build_fcm_message(notification, device_token: str) -> dict:
+    from core.services.notifications.pull_tokens import build_support_reply_metadata
+
     title = str(getattr(notification, 'title', '') or 'منصة تعلّم').strip() or 'منصة تعلّم'
     full_body = str(getattr(notification, 'message', '') or '').strip()
     body = (full_body[:499] + '…') if len(full_body) > 500 else full_body
     link = _normalize_link_value(getattr(notification, 'link', None))
     channel_id = resolve_android_channel(title, link)
     notif_id_str = str(getattr(notification, 'pk', '') or '')
+
+    data_payload = {
+        'notification_id': notif_id_str,
+        'title': title,
+        'message': body,
+        'link': link,
+        'channel_id': channel_id,
+        'click_action': 'FLUTTER_NOTIFICATION_CLICK',
+    }
+
+    support_meta = build_support_reply_metadata(notification)
+    if support_meta:
+        data_payload.update(support_meta)
+        # رسالة Data-Only عالية الأولوية لإظهار إشعار الرد المباشر (RemoteInput) حتى عند غلق التطبيق
+        return {
+            'message': {
+                'token': device_token,
+                'data': data_payload,
+                'android': {
+                    'priority': 'HIGH',
+                },
+            }
+        }
 
     return {
         'message': {
@@ -173,14 +201,7 @@ def _build_fcm_message(notification, device_token: str) -> dict:
                 'title': title,
                 'body': body,
             },
-            'data': {
-                'notification_id': notif_id_str,
-                'title': title,
-                'message': body,
-                'link': link,
-                'channel_id': channel_id,
-                'click_action': 'FLUTTER_NOTIFICATION_CLICK',
-            },
+            'data': data_payload,
             'android': {
                 'priority': 'HIGH',
                 'notification': {

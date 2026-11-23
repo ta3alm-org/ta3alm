@@ -28,6 +28,18 @@ def _base_context(request):
     except Exception:
         pass
 
+    support_chat_unread_count = 0
+    client_errors_unresolved_count = 0
+    try:
+        from django.db.models import Sum
+        from core.models import ClientErrorReport, SupportThread
+        support_chat_unread_count = int(
+            SupportThread.objects.aggregate(total=Sum('unread_for_admin')).get('total') or 0
+        )
+        client_errors_unresolved_count = ClientErrorReport.objects.filter(is_resolved=False).count()
+    except Exception:
+        pass
+
     return {
         'admin_user':         user,
         'admin_profile':      profile,
@@ -41,4 +53,6 @@ def _base_context(request):
         'unread_count':       unread_count,
         'site_settings':      site_settings,
         'zoho_connected':     zoho_connected,
+        'support_chat_unread_count': support_chat_unread_count,
+        'client_errors_unresolved_count': client_errors_unresolved_count,
     }

@@ -2,155 +2,64 @@
 {% load i18n %}
 
 {% block page_title %}إرسال إشعارات مخصصة{% endblock %}
+{% block body_page %}notifications{% endblock %}
 {% block nav_notifications %}active{% endblock %}
-{% block breadcrumb %}
-<span class="sep">/</span><span class="current">إرسال إشعارات مخصصة</span>
-{% endblock %}
-
-{% block extra_css %}
-<style>
-    .target-mode-card {
-        border: 2px solid #e8eaf0;
-        border-radius: 14px;
-        padding: 14px 16px;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        background: #fff;
-        height: 100%;
-    }
-    .target-mode-card:hover {
-        border-color: #c7cbe0;
-        background: #fafbff;
-    }
-    .target-mode-card.active {
-        border-color: var(--admin-accent);
-        background: #fff5f7;
-        box-shadow: 0 4px 14px rgba(233, 69, 96, 0.12);
-    }
-    .target-mode-icon {
-        width: 40px;
-        height: 40px;
-        border-radius: 10px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.15rem;
-        margin-bottom: 8px;
-    }
-    .user-chip {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        background: #f3e8fd;
-        color: #4a1d96;
-        border: 1px solid #d8b4fe;
-        border-radius: 999px;
-        padding: 5px 12px;
-        font-size: 0.82rem;
-        font-weight: 700;
-    }
-    .user-chip button {
-        border: none;
-        background: transparent;
-        color: #6b21a8;
-        font-weight: 900;
-        cursor: pointer;
-        padding: 0 2px;
-        line-height: 1;
-    }
-    .search-result-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-        padding: 10px 12px;
-        border-bottom: 1px solid #f2f4f8;
-    }
-    .search-result-row:last-child { border-bottom: none; }
-    .phone-preview-card {
-        background: linear-gradient(135deg, #1a1a2e, #16213e);
-        color: #fff;
-        border-radius: 16px;
-        padding: 16px;
-    }
-    .phone-preview-notif {
-        background: rgba(255, 255, 255, 0.12);
-        border: 1px solid rgba(255, 255, 255, 0.14);
-        border-radius: 12px;
-        padding: 12px 14px;
-    }
-</style>
-{% endblock %}
+{% block breadcrumb %}<span class="sep">/</span><span class="current">إرسال إشعارات مخصصة</span>{% endblock %}
 
 {% block content %}
-<div class="page-header d-flex flex-wrap align-items-center justify-content-between gap-3">
+<div class="ap-page-header">
     <div>
-        <h1><i class="bi bi-bell-fill me-2" style="color:var(--admin-accent);"></i>إرسال إشعارات مخصصة</h1>
-        <p>أرسل إشعاراً فورياً داخل المنصة وعبر التطبيق (FCM) لمستخدمين معيّنين، أو لفئة محددة، أو لجميع مستخدمي المنصة.</p>
+        <h1 class="ap-page-title"><i class="bi bi-bell"></i> إرسال إشعارات مخصصة</h1>
+        <p class="ap-page-subtitle">أرسل إشعاراً فورياً داخل المنصة وعبر التطبيق (FCM) لمستخدمين معيّنين، فئة محددة، أو الجميع</p>
     </div>
-    <div class="d-flex align-items-center gap-2">
+    <div class="ap-page-actions">
         {% if notif_meta.fcm_configured %}
-        <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 rounded-3 fw-bold">
-            <i class="bi bi-broadcast-pin me-1"></i> Firebase FCM مفعّل
-        </span>
+        <span class="ap-badge ap-badge-success"><span class="ap-dot"></span>Firebase FCM مفعّل</span>
         {% else %}
-        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-3 py-2 rounded-3 fw-bold">
-            <i class="bi bi-info-circle-fill me-1"></i> سيتم الحفظ داخل المنصة (FCM غير مهيأ على الخادم)
-        </span>
+        <span class="ap-badge ap-badge-warning"><span class="ap-dot"></span>حفظ داخل المنصة (FCM غير مهيأ)</span>
         {% endif %}
     </div>
 </div>
 
-<form method="POST" id="customNotificationForm">
+<form method="POST" id="customNotificationForm"
+      data-preview-url="{% url 'admin_panel:notifications_recipient_preview' %}">
     {% csrf_token %}
-    <div class="row g-4">
-        <!-- العمود الأيمن: الاستهداف ومحتوى الإشعار -->
-        <div class="col-lg-8">
-            <!-- 1. اختيار الفئة / المستهدفين -->
-            <div class="admin-card mb-4">
-                <div class="admin-card-header">
-                    <span class="admin-card-title"><i class="bi bi-people-fill me-2 text-primary"></i>1. تحديد المستهدفين</span>
+
+    <div class="ap-split-8-4">
+        <!-- العمود الرئيسي: الاستهداف والمحتوى -->
+        <div class="ap-flex ap-gap-4" style="flex-direction:column;">
+            <div class="ap-card">
+                <div class="ap-card-header">
+                    <h2 class="ap-card-title"><i class="bi bi-people"></i> 1. تحديد المستهدفين</h2>
                 </div>
-                <div class="p-4">
-                    <div class="row g-3 mb-4">
-                        <div class="col-md-4">
-                            <label class="target-mode-card d-block {% if target_mode == 'all' %}active{% endif %}" data-mode="all">
-                                <input type="radio" name="target_mode" value="all" class="d-none" {% if target_mode == 'all' %}checked{% endif %}>
-                                <div class="target-mode-icon" style="background:#fde8ea; color:#e94560;">
-                                    <i class="bi bi-megaphone-fill"></i>
-                                </div>
-                                <div class="fw-bold">كل المستخدمين</div>
-                                <div class="text-muted small">إرسال عام لكل مستخدمي المنصة النشطين</div>
-                            </label>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="target-mode-card d-block {% if target_mode == 'segment' %}active{% endif %}" data-mode="segment">
-                                <input type="radio" name="target_mode" value="segment" class="d-none" {% if target_mode == 'segment' %}checked{% endif %}>
-                                <div class="target-mode-icon" style="background:#e8f4fd; color:#0d6efd;">
-                                    <i class="bi bi-diagram-3-fill"></i>
-                                </div>
-                                <div class="fw-bold">فئة من المستخدمين</div>
-                                <div class="text-muted small">حسب الدور، الصف، المعلم، الباقة، أو FCM</div>
-                            </label>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="target-mode-card d-block {% if target_mode == 'users' %}active{% endif %}" data-mode="users">
-                                <input type="radio" name="target_mode" value="users" class="d-none" {% if target_mode == 'users' %}checked{% endif %}>
-                                <div class="target-mode-icon" style="background:#f3e8fd; color:#6f42c1;">
-                                    <i class="bi bi-person-check-fill"></i>
-                                </div>
-                                <div class="fw-bold">مستخدمون معيّنون</div>
-                                <div class="text-muted small">اختر مستخدماً واحداً أو عدة مستخدمين بالبحث</div>
-                            </label>
-                        </div>
+                <div class="ap-card-body">
+                    <div class="ap-mode-grid ap-mb-4">
+                        <label class="ap-mode-card {% if target_mode == 'all' %}active{% endif %}" data-mode="all">
+                            <input type="radio" name="target_mode" value="all" class="ap-hidden" {% if target_mode == 'all' %}checked{% endif %}>
+                            <span class="ap-mode-icon"><i class="bi bi-megaphone"></i></span>
+                            <span class="ap-strong ap-sm">كل المستخدمين</span>
+                            <span class="ap-xs ap-muted">إرسال عام لكل مستخدمي المنصة النشطين</span>
+                        </label>
+                        <label class="ap-mode-card {% if target_mode == 'segment' %}active{% endif %}" data-mode="segment">
+                            <input type="radio" name="target_mode" value="segment" class="ap-hidden" {% if target_mode == 'segment' %}checked{% endif %}>
+                            <span class="ap-mode-icon"><i class="bi bi-diagram-3"></i></span>
+                            <span class="ap-strong ap-sm">فئة من المستخدمين</span>
+                            <span class="ap-xs ap-muted">حسب الدور، الصف، المعلم، الباقة، أو FCM</span>
+                        </label>
+                        <label class="ap-mode-card {% if target_mode == 'users' %}active{% endif %}" data-mode="users">
+                            <input type="radio" name="target_mode" value="users" class="ap-hidden" {% if target_mode == 'users' %}checked{% endif %}>
+                            <span class="ap-mode-icon"><i class="bi bi-person-check"></i></span>
+                            <span class="ap-strong ap-sm">مستخدمون معيّنون</span>
+                            <span class="ap-xs ap-muted">اختر مستخدماً واحداً أو عدة مستخدمين بالبحث</span>
+                        </label>
                     </div>
 
                     <!-- إعدادات الفئة -->
-                    <div id="segmentOptionsBox" class="{% if target_mode != 'segment' %}d-none{% endif %} p-3 rounded-3 mb-3" style="background:#f8f9fc; border:1px solid #e8eaf0;">
-                        <div class="row g-3">
-                            <div class="col-md-6">
-                                <label for="segmentSelect" class="form-label fw-bold small">اختر الفئة المستهدفة</label>
-                                <select id="segmentSelect" name="segment" class="form-select">
+                    <div id="segmentOptionsBox" class="ap-subpanel ap-mb-4 {% if target_mode != 'segment' %}ap-hidden{% endif %}">
+                        <div class="ap-form-grid">
+                            <div class="ap-field">
+                                <label for="segmentSelect" class="ap-label">اختر الفئة المستهدفة</label>
+                                <select id="segmentSelect" name="segment" class="ap-select">
                                     {% for seg in notif_meta.segments %}
                                     <option value="{{ seg.key }}"
                                             data-extra="{{ seg.extra_param|default:'' }}"
@@ -160,13 +69,12 @@
                                     </option>
                                     {% endfor %}
                                 </select>
-                                <div id="segmentDescText" class="form-text small"></div>
+                                <span id="segmentDescText" class="ap-help"></span>
                             </div>
 
-                            <!-- اختيار فرعي: الصف الدراسي -->
-                            <div class="col-md-6 segment-extra d-none" data-extra-field="grade">
-                                <label for="gradeSelect" class="form-label fw-bold small">الصف الدراسي</label>
-                                <select id="gradeSelect" name="grade" class="form-select">
+                            <div class="ap-field segment-extra ap-hidden" data-extra-field="grade">
+                                <label for="gradeSelect" class="ap-label">الصف الدراسي</label>
+                                <select id="gradeSelect" name="grade" class="ap-select">
                                     <option value="">— اختر الصف —</option>
                                     {% for g in notif_meta.grades %}
                                     <option value="{{ g.key }}" {% if grade == g.key %}selected{% endif %}>{{ g.label }}</option>
@@ -174,10 +82,9 @@
                                 </select>
                             </div>
 
-                            <!-- اختيار فرعي: المعلم -->
-                            <div class="col-md-6 segment-extra d-none" data-extra-field="teacher_id">
-                                <label for="teacherSelect" class="form-label fw-bold small">المعلم</label>
-                                <select id="teacherSelect" name="teacher_id" class="form-select">
+                            <div class="ap-field segment-extra ap-hidden" data-extra-field="teacher_id">
+                                <label for="teacherSelect" class="ap-label">المعلم</label>
+                                <select id="teacherSelect" name="teacher_id" class="ap-select">
                                     <option value="">— اختر المعلم —</option>
                                     {% for t in notif_meta.teachers %}
                                     <option value="{{ t.id }}" {% if teacher_id == t.id|stringformat:'d' %}selected{% endif %}>
@@ -187,10 +94,9 @@
                                 </select>
                             </div>
 
-                            <!-- اختيار فرعي: الباقة -->
-                            <div class="col-md-6 segment-extra d-none" data-extra-field="plan_id">
-                                <label for="planSelect" class="form-label fw-bold small">باقة الاشتراك</label>
-                                <select id="planSelect" name="plan_id" class="form-select">
+                            <div class="ap-field segment-extra ap-hidden" data-extra-field="plan_id">
+                                <label for="planSelect" class="ap-label">باقة الاشتراك</label>
+                                <select id="planSelect" name="plan_id" class="ap-select">
                                     <option value="">— اختر الباقة —</option>
                                     {% for p in notif_meta.plans %}
                                     <option value="{{ p.id }}" {% if plan_id == p.id|stringformat:'d' %}selected{% endif %}>
@@ -200,10 +106,9 @@
                                 </select>
                             </div>
 
-                            <!-- اختيار فرعي: المادة -->
-                            <div class="col-md-6 segment-extra d-none" data-extra-field="subject_id">
-                                <label for="subjectSelect" class="form-label fw-bold small">المادة الدراسية</label>
-                                <select id="subjectSelect" name="subject_id" class="form-select">
+                            <div class="ap-field segment-extra ap-hidden" data-extra-field="subject_id">
+                                <label for="subjectSelect" class="ap-label">المادة الدراسية</label>
+                                <select id="subjectSelect" name="subject_id" class="ap-select">
                                     <option value="">— اختر المادة —</option>
                                     {% for s in notif_meta.subjects %}
                                     <option value="{{ s.id }}" {% if subject_id == s.id|stringformat:'d' %}selected{% endif %}>{{ s.name }}</option>
@@ -214,181 +119,145 @@
                     </div>
 
                     <!-- اختيار مستخدمين معيّنين -->
-                    <div id="specificUsersBox" class="{% if target_mode != 'users' %}d-none{% endif %} p-3 rounded-3 mb-3" style="background:#f8f9fc; border:1px solid #e8eaf0;">
-                        <label class="form-label fw-bold small">المستخدمون المختارون (<span id="selectedUsersCount">0</span>)</label>
-                        <div id="selectedUsersContainer" class="d-flex flex-wrap gap-2 mb-3"></div>
+                    <div id="specificUsersBox" class="ap-subpanel ap-mb-4 {% if target_mode != 'users' %}ap-hidden{% endif %}">
+                        <div class="ap-label ap-mb-2">المستخدمون المختارون (<span id="selectedUsersCount">0</span>)</div>
+                        <div id="selectedUsersContainer" class="ap-flex ap-wrap ap-gap-2 ap-mb-3"></div>
                         <div id="selectedHiddenInputs"></div>
 
-                        <div class="row g-2 mb-2">
-                            <div class="col-md-7">
-                                <input type="text" id="userSearchInput" class="form-control"
-                                       placeholder="ابحث بالاسم، البريد الإلكتروني، الهاتف، أو الكود...">
-                            </div>
-                            <div class="col-md-3">
-                                <select id="userSearchRole" class="form-select">
-                                    <option value="">كل الأدوار</option>
-                                    <option value="student">طالب</option>
-                                    <option value="teacher">معلم</option>
-                                    <option value="assistant">مساعد</option>
-                                    <option value="admin">مسؤول</option>
-                                </select>
-                            </div>
-                            <div class="col-md-2 d-grid">
-                                <button type="button" id="userSearchBtn" class="btn btn-outline-primary fw-bold">
-                                    <i class="bi bi-search"></i> بحث
-                                </button>
-                            </div>
+                        <div class="ap-flex ap-wrap ap-gap-2 ap-mb-3">
+                            <input type="text" id="userSearchInput" class="ap-input ap-input-sm" style="flex:2; min-width:180px;"
+                                   placeholder="ابحث بالاسم، البريد، الهاتف، أو الكود...">
+                            <select id="userSearchRole" class="ap-select ap-select-sm" style="flex:1; min-width:120px;">
+                                <option value="">كل الأدوار</option>
+                                <option value="student">طالب</option>
+                                <option value="teacher">معلم</option>
+                                <option value="assistant">مساعد</option>
+                                <option value="admin">مسؤول</option>
+                            </select>
+                            <button type="button" id="userSearchBtn" class="ap-btn ap-btn-sm ap-btn-secondary">
+                                <i class="bi bi-search"></i> بحث
+                            </button>
                         </div>
 
-                        <div id="userSearchResults" class="bg-white border rounded-3 overflow-auto" style="max-height:240px;"></div>
+                        <div id="userSearchResults" class="ap-user-picker-results"></div>
                     </div>
 
-                    <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" id="excludeBannedCheck" name="exclude_banned" value="1"
+                    <label class="ap-switch-row" for="excludeBannedCheck">
+                        <span class="ap-switch-label">استثناء الحسابات المحظورة تلقائياً</span>
+                        <input class="ap-switch" type="checkbox" id="excludeBannedCheck" name="exclude_banned" value="1"
                                {% if exclude_banned %}checked{% endif %}>
-                        <label class="form-check-label small fw-bold" for="excludeBannedCheck">
-                            استثناء الحسابات المحظورة تلقائياً
-                        </label>
-                    </div>
+                    </label>
                 </div>
             </div>
 
-            <!-- 2. محتوى الإشعار -->
-            <div class="admin-card">
-                <div class="admin-card-header">
-                    <span class="admin-card-title"><i class="bi bi-chat-square-text-fill me-2 text-success"></i>2. نص الإشعار والرابط</span>
+            <div class="ap-card">
+                <div class="ap-card-header">
+                    <h2 class="ap-card-title"><i class="bi bi-chat-square-text"></i> 2. نص الإشعار والرابط</h2>
                 </div>
-                <div class="p-4">
-                    <div class="mb-3">
-                        <label for="notifTitleInput" class="form-label fw-bold small">عنوان الإشعار <span class="text-danger">*</span></label>
+                <div class="ap-card-body">
+                    <div class="ap-field ap-mb-3">
+                        <label for="notifTitleInput" class="ap-label">عنوان الإشعار <span class="ap-text-danger">*</span></label>
                         <input type="text" id="notifTitleInput" name="title" maxlength="200" required
-                               value="{{ title_val }}" class="form-control"
-                               placeholder="مثال: تحديث مهم في منصة تعلّم أو عرض خاص">
+                               value="{{ title_val }}" class="ap-input"
+                               placeholder="مثال: تحديث مهم في منصة تَعَلَّم أو عرض خاص">
                     </div>
 
-                    <div class="mb-3">
-                        <label for="notifMessageInput" class="form-label fw-bold small">نص الإشعار <span class="text-danger">*</span></label>
-                        <textarea id="notifMessageInput" name="message" rows="4" required class="form-control"
-                                  placeholder="اكتب محتوى الرسالة التي ستصل للمستخدم في المنصة وعلى هاتفه...">{{ message_val }}</textarea>
+                    <div class="ap-field ap-mb-3">
+                        <label for="notifMessageInput" class="ap-label">نص الإشعار <span class="ap-text-danger">*</span></label>
+                        <textarea id="notifMessageInput" name="message" rows="4" required class="ap-textarea"
+                                  placeholder="اكتب محتوى الرسالة التي ستصل للمستخدم...">{{ message_val }}</textarea>
                     </div>
 
-                    <div class="mb-3">
-                        <label for="notifLinkInput" class="form-label fw-bold small">رابط عند الضغط على الإشعار (اختياري)</label>
+                    <div class="ap-field ap-mb-4">
+                        <label for="notifLinkInput" class="ap-label">رابط عند الضغط على الإشعار (اختياري)</label>
                         <input type="text" id="notifLinkInput" name="link" maxlength="255" dir="ltr"
-                               value="{{ link_val }}" class="form-control"
+                               value="{{ link_val }}" class="ap-input ap-ltr"
                                placeholder="/notifications/all/ أو /student/dashboard/ أو https://...">
-                        <div class="d-flex flex-wrap gap-1 mt-2">
-                            <button type="button" class="btn btn-sm btn-outline-secondary link-preset-btn" data-url="">بدون رابط</button>
+                        <div class="ap-flex ap-wrap ap-gap-1 ap-mt-2">
+                            <button type="button" class="ap-btn ap-btn-sm ap-btn-ghost link-preset-btn" data-url="">بدون رابط</button>
                             {% for preset in notif_meta.link_presets %}
-                            <button type="button" class="btn btn-sm btn-outline-primary link-preset-btn" data-url="{{ preset.url }}">
+                            <button type="button" class="ap-btn ap-btn-sm ap-btn-secondary link-preset-btn" data-url="{{ preset.url }}">
                                 {{ preset.label }}
                             </button>
                             {% endfor %}
                         </div>
                     </div>
 
-                    <div class="d-flex justify-content-end pt-2">
-                        <button type="submit" class="btn btn-danger fw-bold px-4 py-2 rounded-3">
-                            <i class="bi bi-send-fill me-1"></i> إرسال الإشعار الآن
+                    <div class="ap-flex ap-justify-end">
+                        <button type="submit" class="ap-btn ap-btn-primary ap-btn-lg">
+                            <i class="bi bi-send"></i> إرسال الإشعار الآن
                         </button>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- العمود الأيسر: المعاينة الحية وسجل الإرسالات -->
-        <div class="col-lg-4">
-            <!-- بطاقة معاينة المستلمين -->
-            <div class="admin-card mb-4">
-                <div class="admin-card-header">
-                    <span class="admin-card-title"><i class="bi bi-bullseye me-2 text-danger"></i>معاينة المستهدفين</span>
-                    <span id="previewLoadingSpinner" class="spinner-border spinner-border-sm text-primary d-none"></span>
+        <!-- العمود الجانبي: المعاينة الحية وسجل الإرسالات -->
+        <div class="ap-flex ap-gap-4" style="flex-direction:column;">
+            <div class="ap-card">
+                <div class="ap-card-header">
+                    <h2 class="ap-card-title"><i class="bi bi-bullseye"></i> معاينة المستهدفين</h2>
+                    <span id="previewLoadingSpinner" class="ap-badge ap-badge-neutral ap-hidden">جاري الحساب...</span>
                 </div>
-                <div class="p-4">
-                    <div class="small text-muted mb-1">النطاق المحدد:</div>
-                    <div id="previewAudienceLabel" class="fw-bold mb-3">{{ preview.audience_label|default:"—" }}</div>
+                <div class="ap-card-body">
+                    <div class="ap-xs ap-muted">النطاق المحدد</div>
+                    <div id="previewAudienceLabel" class="ap-strong ap-sm ap-mt-1 ap-mb-3">{{ preview.audience_label|default:"—" }}</div>
 
-                    <div id="previewErrorBox" class="p-2 rounded-3 mb-3 small fw-bold {% if not preview.error %}d-none{% endif %}"
-                         style="background:#fde8ea; color:#c62828;">
+                    <div id="previewErrorBox" class="ap-banner ap-banner-danger ap-mb-3 ap-xs {% if not preview.error %}ap-hidden{% endif %}">
                         {{ preview.error|default:"" }}
                     </div>
 
-                    <div class="row g-2 mb-3">
-                        <div class="col-6">
-                            <div class="p-3 rounded-3 text-center" style="background:#f8f9fc; border:1px solid #eee;">
-                                <div id="previewTotalCount" class="fs-3 fw-black text-primary">{{ preview.recipient_count|default:0 }}</div>
-                                <div class="small text-muted fw-bold">إجمالي المستلمين</div>
-                            </div>
+                    <div class="ap-grid-2 ap-mb-4" style="gap:10px;">
+                        <div class="ap-subpanel" style="text-align:center;">
+                            <div id="previewTotalCount" style="font-size:1.45rem; font-weight:800;">{{ preview.recipient_count|default:0 }}</div>
+                            <div class="ap-xs ap-muted ap-strong">إجمالي المستلمين</div>
                         </div>
-                        <div class="col-6">
-                            <div class="p-3 rounded-3 text-center" style="background:#e8fdf4; border:1px solid #ccebd9;">
-                                <div id="previewFcmCount" class="fs-3 fw-black text-success">{{ preview.fcm_user_count|default:0 }}</div>
-                                <div class="small text-success fw-bold">لديهم FCM فوري</div>
-                            </div>
+                        <div class="ap-subpanel" style="text-align:center;">
+                            <div id="previewFcmCount" class="ap-text-success" style="font-size:1.45rem; font-weight:800;">{{ preview.fcm_user_count|default:0 }}</div>
+                            <div class="ap-xs ap-text-success ap-strong">لديهم FCM فوري</div>
                         </div>
                     </div>
 
-                    <div class="small fw-bold text-muted mb-2">عيّنة من المستلمين:</div>
-                    <div id="previewSampleList" class="d-flex flex-column gap-1 small">
+                    <div class="ap-xs ap-muted ap-strong ap-mb-2">عيّنة من المستلمين</div>
+                    <div id="previewSampleList" class="ap-kv-list">
                         {% for s in preview.sample_recipients %}
-                        <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
-                            <span>{{ s.full_name }} <span class="text-muted">({{ s.role_display }})</span></span>
+                        <div class="ap-kv-row">
+                            <span class="ap-sm">{{ s.full_name }} ({{ s.role_display }})</span>
                             {% if s.has_fcm %}
-                            <span class="badge bg-success-subtle text-success">FCM</span>
+                            <span class="ap-badge ap-badge-success">FCM</span>
                             {% endif %}
                         </div>
                         {% empty %}
-                        <span class="text-muted">لا يوجد مستخدمون مطابقون حالياً</span>
+                        <span class="ap-muted ap-xs">لا يوجد مستخدمون مطابقون حالياً</span>
                         {% endfor %}
                     </div>
                 </div>
             </div>
 
-            <!-- معاينة شكل الإشعار على الهاتف -->
-            <div class="phone-preview-card mb-4">
-                <div class="d-flex align-items-center justify-content-between mb-2">
-                    <span class="small opacity-75"><i class="bi bi-phone me-1"></i>معاينة شكل الإشعار</span>
-                    <span class="badge bg-light text-dark" style="font-size:0.7rem;">منصة تعلّم</span>
+            <div class="ap-phone-mockup">
+                <div class="ap-flex ap-items-center ap-justify-between ap-mb-2 ap-xs" style="opacity:0.78;">
+                    <span><i class="bi bi-phone"></i> معاينة على الهاتف</span>
+                    <span>منصة تَعَلَّم</span>
                 </div>
-                <div class="phone-preview-notif">
-                    <div id="liveNotifTitle" class="fw-bold mb-1" style="font-size:0.95rem;">
+                <div class="ap-phone-notif">
+                    <div id="liveNotifTitle" class="ap-strong ap-sm ap-mb-1">
                         {{ title_val|default:"عنوان الإشعار يظهر هنا" }}
                     </div>
-                    <div id="liveNotifMessage" class="small opacity-75" style="white-space:pre-line;">
+                    <div id="liveNotifMessage" class="ap-xs" style="opacity:0.85; white-space:pre-line;">
                         {{ message_val|default:"نص الرسالة سيظهر للمستخدم في التطبيق والموقع..." }}
                     </div>
-                    <div id="liveNotifLink" class="small mt-2 text-info {% if not link_val %}d-none{% endif %}" dir="ltr">
+                    <div id="liveNotifLink" class="ap-xs ap-ltr ap-mt-2 {% if not link_val %}ap-hidden{% endif %}" style="color:#9cc9b8;">
                         {{ link_val }}
                     </div>
                 </div>
             </div>
 
-            <!-- آخر الإرسالات -->
-            <div class="admin-card">
-                <div class="admin-card-header">
-                    <span class="admin-card-title"><i class="bi bi-clock-history me-2 text-secondary"></i>أحدث الإشعارات المرسلة</span>
+            <div class="ap-card">
+                <div class="ap-card-header">
+                    <h2 class="ap-card-title"><i class="bi bi-clock-history"></i> أحدث الإشعارات المرسلة</h2>
                 </div>
-                <div class="admin-card-body">
-                    {% for log in recent_dispatches %}
-                    <div class="audit-item">
-                        <div class="audit-dot" style="background:#6f42c1;"></div>
-                        <div class="flex-grow-1">
-                            <div class="fw-bold small">{{ log.details.title|default:log.target_label }}</div>
-                            <div class="text-muted" style="font-size:0.76rem;">
-                                {{ log.target_label }} · {{ log.details.recipient_count|default:0 }} مستلم
-                                {% if log.details.fcm_user_count %} ({{ log.details.fcm_user_count }} FCM){% endif %}
-                            </div>
-                            <div class="text-muted" style="font-size:0.7rem;">
-                                {{ log.admin.get_full_name|default:log.admin.email|default:"—" }} · {{ log.created_at|date:"j M Y H:i" }}
-                            </div>
-                        </div>
-                    </div>
-                    {% empty %}
-                    <div class="empty-state py-4">
-                        <i class="bi bi-bell-slash" style="font-size:2rem;"></i>
-                        لم يتم إرسال إشعارات مخصصة بعد
-                    </div>
-                    {% endfor %}
+                <div class="ap-card-body-flush" id="recentDispatchesContainer">
+                    {% include 'admin_panel/partials/_notification_dispatches.html' %}
                 </div>
             </div>
         </div>
@@ -398,334 +267,3 @@
 {{ selected_users|json_script:"initialSelectedUsersData" }}
 {{ initial_users|json_script:"initialSearchUsersData" }}
 {% endblock %}
-
-{% block extra_js %}
-<script>
-(function() {
-    const previewUrl = "{% url 'admin_panel:notifications_recipient_preview' %}";
-    const form = document.getElementById('customNotificationForm');
-    const modeCards = document.querySelectorAll('.target-mode-card');
-    const segmentOptionsBox = document.getElementById('segmentOptionsBox');
-    const specificUsersBox = document.getElementById('specificUsersBox');
-    const segmentSelect = document.getElementById('segmentSelect');
-    const segmentDescText = document.getElementById('segmentDescText');
-    const excludeBannedCheck = document.getElementById('excludeBannedCheck');
-
-    const gradeSelect = document.getElementById('gradeSelect');
-    const teacherSelect = document.getElementById('teacherSelect');
-    const planSelect = document.getElementById('planSelect');
-    const subjectSelect = document.getElementById('subjectSelect');
-
-    const selectedContainer = document.getElementById('selectedUsersContainer');
-    const selectedHiddenInputs = document.getElementById('selectedHiddenInputs');
-    const selectedCountEl = document.getElementById('selectedUsersCount');
-    const userSearchInput = document.getElementById('userSearchInput');
-    const userSearchRole = document.getElementById('userSearchRole');
-    const userSearchBtn = document.getElementById('userSearchBtn');
-    const userSearchResults = document.getElementById('userSearchResults');
-
-    const selectedUsers = new Map();
-    const initialSelected = JSON.parse(document.getElementById('initialSelectedUsersData').textContent || '[]');
-    initialSelected.forEach(u => selectedUsers.set(Number(u.id), u));
-
-    let cachedSearchResults = JSON.parse(document.getElementById('initialSearchUsersData').textContent || '[]');
-
-    function currentMode() {
-        const checked = document.querySelector('input[name="target_mode"]:checked');
-        return checked ? checked.value : 'all';
-    }
-
-    function syncModeUI() {
-        const mode = currentMode();
-        modeCards.forEach(card => {
-            card.classList.toggle('active', card.dataset.mode === mode);
-        });
-        segmentOptionsBox.classList.toggle('d-none', mode !== 'segment');
-        specificUsersBox.classList.toggle('d-none', mode !== 'users');
-        syncSegmentExtras();
-    }
-
-    function syncSegmentExtras() {
-        const opt = segmentSelect.options[segmentSelect.selectedIndex];
-        const extra = opt ? (opt.dataset.extra || '') : '';
-        segmentDescText.textContent = opt ? (opt.dataset.desc || '') : '';
-        document.querySelectorAll('.segment-extra').forEach(el => {
-            el.classList.toggle('d-none', el.dataset.extraField !== extra);
-        });
-    }
-
-    function renderSelectedUsers() {
-        selectedContainer.innerHTML = '';
-        selectedHiddenInputs.innerHTML = '';
-        selectedCountEl.textContent = String(selectedUsers.size);
-
-        if (selectedUsers.size === 0) {
-            const emptyHint = document.createElement('span');
-            emptyHint.className = 'text-muted small';
-            emptyHint.textContent = 'لم يتم اختيار أي مستخدم بعد — ابحث بالأسفل واضغط «إضافة».';
-            selectedContainer.appendChild(emptyHint);
-            return;
-        }
-
-        selectedUsers.forEach((u, id) => {
-            const chip = document.createElement('span');
-            chip.className = 'user-chip';
-
-            const label = document.createElement('span');
-            label.textContent = `${u.full_name} (${u.role_display || u.role})`;
-            chip.appendChild(label);
-
-            if (u.has_fcm) {
-                const fcmTag = document.createElement('span');
-                fcmTag.className = 'badge bg-success';
-                fcmTag.style.fontSize = '0.65rem';
-                fcmTag.textContent = 'FCM';
-                chip.appendChild(fcmTag);
-            }
-
-            const removeBtn = document.createElement('button');
-            removeBtn.type = 'button';
-            removeBtn.title = 'إزالة';
-            removeBtn.textContent = '×';
-            removeBtn.addEventListener('click', () => {
-                selectedUsers.delete(id);
-                renderSelectedUsers();
-                renderSearchResults(cachedSearchResults);
-                refreshPreview();
-            });
-            chip.appendChild(removeBtn);
-            selectedContainer.appendChild(chip);
-
-            const hidden = document.createElement('input');
-            hidden.type = 'hidden';
-            hidden.name = 'user_ids';
-            hidden.value = String(id);
-            selectedHiddenInputs.appendChild(hidden);
-        });
-    }
-
-    function renderSearchResults(users) {
-        cachedSearchResults = users || [];
-        userSearchResults.innerHTML = '';
-        if (!cachedSearchResults.length) {
-            const empty = document.createElement('div');
-            empty.className = 'p-3 text-center text-muted small';
-            empty.textContent = 'لا توجد نتائج مطابقة للبحث.';
-            userSearchResults.appendChild(empty);
-            return;
-        }
-
-        cachedSearchResults.forEach(u => {
-            const uid = Number(u.id);
-            const isPicked = selectedUsers.has(uid);
-
-            const row = document.createElement('div');
-            row.className = 'search-result-row';
-
-            const info = document.createElement('div');
-            const nameLine = document.createElement('div');
-            nameLine.className = 'fw-bold small';
-            nameLine.textContent = `${u.full_name} `;
-            const roleBadge = document.createElement('span');
-            roleBadge.className = 'badge bg-light text-dark border ms-1';
-            roleBadge.textContent = u.role_display || u.role;
-            nameLine.appendChild(roleBadge);
-            if (u.has_fcm) {
-                const fcmBadge = document.createElement('span');
-                fcmBadge.className = 'badge bg-success-subtle text-success ms-1';
-                fcmBadge.textContent = 'FCM';
-                nameLine.appendChild(fcmBadge);
-            }
-            if (u.is_banned) {
-                const banBadge = document.createElement('span');
-                banBadge.className = 'badge bg-danger-subtle text-danger ms-1';
-                banBadge.textContent = 'محظور';
-                nameLine.appendChild(banBadge);
-            }
-
-            const subLine = document.createElement('div');
-            subLine.className = 'text-muted';
-            subLine.style.fontSize = '0.75rem';
-            subLine.textContent = [u.email, u.phone, u.custom_id].filter(Boolean).join(' · ');
-
-            info.appendChild(nameLine);
-            info.appendChild(subLine);
-
-            const actionBtn = document.createElement('button');
-            actionBtn.type = 'button';
-            actionBtn.className = isPicked ? 'btn btn-sm btn-success' : 'btn btn-sm btn-outline-primary fw-bold';
-            actionBtn.textContent = isPicked ? 'مُضاف ✓' : '+ إضافة';
-            actionBtn.addEventListener('click', () => {
-                if (selectedUsers.has(uid)) {
-                    selectedUsers.delete(uid);
-                } else {
-                    selectedUsers.set(uid, u);
-                }
-                renderSelectedUsers();
-                renderSearchResults(cachedSearchResults);
-                refreshPreview();
-            });
-
-            row.appendChild(info);
-            row.appendChild(actionBtn);
-            userSearchResults.appendChild(row);
-        });
-    }
-
-    async function searchUsers() {
-        const params = new URLSearchParams({
-            action: 'search_users',
-            q: userSearchInput.value.trim(),
-            role: userSearchRole.value,
-        });
-        try {
-            const resp = await fetch(`${previewUrl}?${params.toString()}`, {
-                headers: { 'X-Requested-With': 'XMLHttpRequest' },
-            });
-            const data = await resp.json();
-            renderSearchResults(data.users || []);
-        } catch (err) {
-            console.error(err);
-        }
-    }
-
-    let previewTimer = null;
-    function refreshPreview() {
-        clearTimeout(previewTimer);
-        previewTimer = setTimeout(doRefreshPreview, 120);
-    }
-
-    async function doRefreshPreview() {
-        const spinner = document.getElementById('previewLoadingSpinner');
-        spinner.classList.remove('d-none');
-
-        const params = new URLSearchParams({
-            target_mode: currentMode(),
-            segment: segmentSelect.value,
-            grade: gradeSelect.value,
-            teacher_id: teacherSelect.value,
-            plan_id: planSelect.value,
-            subject_id: subjectSelect.value,
-            exclude_banned: excludeBannedCheck.checked ? '1' : '0',
-        });
-        selectedUsers.forEach((_, uid) => params.append('user_ids', String(uid)));
-
-        try {
-            const resp = await fetch(`${previewUrl}?${params.toString()}`, {
-                headers: { 'X-Requested-With': 'XMLHttpRequest' },
-            });
-            const data = await resp.json();
-
-            document.getElementById('previewAudienceLabel').textContent = data.audience_label || '—';
-            document.getElementById('previewTotalCount').textContent = String(data.recipient_count || 0);
-            document.getElementById('previewFcmCount').textContent = String(data.fcm_user_count || 0);
-
-            const errBox = document.getElementById('previewErrorBox');
-            if (data.error) {
-                errBox.textContent = data.error;
-                errBox.classList.remove('d-none');
-            } else {
-                errBox.textContent = '';
-                errBox.classList.add('d-none');
-            }
-
-            const sampleList = document.getElementById('previewSampleList');
-            sampleList.innerHTML = '';
-            const samples = data.sample_recipients || [];
-            if (!samples.length) {
-                const empty = document.createElement('span');
-                empty.className = 'text-muted';
-                empty.textContent = 'لا يوجد مستخدمون مطابقون حالياً';
-                sampleList.appendChild(empty);
-            } else {
-                samples.forEach(s => {
-                    const row = document.createElement('div');
-                    row.className = 'd-flex justify-content-between align-items-center py-1 border-bottom';
-                    const nameSpan = document.createElement('span');
-                    nameSpan.textContent = `${s.full_name} (${s.role_display || s.role})`;
-                    row.appendChild(nameSpan);
-                    if (s.has_fcm) {
-                        const badge = document.createElement('span');
-                        badge.className = 'badge bg-success-subtle text-success';
-                        badge.textContent = 'FCM';
-                        row.appendChild(badge);
-                    }
-                    sampleList.appendChild(row);
-                });
-            }
-        } catch (err) {
-            console.error(err);
-        } finally {
-            spinner.classList.add('d-none');
-        }
-    }
-
-    modeCards.forEach(card => {
-        card.addEventListener('click', () => {
-            const radio = card.querySelector('input[type="radio"]');
-            if (radio) radio.checked = true;
-            syncModeUI();
-            refreshPreview();
-        });
-    });
-
-    [segmentSelect, gradeSelect, teacherSelect, planSelect, subjectSelect, excludeBannedCheck].forEach(el => {
-        el.addEventListener('change', () => {
-            syncSegmentExtras();
-            refreshPreview();
-        });
-    });
-
-    userSearchBtn.addEventListener('click', searchUsers);
-    userSearchRole.addEventListener('change', searchUsers);
-    let searchTimer = null;
-    userSearchInput.addEventListener('input', () => {
-        clearTimeout(searchTimer);
-        searchTimer = setTimeout(searchUsers, 250);
-    });
-    userSearchInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            searchUsers();
-        }
-    });
-
-    const titleInput = document.getElementById('notifTitleInput');
-    const msgInput = document.getElementById('notifMessageInput');
-    const linkInput = document.getElementById('notifLinkInput');
-
-    function syncLiveNotifCard() {
-        document.getElementById('liveNotifTitle').textContent =
-            titleInput.value.trim() || 'عنوان الإشعار يظهر هنا';
-        document.getElementById('liveNotifMessage').textContent =
-            msgInput.value.trim() || 'نص الرسالة سيظهر للمستخدم في التطبيق والموقع...';
-        const linkEl = document.getElementById('liveNotifLink');
-        const linkVal = linkInput.value.trim();
-        linkEl.textContent = linkVal;
-        linkEl.classList.toggle('d-none', !linkVal);
-    }
-
-    [titleInput, msgInput, linkInput].forEach(el => el.addEventListener('input', syncLiveNotifCard));
-    document.querySelectorAll('.link-preset-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            linkInput.value = btn.dataset.url || '';
-            syncLiveNotifCard();
-        });
-    });
-
-    form.addEventListener('submit', (e) => {
-        const count = Number(document.getElementById('previewTotalCount').textContent || '0');
-        const label = document.getElementById('previewAudienceLabel').textContent || '';
-        if (count > 1 && !confirm(`سيتم إرسال الإشعار إلى ${count} مستخدم (${label}). هل تريد المتابعة؟`)) {
-            e.preventDefault();
-        }
-    });
-
-    syncModeUI();
-    renderSelectedUsers();
-    renderSearchResults(cachedSearchResults);
-    syncLiveNotifCard();
-})();
-</script>
-{% endblock %}
-

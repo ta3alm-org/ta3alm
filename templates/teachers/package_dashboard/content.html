@@ -139,11 +139,11 @@
                     <div class="modal-body">
                         <div class="mb-3">
                             <label class="form-label fw-bold">{% trans "اسم الملف" %}</label>
-                            <input type="text" name="title" class="form-control" required>
+                            <input type="text" name="title" class="form-control" maxlength="200" required>
                         </div>
                         <div class="mb-3">
                             <label class="form-label fw-bold">{% trans "رابط الملف (Drive/Direct)" %}</label>
-                            <input type="url" name="link" class="form-control" placeholder="https://..." required>
+                            <input type="url" name="link" class="form-control" maxlength="2000" placeholder="https://..." required>
                         </div>
                     </div>
                     <div class="modal-footer">

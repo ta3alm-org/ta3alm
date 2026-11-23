@@ -20,4 +20,6 @@ urlpatterns = [
     path('ajax/get_lessons/',                   views.ajax_get_lessons,      name='ajax_get_lessons'),
     path('plans/',                               views.public_plans,          name='public_plans'),
     path('login/auto/<uuid:token>/',             views.one_time_login_view,   name='one_time_login'),
+    path('support/chat/',                        views.support_chat_page,     name='support_chat'),
+    path('support/chat/<int:thread_id>/',        views.support_chat_page,     name='support_chat_thread'),
 ]

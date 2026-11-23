@@ -5,6 +5,7 @@ Extracted from teachers/views.py.
 import os
 import uuid
 from django.core.files.storage import default_storage
+from django.db import DataError
 from assistants.models import AssistantJob
 from django.shortcuts import (
     render,
@@ -61,11 +62,18 @@ def add_pdf_to_group(request, group_id):
         resolved_link, err = _resolve_pdf_link_from_request(request)
         if not title:
             messages.error(request, "يرجى إدخال اسم الملف.")
+        elif len(title) > 200:
+            messages.error(request, "اسم الملف طويل جداً (الحد الأقصى 200 حرف).")
         elif err:
             messages.error(request, err)
+        elif len(resolved_link) > 2000:
+            messages.error(request, "رابط الملف طويل جداً (الحد الأقصى 2000 حرف).")
         else:
-            PDFFile.objects.create(group=group, title=title, link=resolved_link)
-            messages.success(request, "تم إضافة الملف.")
+            try:
+                PDFFile.objects.create(group=group, title=title, link=resolved_link)
+                messages.success(request, "تم إضافة الملف.")
+            except DataError:
+                messages.error(request, "رابط الملف أو اسمه أطول من الحد المسموح به في قاعدة البيانات حالياً.")
     return _safe_referer_redirect(request, reverse('group_detail', args=[group.id]))
 
 
@@ -81,12 +89,19 @@ def add_pdf_to_package(request, package_id):
         resolved_link, err = _resolve_pdf_link_from_request(request)
         if not title:
             messages.error(request, "يرجى إدخال اسم الملف.")
+        elif len(title) > 200:
+            messages.error(request, "اسم الملف طويل جداً (الحد الأقصى 200 حرف).")
         elif err:
             messages.error(request, err)
+        elif len(resolved_link) > 2000:
+            messages.error(request, "رابط الملف طويل جداً (الحد الأقصى 2000 حرف).")
         else:
-            pdf = PDFFile.objects.create(group=None, title=title, link=resolved_link)
-            package.pdfs.add(pdf)
-            messages.success(request, "تم إضافة الملف للحزمة.")
+            try:
+                pdf = PDFFile.objects.create(group=None, title=title, link=resolved_link)
+                package.pdfs.add(pdf)
+                messages.success(request, "تم إضافة الملف للحزمة.")
+            except DataError:
+                messages.error(request, "رابط الملف أو اسمه أطول من الحد المسموح به في قاعدة البيانات حالياً.")
     return _safe_referer_redirect(request, reverse('teacher_package_detail', args=[package.id]))
 
 

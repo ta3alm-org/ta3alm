@@ -11,7 +11,14 @@ from django.contrib.auth import get_user_model
 from dashboard_admin.models import AuditLog
 from dashboard_admin.decorators import moderator_required
 
+from django.template.loader import render_to_string
+
 from dashboard_admin.views.base import _base_context
+from dashboard_admin.views.ajax import (
+    ajax_error,
+    ajax_success,
+    is_ajax_request,
+)
 
 User = get_user_model()
 
@@ -85,12 +92,33 @@ def send_notifications(request):
                 if res.get('fcm_configured')
                 else " (ملاحظة: إشعارات FCM الفورية غير مهيأة على الخادم حالياً)"
             )
-            messages.success(
-                request,
-                f"تم إرسال الإشعار بنجاح إلى {res['recipient_count']} مستخدم ضمن «{res['audience_label']}»{fcm_note}.",
-            )
+            msg = f"تم إرسال الإشعار بنجاح إلى {res['recipient_count']} مستخدم ضمن «{res['audience_label']}»{fcm_note}."
+            if is_ajax_request(request):
+                recent_dispatches = AuditLog.objects.filter(
+                    action=AuditLog.ACTION_SEND_NOTIFICATION
+                ).select_related('admin').order_by('-created_at')[:15]
+                dispatches_html = render_to_string(
+                    'admin_panel/partials/_notification_dispatches.html',
+                    {'recent_dispatches': recent_dispatches},
+                    request=request,
+                )
+                return ajax_success(
+                    msg,
+                    data={
+                        'recipient_count': res.get('recipient_count', 0),
+                        'fcm_user_count': res.get('fcm_user_count', 0),
+                        'fcm_configured': bool(res.get('fcm_configured')),
+                        'audience_label': res.get('audience_label', ''),
+                        'dispatches_html': dispatches_html,
+                    },
+                )
+            messages.success(request, msg)
             return redirect('admin_panel:send_notifications')
-        messages.error(request, res.get('error') or 'تعذّر إرسال الإشعار.')
+
+        err_msg = res.get('error') or 'تعذّر إرسال الإشعار.'
+        if is_ajax_request(request):
+            return ajax_error(err_msg, status=400)
+        messages.error(request, err_msg)
 
     selected_users = []
     if preselected_ids:

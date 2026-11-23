@@ -1,130 +1,116 @@
 {% extends 'admin_panel/base_admin.html' %}
 {% load i18n %}
 
-{% block title %}{{ message_data.subject|default:"تفاصيل الرسالة" }} | صندوق الدعم{% endblock %}
+{% block page_title %}{{ message_data.subject|default:"تفاصيل الرسالة" }} | صندوق الدعم{% endblock %}
+{% block body_page %}support{% endblock %}
 {% block nav_support_inbox %}active{% endblock %}
-
 {% block breadcrumb %}
-<span class="sep">/</span> <a href="{% url 'admin_panel:support_inbox' %}">بريد الدعم</a>
-<span class="sep">/</span> <span class="current">قراءة الرسالة والرد</span>
+<span class="sep">/</span>
+<a href="{% url 'admin_panel:support_inbox' %}">بريد الدعم</a>
+<span class="sep">/</span>
+<span class="current">قراءة الرسالة والرد</span>
 {% endblock %}
 
 {% block content %}
-<div class="mb-4 d-flex justify-content-between align-items-center">
-    <a href="{% url 'admin_panel:support_inbox' %}" class="btn btn-outline-secondary rounded-pill px-3">
-        <i class="bi bi-arrow-right me-1"></i>الرجوع للصندوق
-    </a>
-    <span class="badge bg-light text-dark border px-3 py-2">
-        <i class="bi bi-envelope me-1"></i>معرف الرسالة: {{ message_id }}
-    </span>
-</div>
-
-<div class="row g-4">
-    <!-- 1. تفاصيل الرسالة الواردة -->
-    <div class="col-lg-7">
-        <div class="admin-card mb-4">
-            <div class="admin-card-header bg-light bg-opacity-50">
-                <div class="w-100">
-                    <h5 class="fw-bold text-dark mb-2">
-                        {{ message_data.subject|default:"(بدون موضوع)" }}
-                    </h5>
-                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 small text-muted">
-                        <div>
-                            <span class="fw-bold text-dark">من:</span> {{ message_data.fromAddress|default:message_data.sender }}
-                        </div>
-                        <div>
-                            <span class="fw-bold text-dark">إلى:</span> {{ message_data.toAddress|default:support_email }}
-                        </div>
-                        <div>
-                            <i class="bi bi-clock me-1"></i>{{ message_data.formatted_date|default:message_data.receivedTime }}
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="admin-card-body p-4">
-                <div class="email-body-content border rounded-3 p-3 bg-white" style="min-height: 250px; font-size: 0.95rem; line-height: 1.7; overflow-x: auto;">
-                    {% if message_data.content %}
-                        <iframe sandbox="" referrerpolicy="no-referrer"
-                                srcdoc="{{ message_data.sanitized_content }}"
-                                style="width: 100%; min-height: 280px; border: 0; background: #fff;"></iframe>
-                    {% elif message_data.summary %}
-                        <p class="mb-0">{{ message_data.summary }}</p>
-                    {% else %}
-                        <p class="text-muted fst-italic mb-0">لا يوجد نص إضافي في جسم الرسالة.</p>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
+<div class="ap-page-header">
+    <div>
+        <h1 class="ap-page-title"><i class="bi bi-envelope-open"></i> {{ message_data.subject|default:"(بدون موضوع)" }}</h1>
+        <p class="ap-page-subtitle">معرف الرسالة: <code>{{ message_id }}</code></p>
     </div>
-
-    <!-- 2. نموذج الرد المباشر السريع -->
-    <div class="col-lg-5">
-        <div class="admin-card shadow-sm sticky-top" style="top: 90px; border-top: 4px solid var(--admin-primary);">
-            <div class="admin-card-header bg-white">
-                <h6 class="admin-card-title mb-0">
-                    <i class="bi bi-reply-all-fill text-primary me-2"></i>رد مباشر من {{ support_email }}
-                </h6>
-            </div>
-
-            <div class="admin-card-body p-4">
-                <form method="POST" action="{% url 'admin_panel:support_send_reply' %}">
-                    {% csrf_token %}
-                    <input type="hidden" name="message_id" value="{{ message_id }}">
-
-                    <div class="mb-3">
-                        <label class="form-label small fw-bold text-muted">إلى:</label>
-                        <input type="email" name="to_email" class="form-control form-control-sm bg-light"
-                               value="{{ message_data.fromAddress|default:'' }}" required>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label small fw-bold text-muted">الموضوع:</label>
-                        <input type="text" name="subject" class="form-control form-control-sm"
-                               value="{% if 'Re:' in message_data.subject %}{{ message_data.subject }}{% else %}Re: {{ message_data.subject|default:'استفسار بخصوص منصة تَعَلَّم' }}{% endif %}" required>
-                    </div>
-
-                    <!-- أزرار الردود الجاهزة السريعة -->
-                    <div class="mb-2">
-                        <label class="form-label small fw-bold text-muted d-block mb-1">ردود سريعة جاهزة بنقرة واحدة:</label>
-                        <div class="d-flex flex-wrap gap-1">
-                            <button type="button" class="btn btn-sm btn-light border small text-muted py-0 px-2"
-                                    onclick="appendReply('أهلاً بك، تم تفعيل اشتراكك وحسابك بنجاح. يمكنك الآن الدخول ومتابعة حصصك فوراً.')">
-                                تفعيل الحساب
-                            </button>
-                            <button type="button" class="btn btn-sm btn-light border small text-muted py-0 px-2"
-                                    onclick="appendReply('مرحباً بك، تم حل المشكلة التقنية وتحديث البيانات في حسابك بنجاح.')">
-                                حل المشكلة
-                            </button>
-                            <button type="button" class="btn btn-sm btn-light border small text-muted py-0 px-2"
-                                    onclick="appendReply('أهلاً بك، يرجى تزويدنا برقم الهاتف المسجل وصورة التحويل لإتمام طلبك.')">
-                                طلب بيانات
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label small fw-bold text-muted">نص الرد (HTML / Text):</label>
-                        <textarea name="content" id="replyContent" class="form-control" rows="8"
-                                  placeholder="اكتب ردك هنا..." required></textarea>
-                    </div>
-
-                    <button type="submit" class="btn btn-primary w-100 py-2 fw-bold rounded-3 shadow-sm">
-                        <i class="bi bi-send-fill me-2"></i>إرسال الرد الآن عبر Zoho API
-                    </button>
-                </form>
-            </div>
-        </div>
+    <div class="ap-page-actions">
+        <a href="{% url 'admin_panel:support_inbox' %}" class="ap-btn ap-btn-secondary">
+            <i class="bi bi-arrow-right"></i> الرجوع للصندوق
+        </a>
     </div>
 </div>
 
-<script>
-function appendReply(text) {
-    const area = document.getElementById('replyContent');
-    if (area) {
-        area.value = text;
-        area.focus();
-    }
-}
-</script>
+<div class="ap-split-7-5">
+    <!-- محتوى الرسالة الواردة -->
+    <div class="ap-card">
+        <div class="ap-card-header">
+            <div style="width:100%;">
+                <div class="ap-kv-list">
+                    <div class="ap-kv-row">
+                        <span class="ap-kv-key">من</span>
+                        <span class="ap-kv-val ap-ltr">{{ message_data.fromAddress|default:message_data.sender }}</span>
+                    </div>
+                    <div class="ap-kv-row">
+                        <span class="ap-kv-key">إلى</span>
+                        <span class="ap-kv-val ap-ltr">{{ message_data.toAddress|default:support_email }}</span>
+                    </div>
+                    <div class="ap-kv-row">
+                        <span class="ap-kv-key">الوقت</span>
+                        <span class="ap-kv-val">{{ message_data.formatted_date|default:message_data.receivedTime }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="ap-card-body">
+            {% if message_data.content %}
+            <iframe sandbox="" referrerpolicy="no-referrer"
+                    srcdoc="{{ message_data.sanitized_content }}"
+                    class="ap-email-iframe"></iframe>
+            {% elif message_data.summary %}
+            <p class="ap-sm" style="margin:0; line-height:1.7;">{{ message_data.summary }}</p>
+            {% else %}
+            <p class="ap-muted ap-sm" style="margin:0;">لا يوجد نص إضافي في جسم الرسالة.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- نموذج الرد المباشر -->
+    <div class="ap-card">
+        <div class="ap-card-header">
+            <h2 class="ap-card-title"><i class="bi bi-reply-all"></i> رد مباشر من {{ support_email }}</h2>
+        </div>
+        <div class="ap-card-body">
+            <form method="POST" action="{% url 'admin_panel:support_send_reply' %}" data-ajax-form>
+                {% csrf_token %}
+                <input type="hidden" name="message_id" value="{{ message_id }}">
+
+                <div class="ap-field ap-mb-3">
+                    <label class="ap-label" for="replyToEmail">إلى</label>
+                    <input id="replyToEmail" type="email" name="to_email" class="ap-input ap-input-sm ap-ltr"
+                           value="{{ message_data.fromAddress|default:'' }}" required>
+                </div>
+
+                <div class="ap-field ap-mb-3">
+                    <label class="ap-label" for="replySubject">الموضوع</label>
+                    <input id="replySubject" type="text" name="subject" class="ap-input ap-input-sm"
+                           value="{% if 'Re:' in message_data.subject %}{{ message_data.subject }}{% else %}Re: {{ message_data.subject|default:'استفسار بخصوص منصة تَعَلَّم' }}{% endif %}" required>
+                </div>
+
+                <div class="ap-field ap-mb-3">
+                    <span class="ap-label">ردود سريعة بنقرة واحدة</span>
+                    <div class="ap-flex ap-wrap ap-gap-1">
+                        <button type="button" class="ap-btn ap-btn-sm ap-btn-secondary"
+                                data-snippet-target="#replyContent"
+                                data-email-snippet="أهلاً بك، تم تفعيل اشتراكك وحسابك بنجاح. يمكنك الآن الدخول ومتابعة حصصك فوراً.">
+                            تفعيل الحساب
+                        </button>
+                        <button type="button" class="ap-btn ap-btn-sm ap-btn-secondary"
+                                data-snippet-target="#replyContent"
+                                data-email-snippet="مرحباً بك، تم حل المشكلة التقنية وتحديث البيانات في حسابك بنجاح.">
+                            حل المشكلة
+                        </button>
+                        <button type="button" class="ap-btn ap-btn-sm ap-btn-secondary"
+                                data-snippet-target="#replyContent"
+                                data-email-snippet="أهلاً بك، يرجى تزويدنا برقم الهاتف المسجل وصورة التحويل لإتمام طلبك.">
+                            طلب بيانات
+                        </button>
+                    </div>
+                </div>
+
+                <div class="ap-field ap-mb-4">
+                    <label class="ap-label" for="replyContent">نص الرد</label>
+                    <textarea name="content" id="replyContent" class="ap-textarea" rows="8" placeholder="اكتب ردك هنا..." required></textarea>
+                </div>
+
+                <button type="submit" class="ap-btn ap-btn-primary ap-w-full">
+                    <i class="bi bi-send"></i> إرسال الرد الآن عبر Zoho API
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
 {% endblock %}

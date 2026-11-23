@@ -24,6 +24,7 @@ from core.models import (
 )
 from core.fcm_service import is_fcm_configured
 from core.notifications_service import (
+    build_support_reply_metadata,
     generate_notif_pull_token,
     verify_notif_pull_token,
 )
@@ -282,6 +283,36 @@ class CurriculumLookupAPIView(APIView):
         return Response({'units': CurriculumUnitSerializer(qs, many=True).data})
 
 
+def _enrich_support_notifications(serialized_items: list[dict], recipient_user) -> list[dict]:
+    """يضيف بيانات الرد المباشر (RemoteInput) للإشعارات المرتبطة بشات الدعم الفني."""
+    from core.notifications_service import extract_support_thread_id, generate_support_reply_token
+    from core.services.notifications.pull_tokens import (
+        SUPPORT_QUICK_REPLY_URL,
+        extract_support_sender_label,
+    )
+
+    if not recipient_user or not getattr(recipient_user, 'pk', None):
+        return serialized_items
+
+    token_cache: dict[int, str] = {}
+    for item in serialized_items:
+        thread_id = extract_support_thread_id(item.get('link'))
+        if not thread_id:
+            continue
+        reply_token = token_cache.get(thread_id)
+        if reply_token is None:
+            reply_token = generate_support_reply_token(recipient_user, thread_id)
+            token_cache[thread_id] = reply_token
+        if not reply_token:
+            continue
+        item['reply_type'] = 'support_chat'
+        item['thread_id'] = str(thread_id)
+        item['reply_token'] = reply_token
+        item['reply_url'] = SUPPORT_QUICK_REPLY_URL
+        item['sender_name'] = extract_support_sender_label(item.get('title'))
+    return serialized_items
+
+
 class NotificationsAPIView(APIView):
     """جلب الإشعارات وعدد غير المقروء، مع دعم السحب التدريجي عبر since_id وإصدار رمز المزامنة بالخلفية."""
     permission_classes = [IsAuthenticated, IsNotBanned]
@@ -306,12 +337,16 @@ class NotificationsAPIView(APIView):
         else:
             qs = qs.order_by('-created_at', '-id')
 
+        serialized = _enrich_support_notifications(
+            NotificationSerializer(qs[:limit], many=True).data,
+            request.user,
+        )
         return Response({
             'unread_count': unread_count,
             'latest_id': latest_id,
             'notif_sync_token': generate_notif_pull_token(request.user),
             'fcm_configured': is_fcm_configured(),
-            'notifications': NotificationSerializer(qs[:limit], many=True).data,
+            'notifications': serialized,
         })
 
 
@@ -346,10 +381,14 @@ class NotificationBackgroundPullAPIView(APIView):
         else:
             qs = qs.order_by('-id')
 
+        serialized = _enrich_support_notifications(
+            NotificationSerializer(qs[:20], many=True).data,
+            user,
+        )
         return Response({
             'unread_count': unread_count,
             'latest_id': latest_id,
-            'notifications': NotificationSerializer(qs[:20], many=True).data,
+            'notifications': serialized,
         })
 
 

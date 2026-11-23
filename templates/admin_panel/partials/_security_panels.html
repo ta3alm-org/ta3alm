@@ -1,0 +1,602 @@
+<div data-tabs="security-sections" data-tabs-container="#securityTabPanels" class="ap-tabs">
+    <button type="button" class="ap-tab-btn active" data-tab-target="sec-tab-devices">
+        <i class="bi bi-phone"></i>
+        <span>الأجهزة الموحدة</span>
+        <span class="ap-tab-count">{{ unified_devices|length }}</span>
+    </button>
+    <button type="button" class="ap-tab-btn" data-tab-target="sec-tab-events">
+        <i class="bi bi-shield-exclamation"></i>
+        <span>الأحداث والتهديدات</span>
+        <span class="ap-tab-count">{{ events|length }}</span>
+    </button>
+    <button type="button" class="ap-tab-btn" data-tab-target="sec-tab-sessions">
+        <i class="bi bi-broadcast"></i>
+        <span>الجلسات النشطة والحظر</span>
+        <span class="ap-tab-count">{{ active_sessions|length }}</span>
+    </button>
+    <button type="button" class="ap-tab-btn" data-tab-target="sec-tab-ai">
+        <i class="bi bi-cpu"></i>
+        <span>تقارير الذكاء الاصطناعي</span>
+        <span class="ap-tab-count">{{ risk_profiles|length }}</span>
+    </button>
+    <button type="button" class="ap-tab-btn" data-tab-target="sec-tab-policies">
+        <i class="bi bi-sliders"></i>
+        <span>السياسات وإعدادات AI</span>
+    </button>
+</div>
+
+<div id="securityTabPanels">
+    <!-- ══════════ 1. الأجهزة الموحدة ══════════ -->
+    <div class="ap-tab-panel active" id="sec-tab-devices" data-tab-group="security-sections">
+        <div class="ap-card">
+            <div class="ap-card-header">
+                <h2 class="ap-card-title"><i class="bi bi-phone"></i> الأجهزة الموحدة (جهاز فعلي واحد بدون تكرار)</h2>
+                <span class="ap-badge ap-badge-accent">{{ unified_devices|length }} جهاز فعلي</span>
+            </div>
+            <div class="ap-table-wrap">
+                <table class="ap-table">
+                    <thead>
+                        <tr>
+                            <th>معرّف الجهاز</th>
+                            <th>الجهاز والمنصات</th>
+                            <th>الحسابات المرتبطة</th>
+                            <th>الحالة والخطورة</th>
+                            <th>آخر IP</th>
+                            <th class="ap-cell-actions">إجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for udev in unified_devices %}
+                        <tr>
+                            <td>
+                                <code class="ap-ltr">{{ udev.hardware_id }}</code>
+                                <div class="ap-xs ap-subtle-text ap-mt-1">{{ udev.last_active_at|slice:":16"|default:"—" }}</div>
+                            </td>
+                            <td>
+                                <a href="{% url 'admin_panel:security_device_detail' udev.primary_device_id %}" class="ap-strong">
+                                    {{ udev.display_name }}
+                                </a>
+                                <div class="ap-xs ap-muted">{{ udev.os_summary }}</div>
+                                <div class="ap-flex ap-wrap ap-gap-1 ap-mt-1">
+                                    {% for pl in udev.platform_labels %}
+                                    <span class="ap-badge ap-badge-neutral">{{ pl }}</span>
+                                    {% endfor %}
+                                </div>
+                            </td>
+                            <td>
+                                <div class="ap-flex ap-wrap ap-gap-1">
+                                    {% for acc in udev.linked_accounts %}
+                                    <span class="ap-badge {% if acc.is_banned %}ap-badge-danger{% else %}ap-badge-neutral{% endif %}">
+                                        {{ acc.full_name }}
+                                    </span>
+                                    {% endfor %}
+                                </div>
+                            </td>
+                            <td>
+                                <div class="ap-flex ap-wrap ap-gap-1">
+                                    {% if udev.is_blocked %}
+                                    <span class="ap-badge ap-badge-danger"><span class="ap-dot"></span>محظور (تطبيق + متصفح)</span>
+                                    {% elif udev.trust_status == 'restricted' %}
+                                    <span class="ap-badge ap-badge-danger">{{ udev.trust_status }}</span>
+                                    {% elif udev.trust_status == 'suspicious' %}
+                                    <span class="ap-badge ap-badge-warning">{{ udev.trust_status }}</span>
+                                    {% else %}
+                                    <span class="ap-badge ap-badge-success">{{ udev.trust_status }}</span>
+                                    {% endif %}
+                                    {% if udev.is_maintenance_approved %}
+                                    <span class="ap-badge ap-badge-info">معتمد للصيانة</span>
+                                    {% endif %}
+                                </div>
+                                <div class="ap-xs ap-muted ap-mt-1">الخطورة: <strong>{{ udev.max_risk_score }}%</strong></div>
+                            </td>
+                            <td>
+                                <div class="ap-sm ap-ltr">{{ udev.last_ip|default:"—" }}</div>
+                                <div class="ap-xs ap-subtle-text">{{ udev.last_country }}</div>
+                            </td>
+                            <td class="ap-cell-actions">
+                                <div class="ap-inline-flex ap-items-center ap-gap-1">
+                                    <a href="{% url 'admin_panel:security_device_detail' udev.primary_device_id %}" class="ap-btn ap-btn-sm ap-btn-secondary">
+                                        <i class="bi bi-eye"></i> التفاصيل
+                                    </a>
+                                    <div class="ap-dropdown">
+                                        <button type="button" class="ap-icon-btn" data-dropdown-trigger aria-expanded="false">
+                                            <i class="bi bi-three-dots-vertical"></i>
+                                        </button>
+                                        <div class="ap-dropdown-menu">
+                                            <form method="POST" action="{% url 'admin_panel:security_admin_action' %}" data-ajax-form data-security-action="1">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="action" value="toggle_maintenance_device">
+                                                <input type="hidden" name="device_id" value="{{ udev.primary_device_id }}">
+                                                <input type="hidden" name="hardware_id" value="{{ udev.hardware_id }}">
+                                                <input type="hidden" name="installation_id" value="{{ udev.primary_installation_id }}">
+                                                <input type="hidden" name="approved" value="{% if udev.is_maintenance_approved %}0{% else %}1{% endif %}">
+                                                <button type="submit" class="ap-dropdown-item">
+                                                    <i class="bi bi-shield-{% if udev.is_maintenance_approved %}x{% else %}check{% endif %}"></i>
+                                                    {% if udev.is_maintenance_approved %}إلغاء اعتماد الصيانة{% else %}اعتماد للدخول في الصيانة{% endif %}
+                                                </button>
+                                            </form>
+                                            <div class="ap-dropdown-sep"></div>
+                                            <form method="POST" action="{% url 'admin_panel:security_admin_action' %}" data-ajax-form data-security-action="1">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="device_id" value="{{ udev.primary_device_id }}">
+                                                <input type="hidden" name="hardware_id" value="{{ udev.hardware_id }}">
+                                                <input type="hidden" name="installation_id" value="{{ udev.primary_installation_id }}">
+                                                {% if udev.is_blocked %}
+                                                <input type="hidden" name="action" value="unblock_device">
+                                                <button type="submit" class="ap-dropdown-item">
+                                                    <i class="bi bi-unlock"></i> فك حظر الجهاز
+                                                </button>
+                                                {% else %}
+                                                <input type="hidden" name="action" value="block_device">
+                                                <input type="hidden" name="block_type" value="permanent">
+                                                <input type="hidden" name="reason" value="حظر شامل للجهاز (تطبيق + متصفح)">
+                                                <button type="submit" class="ap-dropdown-item is-danger">
+                                                    <i class="bi bi-slash-circle"></i> حظر الجهاز نهائياً
+                                                </button>
+                                                {% endif %}
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6">
+                                <div class="ap-empty">
+                                    <i class="bi bi-phone"></i>
+                                    <p class="ap-empty-title">لا توجد أجهزة مطابقة للبحث</p>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════ 2. الأحداث والتهديدات ══════════ -->
+    <div class="ap-tab-panel" id="sec-tab-events" data-tab-group="security-sections">
+        <div class="ap-split-8-4">
+            <div class="ap-card">
+                <div class="ap-card-header">
+                    <h2 class="ap-card-title"><i class="bi bi-shield-exclamation"></i> أحداث الأمان والتهديدات</h2>
+                </div>
+                <div class="ap-table-wrap">
+                    <table class="ap-table">
+                        <thead>
+                            <tr>
+                                <th>النوع</th>
+                                <th>المستخدم</th>
+                                <th>الخطورة</th>
+                                <th>IP</th>
+                                <th>الحالة</th>
+                                <th class="ap-cell-actions">تحقيق</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for e in events %}
+                            <tr>
+                                <td>
+                                    <div class="ap-strong ap-sm">{{ e.event_type }}</div>
+                                    <div class="ap-xs ap-subtle-text">{{ e.action_taken }} · {{ e.created_at|date:"m-d H:i" }}</div>
+                                </td>
+                                <td class="ap-sm">{{ e.user.username|default:"—" }}</td>
+                                <td>
+                                    <span class="ap-badge {% if e.severity == 'critical' %}ap-badge-danger{% elif e.severity == 'high' %}ap-badge-warning{% elif e.severity == 'medium' %}ap-badge-info{% else %}ap-badge-neutral{% endif %}">
+                                        {{ e.severity|upper }} ({{ e.risk_score }})
+                                    </span>
+                                </td>
+                                <td class="ap-xs ap-ltr">{{ e.ip_address|default:"—" }} {{ e.country_code }}</td>
+                                <td><span class="ap-badge ap-badge-neutral">{{ e.investigation_status }}</span></td>
+                                <td class="ap-cell-actions">
+                                    <form method="POST" action="{% url 'admin_panel:security_admin_action' %}"
+                                          data-ajax-form data-security-action="1"
+                                          class="ap-inline-flex ap-gap-1">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="resolve_event">
+                                        <input type="hidden" name="event_id" value="{{ e.id }}">
+                                        <button type="submit" name="investigation_status" value="resolved" class="ap-btn ap-btn-sm ap-btn-success" title="تم الحل">
+                                            <i class="bi bi-check-lg"></i>
+                                        </button>
+                                        <button type="submit" name="investigation_status" value="false_positive" class="ap-btn ap-btn-sm ap-btn-secondary" title="إنذار كاذب واستعادة الثقة">
+                                            FP
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="6">
+                                    <div class="ap-empty">
+                                        <i class="bi bi-shield-check"></i>
+                                        <p class="ap-empty-title">لا توجد أحداث أمنية مسجّلة</p>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="ap-card">
+                <div class="ap-card-header">
+                    <h2 class="ap-card-title"><i class="bi bi-people"></i> تنبيهات مشاركة الحسابات</h2>
+                </div>
+                <div class="ap-card-body-flush">
+                    {% for s in sharing_alerts %}
+                    <div class="ap-timeline-item">
+                        <div class="ap-timeline-dot is-warning"></div>
+                        <div>
+                            <div class="ap-strong ap-sm">{{ s.user.username|default:"—" }} — <span class="ap-text-danger">{{ s.event_type }}</span></div>
+                            <div class="ap-xs ap-subtle-text ap-mt-1">{{ s.created_at|date:"Y-m-d H:i" }} · IP: {{ s.ip_address|default:"—" }}</div>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="ap-empty">
+                        <i class="bi bi-person-check"></i>
+                        <p class="ap-empty-title">لا توجد تنبيهات مشاركة حساب حالياً</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════ 3. الجلسات النشطة والحظر ══════════ -->
+    <div class="ap-tab-panel" id="sec-tab-sessions" data-tab-group="security-sections">
+        <div class="ap-split-8-4">
+            <div class="ap-card">
+                <div class="ap-card-header">
+                    <h2 class="ap-card-title"><i class="bi bi-broadcast"></i> الجلسات النشطة الحالية</h2>
+                </div>
+                <div class="ap-table-wrap">
+                    <table class="ap-table">
+                        <thead>
+                            <tr>
+                                <th>المستخدم</th>
+                                <th>الجهاز</th>
+                                <th>IP / الدولة</th>
+                                <th>VPN/Proxy</th>
+                                <th>آخر تواصل</th>
+                                <th class="ap-cell-actions">إجراء</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for sess in active_sessions %}
+                            <tr>
+                                <td class="ap-strong ap-sm">{{ sess.user.username }}</td>
+                                <td class="ap-sm">{{ sess.device.device_name|default:sess.installation_id|truncatechars:28 }}</td>
+                                <td class="ap-xs ap-ltr">{{ sess.ip_address|default:"—" }} ({{ sess.country_code|default:"—" }})</td>
+                                <td>
+                                    {% if sess.is_vpn_or_proxy %}
+                                    <span class="ap-badge ap-badge-warning">VPN/Proxy</span>
+                                    {% else %}—{% endif %}
+                                </td>
+                                <td class="ap-xs ap-muted">{{ sess.last_seen_at|date:"Y-m-d H:i" }}</td>
+                                <td class="ap-cell-actions">
+                                    <form method="POST" action="{% url 'admin_panel:security_admin_action' %}"
+                                          data-ajax-form data-security-action="1">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="revoke_session">
+                                        <input type="hidden" name="session_id" value="{{ sess.id }}">
+                                        <button type="submit" class="ap-btn ap-btn-sm ap-btn-danger-outline">إنهاء الجلسة</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="6">
+                                    <div class="ap-empty">
+                                        <i class="bi bi-broadcast"></i>
+                                        <p class="ap-empty-title">لا توجد جلسات نشطة حالياً</p>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="ap-card">
+                <div class="ap-card-header">
+                    <h2 class="ap-card-title"><i class="bi bi-slash-circle"></i> قائمة الحظر النشطة</h2>
+                </div>
+                <div class="ap-card-body">
+                    {% for b in active_blocks %}
+                    <div class="ap-subpanel ap-flex ap-items-center ap-justify-between ap-gap-2 ap-mb-2">
+                        <div style="min-width:0;">
+                            <div class="ap-strong ap-xs ap-ltr ap-truncate">{{ b.installation_id|truncatechars:24 }}</div>
+                            <div class="ap-xs ap-muted">{{ b.get_block_type_display }} — {{ b.reason }}</div>
+                        </div>
+                        <form method="POST" action="{% url 'admin_panel:security_admin_action' %}" data-ajax-form data-security-action="1">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="unblock_device">
+                            <input type="hidden" name="block_id" value="{{ b.id }}">
+                            <button type="submit" class="ap-btn ap-btn-sm ap-btn-success">فك</button>
+                        </form>
+                    </div>
+                    {% empty %}
+                    <div class="ap-empty" style="padding:24px 12px;">
+                        <i class="bi bi-unlock"></i>
+                        <p class="ap-empty-title">لا توجد أجهزة محظورة حالياً</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════ 4. تقارير الذكاء الاصطناعي ══════════ -->
+    <div class="ap-tab-panel" id="sec-tab-ai" data-tab-group="security-sections">
+        <div class="ap-card" id="ai-reports-section">
+            <div class="ap-card-header">
+                <h2 class="ap-card-title"><i class="bi bi-clipboard2-data"></i> تقارير الذكاء الاصطناعي وتحليل السلوك</h2>
+                <form method="POST" action="{% url 'admin_panel:security_admin_action' %}" data-ajax-form data-security-action="1">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="analyze_user_behavior">
+                    <button type="submit" class="ap-btn ap-btn-sm ap-btn-primary">
+                        <i class="bi bi-play-circle"></i> تشغيل الفحص الآن
+                    </button>
+                </form>
+            </div>
+            <div class="ap-table-wrap">
+                <table class="ap-table">
+                    <thead>
+                        <tr>
+                            <th>المستخدم</th>
+                            <th>درجة الخطورة</th>
+                            <th>مؤشرات السلوك</th>
+                            <th>توصية الذكاء الاصطناعي</th>
+                            <th class="ap-cell-actions">إجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in risk_profiles %}
+                        <tr>
+                            <td>
+                                <div class="ap-strong ap-sm">{{ p.user.get_full_name|default:p.user.email|default:p.user.username }}</div>
+                                <div class="ap-xs ap-subtle-text ap-ltr">{{ p.user.email }} · IP: {{ p.last_ip|default:"-" }}</div>
+                                {% if p.user.is_banned %}
+                                <span class="ap-badge ap-badge-danger ap-mt-1">الحساب محظور</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="ap-badge {% if p.behavior_risk_level == 'critical' %}ap-badge-danger{% elif p.behavior_risk_level == 'high' %}ap-badge-warning{% elif p.behavior_risk_level == 'medium' %}ap-badge-info{% else %}ap-badge-success{% endif %}">
+                                    {{ p.behavior_risk_score }}% ({{ p.behavior_risk_level|upper }})
+                                </span>
+                                <div class="ap-xs ap-subtle-text ap-mt-1">AI: {{ p.ai_risk_score }}%</div>
+                            </td>
+                            <td class="ap-xs">
+                                <div>إجراءات: <strong>{{ p.total_actions_count }}</strong></div>
+                                <div>فاشل: <strong>{{ p.total_failed_logins }}</strong> · عبث: <strong class="ap-text-danger">{{ p.proxy_tamper_strikes }}</strong> · مشاركة: <strong class="ap-text-warning">{{ p.sharing_strikes }}</strong></div>
+                            </td>
+                            <td style="min-width:240px;">
+                                <div class="ap-xs ap-strong">
+                                    التوصية:
+                                    {% if p.ai_recommended_action == 'device_and_user' %}
+                                    <span class="ap-text-danger">حظر الجهاز والحساب معاً</span>
+                                    {% elif p.ai_recommended_action == 'device_only' %}
+                                    <span class="ap-text-danger">حظر الجهاز فقط</span>
+                                    {% elif p.ai_recommended_action == 'user_only' %}
+                                    <span class="ap-text-danger">حظر الحساب فقط</span>
+                                    {% elif p.ai_recommended_action == 'warn' %}
+                                    <span class="ap-text-warning">مراقبة وتحذير</span>
+                                    {% else %}
+                                    <span class="ap-text-success">سلوك طبيعي</span>
+                                    {% endif %}
+                                </div>
+                                <div class="ap-xs ap-muted ap-mt-1">{{ p.ai_analysis_summary|default:"لم يصدر تقرير AI بعد — اضغط فحص AI." }}</div>
+                                <div class="ap-xs ap-subtle-text ap-mt-1">آخر تحليل: {{ p.ai_last_analyzed_at|date:"Y-m-d H:i"|default:"—" }}</div>
+                            </td>
+                            <td class="ap-cell-actions">
+                                <div class="ap-inline-flex ap-items-center ap-gap-1">
+                                    <form method="POST" action="{% url 'admin_panel:security_admin_action' %}" data-ajax-form data-security-action="1">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="analyze_user_behavior">
+                                        <input type="hidden" name="user_id" value="{{ p.user.id }}">
+                                        <button type="submit" class="ap-btn ap-btn-sm ap-btn-secondary" title="فحص هذا المستخدم بالذكاء الاصطناعي">
+                                            <i class="bi bi-cpu"></i> فحص
+                                        </button>
+                                    </form>
+                                    <div class="ap-dropdown">
+                                        <button type="button" class="ap-icon-btn" data-dropdown-trigger aria-expanded="false">
+                                            <i class="bi bi-three-dots-vertical"></i>
+                                        </button>
+                                        <div class="ap-dropdown-menu">
+                                            <form method="POST" action="{% url 'admin_panel:security_admin_action' %}" data-ajax-form data-security-action="1">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="action" value="ban_device_only">
+                                                <input type="hidden" name="user_id" value="{{ p.user.id }}">
+                                                <button type="submit" class="ap-dropdown-item">حظر الجهاز فقط</button>
+                                            </form>
+                                            <form method="POST" action="{% url 'admin_panel:security_admin_action' %}" data-ajax-form data-security-action="1">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="action" value="ban_user_only">
+                                                <input type="hidden" name="user_id" value="{{ p.user.id }}">
+                                                <button type="submit" class="ap-dropdown-item is-danger">حظر الحساب فقط</button>
+                                            </form>
+                                            <form method="POST" action="{% url 'admin_panel:security_admin_action' %}" data-ajax-form data-security-action="1">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="action" value="ban_user_and_device">
+                                                <input type="hidden" name="user_id" value="{{ p.user.id }}">
+                                                <button type="submit" class="ap-dropdown-item is-danger">حظر الحساب والجهاز</button>
+                                            </form>
+                                            {% if p.user.is_banned or p.auto_ban_mode != 'none' %}
+                                            <div class="ap-dropdown-sep"></div>
+                                            <form method="POST" action="{% url 'admin_panel:security_admin_action' %}" data-ajax-form data-security-action="1">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="action" value="unban_user_and_devices">
+                                                <input type="hidden" name="user_id" value="{{ p.user.id }}">
+                                                <button type="submit" class="ap-dropdown-item">فك الحظر عن الاثنين</button>
+                                            </form>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5">
+                                <div class="ap-empty">
+                                    <i class="bi bi-cpu"></i>
+                                    <p class="ap-empty-title">لا توجد تقارير سلوكية بعد</p>
+                                    <p class="ap-empty-sub">اضغط «تشغيل الفحص الآن» لتحليل المستخدمين وإصدار التقارير فوراً.</p>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════ 5. السياسات وإعدادات الذكاء الاصطناعي ══════════ -->
+    <div class="ap-tab-panel" id="sec-tab-policies" data-tab-group="security-sections">
+        <div class="ap-grid-2">
+            <!-- سياسات الحدود والحماية -->
+            <div class="ap-card">
+                <div class="ap-card-header">
+                    <h2 class="ap-card-title"><i class="bi bi-sliders"></i> حدود الأجهزة وسياسات الحماية</h2>
+                </div>
+                <form method="POST" action="{% url 'admin_panel:security_admin_action' %}" data-ajax-form data-security-action="1" class="ap-card-body">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="update_policy">
+                    <div class="ap-form-grid">
+                        <div class="ap-field">
+                            <label class="ap-label">حد أجهزة الطالب</label>
+                            <input type="number" min="1" name="student_device_limit" value="{{ policy.student_device_limit }}" class="ap-input">
+                        </div>
+                        <div class="ap-field">
+                            <label class="ap-label">حد أجهزة المعلم</label>
+                            <input type="number" min="1" name="teacher_device_limit" value="{{ policy.teacher_device_limit }}" class="ap-input">
+                        </div>
+                        <div class="ap-field">
+                            <label class="ap-label">حد الجلسات المتزامنة</label>
+                            <input type="number" min="1" name="max_concurrent_sessions" value="{{ policy.max_concurrent_sessions }}" class="ap-input">
+                        </div>
+                        <div class="ap-field">
+                            <label class="ap-label">حد التشغيل المتزامن</label>
+                            <input type="number" min="1" name="max_concurrent_playback" value="{{ policy.max_concurrent_playback }}" class="ap-input">
+                        </div>
+                        <div class="ap-field">
+                            <label class="ap-label">عتبة الخطر العالي</label>
+                            <input type="number" min="1" name="risk_threshold_high" value="{{ policy.risk_threshold_high }}" class="ap-input">
+                        </div>
+                        <div class="ap-field">
+                            <label class="ap-label">أيام الاحتفاظ بالسجل</label>
+                            <input type="number" min="7" name="event_retention_days" value="{{ policy.event_retention_days }}" class="ap-input">
+                        </div>
+                    </div>
+
+                    <div class="ap-flex ap-mt-4 ap-gap-2" style="flex-direction:column;">
+                        <label class="ap-switch-row" for="enforceLimit">
+                            <span class="ap-switch-label">فرض حد الأجهزة</span>
+                            <input class="ap-switch" type="checkbox" id="enforceLimit" name="enforce_device_limits" {% if policy.enforce_device_limits %}checked{% endif %}>
+                        </label>
+                        <label class="ap-switch-row" for="enforceScreen">
+                            <span class="ap-switch-label">حماية الشاشة ومنع الالتقاط</span>
+                            <input class="ap-switch" type="checkbox" id="enforceScreen" name="enforce_screen_capture_policy" {% if policy.enforce_screen_capture_policy %}checked{% endif %}>
+                        </label>
+                        <label class="ap-switch-row" for="blockVpn">
+                            <span class="ap-switch-label">منع الدخول بـ VPN / Proxy</span>
+                            <input class="ap-switch" type="checkbox" id="blockVpn" name="block_vpn_connections" {% if policy.block_vpn_connections %}checked{% endif %}>
+                        </label>
+                        <label class="ap-switch-row" for="blockDev">
+                            <span class="ap-switch-label">منع خيارات المطور (Developer Options)</span>
+                            <input class="ap-switch" type="checkbox" id="blockDev" name="block_developer_options" {% if policy.block_developer_options %}checked{% endif %}>
+                        </label>
+                        <label class="ap-switch-row" for="blockDnsPort">
+                            <span class="ap-switch-label">منع توجيه البورتات و DNS غير الطبيعي</span>
+                            <input class="ap-switch" type="checkbox" id="blockDnsPort" name="block_abnormal_dns_or_ports" {% if policy.block_abnormal_dns_or_ports %}checked{% endif %}>
+                        </label>
+                    </div>
+
+                    <div class="ap-flex ap-justify-end ap-mt-4">
+                        <button type="submit" class="ap-btn ap-btn-primary">
+                            <i class="bi bi-check2-circle"></i> حفظ السياسة الأمنية
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- إعدادات محلل الذكاء الاصطناعي -->
+            <div class="ap-card">
+                <div class="ap-card-header">
+                    <h2 class="ap-card-title"><i class="bi bi-cpu"></i> إعدادات محلل الذكاء الاصطناعي الأمني</h2>
+                    {% if ai_config.enabled and ai_config.configured %}
+                    <span class="ap-badge ap-badge-success">مفعّل ({{ ai_config.provider|upper }} / {{ ai_config.model }})</span>
+                    {% elif ai_config.enabled %}
+                    <span class="ap-badge ap-badge-warning">يعمل محلياً — أضف API Key</span>
+                    {% else %}
+                    <span class="ap-badge ap-badge-neutral">معطّل</span>
+                    {% endif %}
+                </div>
+                <form method="POST" action="{% url 'admin_panel:security_admin_action' %}" data-ajax-form data-security-action="1" class="ap-card-body">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="update_ai_config">
+
+                    <div class="ap-subpanel ap-mb-4 ap-xs">
+                        <div>آخر فحص آلي: <strong>{{ policy.last_ai_audit_at|date:"Y-m-d H:i"|default:"لم يتم التشغيل بعد" }}</strong></div>
+                        <div class="ap-mt-1">فحص: <strong>{{ ai_summary.analyzed_users|default:0 }}</strong> · عالي الخطورة: <strong>{{ ai_summary.flagged_high_risk|default:0 }}</strong> · حظر: <strong>{{ ai_summary.banned_users|default:0 }}</strong> حساب / <strong>{{ ai_summary.banned_devices|default:0 }}</strong> جهاز</div>
+                        {% if ai_config.masked_key %}
+                        <div class="ap-mt-1">المفتاح المحفوظ: <code class="ap-ltr">{{ ai_config.masked_key }}</code></div>
+                        {% endif %}
+                    </div>
+
+                    <div class="ap-form-grid">
+                        <div class="ap-field">
+                            <label class="ap-label">مزود الذكاء الاصطناعي</label>
+                            <select name="ai_provider" class="ap-select">
+                                <option value="auto" {% if policy.ai_provider == 'auto' %}selected{% endif %}>كشف تلقائي (Auto)</option>
+                                <option value="gemini" {% if policy.ai_provider == 'gemini' %}selected{% endif %}>Google Gemini</option>
+                                <option value="openai" {% if policy.ai_provider == 'openai' %}selected{% endif %}>OpenAI</option>
+                                <option value="groq" {% if policy.ai_provider == 'groq' %}selected{% endif %}>Groq</option>
+                                <option value="deepseek" {% if policy.ai_provider == 'deepseek' %}selected{% endif %}>DeepSeek</option>
+                            </select>
+                        </div>
+                        <div class="ap-field">
+                            <label class="ap-label">اسم الموديل</label>
+                            <input type="text" name="ai_model_name" dir="ltr" value="{{ policy.ai_model_name|default:'gemini-2.5-flash' }}" class="ap-input">
+                        </div>
+                        <div class="ap-field ap-col-full">
+                            <label class="ap-label">مفتاح AI API (اختياري — يقرأ .env تلقائياً)</label>
+                            <input type="password" name="ai_api_key_override" dir="ltr" class="ap-input" placeholder="اتركه فارغاً لاستخدام المفتاح الحالي">
+                            {% if policy.ai_api_key_override %}
+                            <label class="ap-flex ap-items-center ap-gap-2 ap-mt-1 ap-xs ap-text-danger">
+                                <input type="checkbox" name="clear_ai_key" value="1"> مسح المفتاح المخصص
+                            </label>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="ap-flex ap-mt-4 ap-gap-2" style="flex-direction:column;">
+                        <label class="ap-switch-row" for="aiEnabledSwitch">
+                            <span class="ap-switch-label">تفعيل محلل الذكاء الاصطناعي</span>
+                            <input class="ap-switch" type="checkbox" id="aiEnabledSwitch" name="ai_security_enabled" {% if policy.ai_security_enabled %}checked{% endif %}>
+                        </label>
+                        <label class="ap-switch-row" for="aiHourlySwitch">
+                            <span class="ap-switch-label">فحص دوري تلقائي كل ساعة</span>
+                            <input class="ap-switch" type="checkbox" id="aiHourlySwitch" name="ai_hourly_schedule_enabled" {% if policy.ai_hourly_schedule_enabled %}checked{% endif %}>
+                        </label>
+                        <label class="ap-switch-row" for="aiAutoBanSwitch">
+                            <span class="ap-switch-label">تنفيذ الحظر التلقائي عند الخطورة الحرجة</span>
+                            <input class="ap-switch" type="checkbox" id="aiAutoBanSwitch" name="ai_auto_enforce_bans" {% if policy.ai_auto_enforce_bans %}checked{% endif %}>
+                        </label>
+                    </div>
+
+                    <div class="ap-flex ap-justify-end ap-mt-4">
+                        <button type="submit" class="ap-btn ap-btn-primary">
+                            <i class="bi bi-save"></i> حفظ إعدادات AI
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

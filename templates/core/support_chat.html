@@ -1,0 +1,145 @@
+{% extends 'base.html' %}
+{% load i18n %}
+{% block title %}محادثة الدعم الفني المباشرة{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-0 rounded-4 overflow-hidden">
+                <div class="card-header d-flex justify-content-between align-items-center py-3 px-4"
+                     style="background: linear-gradient(135deg, #6b1d2f, #4c1120); color: #fff;">
+                    <div>
+                        <h5 class="mb-0 fw-bold">
+                            <i class="bi bi-chat-dots-fill me-2"></i>
+                            {% if acting_as_admin %}
+                                محادثة دعم: {{ thread.user.get_full_name|default:thread.user.email }}
+                            {% else %}
+                                الدعم الفني المباشر — منصة تعلّم
+                            {% endif %}
+                        </h5>
+                        <small class="opacity-75">
+                            {% if thread.status == 'closed' %}تم إغلاق المحادثة — أرسل رسالة لإعادة فتحها{% else %}متصل للرد الفوري{% endif %}
+                        </small>
+                    </div>
+                    <span class="badge bg-light text-dark rounded-pill px-3 py-2">#{{ thread.id }}</span>
+                </div>
+
+                <div id="chatBox" class="p-3 p-md-4" style="height: 440px; overflow-y: auto; background: #f5f2f4;">
+                    {% for m in chat_messages %}
+                        <div class="d-flex mb-3 {% if acting_as_admin and m.is_from_admin or not acting_as_admin and not m.is_from_admin %}justify-content-end{% else %}justify-content-start{% endif %}" data-msg-id="{{ m.id }}">
+                            <div class="p-3 rounded-4 shadow-sm" style="max-width: 78%; {% if acting_as_admin and m.is_from_admin or not acting_as_admin and not m.is_from_admin %}background: #6b1d2f; color: #fff;{% else %}background: #ffffff; color: #222; border: 1px solid #e7dfe3;{% endif %}">
+                                <div class="small fw-bold mb-1 opacity-75">
+                                    {% if m.is_from_admin %}الدعم الفني{% else %}{{ m.sender.get_full_name|default:m.sender.email }}{% endif %}
+                                    {% if m.via_notification_reply %}<span class="badge bg-warning text-dark ms-1">رد من الإشعارات</span>{% endif %}
+                                </div>
+                                <div style="white-space: pre-wrap;">{{ m.body }}</div>
+                                <div class="text-end mt-1" style="font-size: 0.72rem; opacity: 0.7;">{{ m.created_at|date:"Y-m-d H:i" }}</div>
+                            </div>
+                        </div>
+                    {% empty %}
+                        <div id="emptyChatHint" class="text-center text-muted py-5">
+                            <i class="bi bi-chat-heart display-4 d-block mb-2 opacity-50"></i>
+                            <p class="mb-0 fw-bold">أهلاً بك في الدعم الفني! اكتب رسالتك وسيرد عليك فريق الإدارة فوراً.</p>
+                        </div>
+                    {% endfor %}
+                </div>
+
+                <form id="supportChatForm" method="POST" class="p-3 bg-white border-top d-flex gap-2">
+                    {% csrf_token %}
+                    <input type="text" id="chatInput" name="body" class="form-control rounded-pill px-3"
+                           placeholder="اكتب رسالتك هنا..." maxlength="4000" required autocomplete="off">
+                    <button type="submit" class="btn btn-primary rounded-pill px-4 fw-bold" style="background: #6b1d2f; border-color: #6b1d2f;">
+                        إرسال <i class="bi bi-send-fill ms-1"></i>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    const chatBox = document.getElementById('chatBox');
+    const form = document.getElementById('supportChatForm');
+    const input = document.getElementById('chatInput');
+    const actingAsAdmin = {{ acting_as_admin|yesno:"true,false" }};
+    let lastId = {{ last_msg_id|default:0 }};
+
+    function scrollBottom() {
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+    scrollBottom();
+
+    function appendBubble(m) {
+        if (document.querySelector('[data-msg-id="' + m.id + '"]')) return;
+        const empty = document.getElementById('emptyChatHint');
+        if (empty) empty.remove();
+        const isMine = actingAsAdmin ? !!m.is_from_admin : !m.is_from_admin;
+        const wrap = document.createElement('div');
+        wrap.className = 'd-flex mb-3 ' + (isMine ? 'justify-content-end' : 'justify-content-start');
+        wrap.setAttribute('data-msg-id', m.id);
+
+        const bubble = document.createElement('div');
+        bubble.className = 'p-3 rounded-4 shadow-sm';
+        bubble.style.maxWidth = '78%';
+        bubble.style.background = isMine ? '#6b1d2f' : '#ffffff';
+        bubble.style.color = isMine ? '#fff' : '#222';
+        if (!isMine) bubble.style.border = '1px solid #e7dfe3';
+
+        const header = document.createElement('div');
+        header.className = 'small fw-bold mb-1 opacity-75';
+        header.textContent = m.is_from_admin ? 'الدعم الفني' : (m.sender_name || 'مستخدم');
+        if (m.via_notification_reply) {
+            const b = document.createElement('span');
+            b.className = 'badge bg-warning text-dark ms-1';
+            b.textContent = 'رد من الإشعارات';
+            header.appendChild(b);
+        }
+
+        const body = document.createElement('div');
+        body.style.whiteSpace = 'pre-wrap';
+        body.textContent = m.body || '';
+
+        bubble.appendChild(header);
+        bubble.appendChild(body);
+        wrap.appendChild(bubble);
+        chatBox.appendChild(wrap);
+        if (m.id > lastId) lastId = m.id;
+        scrollBottom();
+    }
+
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const text = (input.value || '').trim();
+        if (!text) return;
+        const csrf = form.querySelector('input[name="csrfmiddlewaretoken"]').value;
+        input.value = '';
+        try {
+            const resp = await fetch(window.location.href, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': csrf,
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: new URLSearchParams({ body: text })
+            });
+            const data = await resp.json();
+            if (data && data.message) appendBubble(data.message);
+        } catch (err) {}
+    });
+
+    setInterval(async function() {
+        try {
+            const sep = window.location.search ? '&' : '?';
+            const resp = await fetch(window.location.pathname + window.location.search + sep + 'poll=1&after_id=' + lastId);
+            const data = await resp.json();
+            if (data && Array.isArray(data.messages)) {
+                data.messages.forEach(appendBubble);
+            }
+        } catch (err) {}
+    }, 5000);
+})();
+</script>
+{% endblock %}

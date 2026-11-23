@@ -1,62 +1,51 @@
 {% extends 'admin_panel/base_admin.html' %}
 {% load i18n %}
+
 {% block page_title %}التقارير المالية{% endblock %}
+{% block body_page %}finance{% endblock %}
 {% block nav_finance %}active{% endblock %}
 {% block breadcrumb %}<span class="sep">/</span><span class="current">التقارير المالية</span>{% endblock %}
 
 {% block content %}
-<div class="page-header d-flex align-items-center justify-content-between">
+<div class="ap-page-header">
     <div>
-        <h1><i class="bi bi-cash-stack me-2" style="color:var(--admin-accent);"></i>التقارير المالية</h1>
-        <p>إجمالي الإيرادات من اشتراكات المعلمين</p>
+        <h1 class="ap-page-title"><i class="bi bi-bar-chart-line"></i> التقارير المالية</h1>
+        <p class="ap-page-subtitle">سجل الإيرادات ومعاملات اشتراكات المعلمين</p>
     </div>
-    <div class="stat-card text-center" style="min-width:180px;">
-        <div class="stat-icon mx-auto" style="background:#e8fdf4; color:#0f9b58;">
-            <i class="bi bi-currency-dollar"></i>
+
+    <div class="ap-stat" style="min-width:220px;">
+        <div class="ap-stat-top">
+            <span class="ap-stat-label">إجمالي الإيرادات (EGP)</span>
+            <span class="ap-stat-icon"><i class="bi bi-currency-dollar"></i></span>
         </div>
-        <div class="stat-number" style="color:var(--admin-success);">{{ total_revenue }}</div>
-        <div class="stat-label">إجمالي الإيرادات (EGP)</div>
+        <div class="ap-stat-value ap-text-success" id="financeTotalRevenueValue">{{ total_revenue }}</div>
     </div>
 </div>
 
-<div class="admin-card">
-    <div class="admin-card-header">
-        <span class="admin-card-title"><i class="bi bi-receipt me-2"></i>سجل المعاملات</span>
-        <form method="GET" class="admin-search" style="width:auto;">
-            <i class="bi bi-search text-muted"></i>
-            <input type="text" name="q" placeholder="بحث..." value="{{ query|default:'' }}">
-            <button type="submit">بحث</button>
-            {% if query %}<a href="{% url 'admin_panel:finance_report' %}" class="btn btn-sm btn-light">✕</a>{% endif %}
+<div class="ap-card">
+    <div class="ap-toolbar">
+        <div class="ap-flex ap-items-center ap-gap-2">
+            <span class="ap-strong ap-sm">سجل المعاملات</span>
+            <span class="ap-badge ap-badge-neutral" id="financeTransactionsCount">{{ transactions|length }} معاملة</span>
+        </div>
+        <form method="GET" action="{% url 'admin_panel:finance_report' %}"
+              data-live-filter-form data-filter-target="#financeTableContainer"
+              class="ap-flex ap-items-center ap-gap-2">
+            <div class="ap-search-box">
+                <i class="bi bi-search"></i>
+                <input type="text" name="q" class="ap-search-input"
+                       placeholder="ابحث باسم المعلم، الهاتف، أو رقم المعاملة..." value="{{ query|default:'' }}">
+                {% if query %}
+                <button type="button" class="ap-search-clear" data-filter-reset title="مسح">
+                    <i class="bi bi-x"></i>
+                </button>
+                {% endif %}
+            </div>
+            <button type="submit" class="ap-btn ap-btn-secondary ap-btn-sm">بحث</button>
         </form>
     </div>
-    <div class="table-responsive">
-        <table class="admin-table">
-            <thead>
-                <tr>
-                    <th>#</th>
-                    <th>المعلم</th>
-                    <th>رقم المعاملة</th>
-                    <th>المبلغ</th>
-                    <th>التاريخ</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for t in transactions %}
-                <tr>
-                    <td class="text-muted" style="font-size:0.8rem;">{{ forloop.counter }}</td>
-                    <td>
-                        <div class="fw-bold" style="font-size:0.875rem;">{{ t.teacher.user.get_full_name }}</div>
-                        <div class="text-muted" style="font-size:0.75rem; direction:ltr;">{{ t.teacher.user.phone }}</div>
-                    </td>
-                    <td><code style="font-size:0.8rem;">{{ t.transaction_id }}</code></td>
-                    <td class="fw-bold" style="color:var(--admin-success);">{{ t.amount }} EGP</td>
-                    <td class="text-muted" style="font-size:0.85rem;">{{ t.date|date:"j M Y · H:i" }}</td>
-                </tr>
-                {% empty %}
-                <tr><td colspan="5"><div class="empty-state"><i class="bi bi-receipt-cutoff"></i>لا توجد معاملات</div></td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    <div id="financeTableContainer">
+        {% include 'admin_panel/partials/_finance_table.html' %}
     </div>
 </div>
 {% endblock %}

@@ -15,17 +15,20 @@ from dashboard_admin.models import AuditLog
 from dashboard_admin.decorators import moderator_required
 from django.urls import reverse
 
+from django.template.loader import render_to_string
+
 from dashboard_admin.views.base import _base_context
+from dashboard_admin.views.ajax import (
+    ajax_error,
+    ajax_success,
+    is_ajax_request,
+)
 
 User = get_user_model()
 
 
-# ==========================================================
-# 10. مركز أمان الأجهزة ومكافحة الحسابات المشتركة والعبث
-# ==========================================================
-@moderator_required
-def security_dashboard(request):
-    """لوحة مراقبة الأجهزة، المخاطر السلوكية، الحظر، والجلسات النشطة."""
+def _build_security_dashboard_context(request):
+    """تجميع بيانات مركز الأمان للعرض الكامل وتحديثات AJAX الجزئية."""
     import ipaddress
     from api_v1.models import (
         DeviceBlock,
@@ -148,6 +151,30 @@ def security_dashboard(request):
             'high_risk_users': high_risk_users_count,
         },
     })
+    return ctx
+
+
+# ==========================================================
+# 10. مركز أمان الأجهزة ومكافحة الحسابات المشتركة والعبث
+# ==========================================================
+@moderator_required
+def security_dashboard(request):
+    """لوحة مراقبة الأجهزة، المخاطر السلوكية، الحظر، والجلسات النشطة."""
+    ctx = _build_security_dashboard_context(request)
+    if is_ajax_request(request) and request.GET.get('partial') == '1':
+        html = render_to_string('admin_panel/partials/_security_panels.html', ctx, request=request)
+        return ajax_success(
+            data={
+                'html': html,
+                'stats': ctx['stats'],
+                'counts': {
+                    'unified_devices': len(ctx['unified_devices']),
+                    'events': len(ctx['events']),
+                    'active_sessions': len(ctx['active_sessions']),
+                    'risk_profiles': len(ctx['risk_profiles']),
+                },
+            }
+        )
     return render(request, 'admin_panel/security_dashboard.html', ctx)
 
 
@@ -176,6 +203,8 @@ def security_device_detail(request, device_id):
 def security_admin_action(request):
     """تنفيذ إجراءات الأمان الإدارية من لوحة التحكم (حظر، فك حظر، إبطال جلسة، سياسات، تحقيق)."""
     if request.method != 'POST':
+        if is_ajax_request(request):
+            return ajax_error("طريقة الطلب غير مدعومة.", status=405)
         return redirect('admin_panel:security_dashboard')
 
     from api_v1.device_security_service import (
@@ -206,6 +235,23 @@ def security_admin_action(request):
         next_url = raw_next
     else:
         next_url = reverse('admin_panel:security_dashboard')
+
+    def _finish(ok, msg, extra=None, status=200):
+        if is_ajax_request(request):
+            payload = {'action': action}
+            if extra:
+                payload.update(extra)
+            if ok:
+                return ajax_success(msg, data=payload, status=status)
+            return ajax_error(msg, status=status or 400, data=payload)
+        if ok:
+            messages.success(request, msg)
+        else:
+            messages.error(request, msg)
+        return redirect(next_url)
+
+    def _is_checked(field_name):
+        return request.POST.get(field_name) in ('on', '1', 'true', 'yes')
 
     if action == 'block_device':
         device_id = request.POST.get('device_id')
@@ -238,9 +284,12 @@ def security_admin_action(request):
                 target_id=device.id if device else None,
                 details={'block_type': block_type, 'hardware_id': hw_id or blk.fingerprint_hash, 'reason': reason, 'duration_hours': duration_hours},
             )
-            messages.success(request, f"تم حظر الجهاز ({hw_id or blk.fingerprint_hash or blk.installation_id}) على التطبيق والمتصفح وإبطال جلساته.")
-        else:
-            messages.error(request, "تعذر العثور على الجهاز المطلوب حظره.")
+            return _finish(
+                True,
+                f"تم حظر الجهاز ({hw_id or blk.fingerprint_hash or blk.installation_id}) على التطبيق والمتصفح وإبطال جلساته.",
+                extra={'is_blocked': True, 'hardware_id': hw_id},
+            )
+        return _finish(False, "تعذر العثور على الجهاز المطلوب حظره.", status=404)
 
     elif action == 'unblock_device':
         block_id = request.POST.get('block_id')
@@ -271,9 +320,12 @@ def security_admin_action(request):
                 target_id=device.id if device else None,
                 details={'unblocked_count': count, 'hardware_id': hw_id, 'reason': reason},
             )
-            messages.success(request, "تم فك حظر الجهاز (التطبيق والمتصفح) بنجاح.")
-        else:
-            messages.error(request, "بيانات الجهاز غير كافية لفك الحظر.")
+            return _finish(
+                True,
+                "تم فك حظر الجهاز (التطبيق والمتصفح) بنجاح.",
+                extra={'is_blocked': False, 'unblocked_count': count, 'hardware_id': hw_id},
+            )
+        return _finish(False, "بيانات الجهاز غير كافية لفك الحظر.", status=400)
 
     elif action == 'revoke_device':
         device = get_object_or_404(RegisteredDevice, id=request.POST.get('device_id'))
@@ -291,7 +343,7 @@ def security_admin_action(request):
             target_id=device.id,
             details={'action': 'revoke_device'},
         )
-        messages.success(request, "تم إلغاء تفويض الجهاز وإنهاء جلساته.")
+        return _finish(True, "تم إلغاء تفويض الجهاز وإنهاء جلساته.", extra={'device_id': device.id})
 
     elif action == 'force_reauth':
         device = get_object_or_404(RegisteredDevice, id=request.POST.get('device_id'))
@@ -304,7 +356,11 @@ def security_admin_action(request):
             ended_at=timezone.now(),
             revoked_reason='force_reauth_admin_panel',
         )
-        messages.info(request, "تم إلزام الجهاز بإعادة التحقق.")
+        msg = "تم إلزام الجهاز بإعادة التحقق."
+        if is_ajax_request(request):
+            return ajax_success(msg, data={'action': action, 'device_id': device.id, 'trust_status': device.trust_status})
+        messages.info(request, msg)
+        return redirect(next_url)
 
     elif action == 'revoke_session':
         sess = get_object_or_404(DeviceSession, id=request.POST.get('session_id'))
@@ -319,7 +375,7 @@ def security_admin_action(request):
             target_id=sess.user_id,
             details={'installation_id': sess.installation_id},
         )
-        messages.success(request, "تم إنهاء الجلسة بنجاح.")
+        return _finish(True, "تم إنهاء الجلسة بنجاح.", extra={'session_id': sess.id})
 
     elif action == 'revoke_all_user_sessions':
         target_user = get_object_or_404(User, id=request.POST.get('user_id'))
@@ -333,7 +389,11 @@ def security_admin_action(request):
             status='revoked',
             revoked_reason='revoked_all_admin_panel',
         )
-        messages.success(request, f"تم إنهاء جميع الجلسات النشطة للمستخدم {target_user.username}.")
+        return _finish(
+            True,
+            f"تم إنهاء جميع الجلسات النشطة للمستخدم {target_user.username}.",
+            extra={'user_id': target_user.id},
+        )
 
     elif action == 'resolve_event':
         evt = get_object_or_404(DeviceSecurityEvent, id=request.POST.get('event_id'))
@@ -353,7 +413,12 @@ def security_admin_action(request):
                 dev.risk_score = max(dev.risk_score - 40, 0)
                 dev.risk_level = 'low' if dev.risk_score < 30 else 'medium'
                 dev.save(update_fields=['trust_status', 'requires_reauth', 'risk_score', 'risk_level'])
-            messages.success(request, "تم تحديث حالة الحدث الأمني.")
+            return _finish(
+                True,
+                "تم تحديث حالة الحدث الأمني.",
+                extra={'event_id': evt.id, 'investigation_status': inv_status},
+            )
+        return _finish(False, "حالة التحقيق غير صالحة.", status=400)
 
     elif action == 'update_policy':
         policy = SecurityPolicyConfig.load()
@@ -373,12 +438,12 @@ def security_admin_action(request):
             raw_v = request.POST.get(field)
             if raw_v is not None and str(raw_v).isdigit():
                 setattr(policy, field, max(int(raw_v), 1))
-        policy.enforce_device_limits = request.POST.get('enforce_device_limits') == 'on'
-        policy.enforce_screen_capture_policy = request.POST.get('enforce_screen_capture_policy') == 'on'
+        policy.enforce_device_limits = _is_checked('enforce_device_limits')
+        policy.enforce_screen_capture_policy = _is_checked('enforce_screen_capture_policy')
         policy.set_boot_guard_flags(
-            block_vpn=request.POST.get('block_vpn_connections') == 'on',
-            block_dev_options=request.POST.get('block_developer_options') == 'on',
-            block_abnormal_net=request.POST.get('block_abnormal_dns_or_ports') == 'on',
+            block_vpn=_is_checked('block_vpn_connections'),
+            block_dev_options=_is_checked('block_developer_options'),
+            block_abnormal_net=_is_checked('block_abnormal_dns_or_ports'),
         )
         policy.save()
         AuditLog.log(
@@ -388,7 +453,7 @@ def security_admin_action(request):
             target_id=policy.id,
             details={'student_device_limit': policy.student_device_limit},
         )
-        messages.success(request, "تم حفظ إعدادات سياسة الأمان وحدود الأجهزة.")
+        return _finish(True, "تم حفظ إعدادات سياسة الأمان وحدود الأجهزة.")
 
     elif action == 'toggle_maintenance_device':
         hw_id = (request.POST.get('hardware_id') or '').strip()
@@ -406,32 +471,32 @@ def security_admin_action(request):
                 hw_id = get_device_hardware_id(dev)
         target_ident = hw_id or inst_id
         if not target_ident:
-            messages.error(request, "يجب تحديد معرّف الجهاز المادي DEV-XXXX.")
+            return _finish(False, "يجب تحديد معرّف الجهاز المادي DEV-XXXX.", status=400)
+        policy = SecurityPolicyConfig.load()
+        raw_approved = request.POST.get('approved')
+        if raw_approved is not None:
+            approved = str(raw_approved).lower() in ('1', 'true', 'yes', 'on')
         else:
-            policy = SecurityPolicyConfig.load()
-            raw_approved = request.POST.get('approved')
-            if raw_approved is not None:
-                approved = str(raw_approved).lower() in ('1', 'true', 'yes', 'on')
-            else:
-                approved = not policy.is_device_maintenance_approved(target_ident)
-            policy.set_device_maintenance_approval(target_ident, approved=approved)
-            policy.save()
-            AuditLog.log(
-                request,
-                AuditLog.ACTION_SECURITY_POLICY,
-                target_label=target_ident,
-                details={'action': 'toggle_maintenance_device', 'approved': approved},
-            )
-            messages.success(
-                request,
-                f"تم {'اعتماد' if approved else 'إلغاء اعتماد'} الجهاز ({target_ident}) لظهور زر دخول الإدارة في وضع الصيانة.",
-            )
+            approved = not policy.is_device_maintenance_approved(target_ident)
+        policy.set_device_maintenance_approval(target_ident, approved=approved)
+        policy.save()
+        AuditLog.log(
+            request,
+            AuditLog.ACTION_SECURITY_POLICY,
+            target_label=target_ident,
+            details={'action': 'toggle_maintenance_device', 'approved': approved},
+        )
+        return _finish(
+            True,
+            f"تم {'اعتماد' if approved else 'إلغاء اعتماد'} الجهاز ({target_ident}) لظهور زر دخول الإدارة في وضع الصيانة.",
+            extra={'approved': approved, 'hardware_id': target_ident},
+        )
 
     elif action == 'update_ai_config':
         policy = SecurityPolicyConfig.load()
-        policy.ai_security_enabled = request.POST.get('ai_security_enabled') == 'on'
-        policy.ai_hourly_schedule_enabled = request.POST.get('ai_hourly_schedule_enabled') == 'on'
-        policy.ai_auto_enforce_bans = request.POST.get('ai_auto_enforce_bans') == 'on'
+        policy.ai_security_enabled = _is_checked('ai_security_enabled')
+        policy.ai_hourly_schedule_enabled = _is_checked('ai_hourly_schedule_enabled')
+        policy.ai_auto_enforce_bans = _is_checked('ai_auto_enforce_bans')
         raw_provider = (request.POST.get('ai_provider') or '').strip().lower()
         if raw_provider in ('auto', 'gemini', 'openai', 'groq', 'deepseek'):
             policy.ai_provider = raw_provider
@@ -458,7 +523,15 @@ def security_admin_action(request):
                 'ai_model_name': policy.ai_model_name,
             },
         )
-        messages.success(request, "تم حفظ إعدادات الذكاء الاصطناعي الأمني بنجاح.")
+        return _finish(
+            True,
+            "تم حفظ إعدادات الذكاء الاصطناعي الأمني بنجاح.",
+            extra={
+                'ai_security_enabled': policy.ai_security_enabled,
+                'ai_provider': policy.ai_provider,
+                'ai_model_name': policy.ai_model_name,
+            },
+        )
 
     elif action == 'analyze_user_behavior':
         from api_v1.security_engine import (
@@ -470,16 +543,17 @@ def security_admin_action(request):
             target_user = get_object_or_404(User, id=raw_uid)
             res = analyze_user_with_ai(target_user, enforce_if_flagged=True, request=request)
             verdict = res.get('verdict') or {}
-            messages.success(
-                request,
+            return _finish(
+                True,
                 f"تم فحص {target_user.get_full_name() or target_user.email}: الخطورة {verdict.get('risk_score', 0)}% ({verdict.get('recommended_action', 'none')}) — {verdict.get('reason_ar', '')}",
+                extra={'user_id': target_user.id, 'verdict': verdict},
             )
-        else:
-            summary = run_hourly_ai_behavioral_audit(force=True, request=request)
-            messages.success(
-                request,
-                f"تم تشغيل فحص الذكاء الاصطناعي لـ {summary.get('analyzed_users', 0)} مستخدماً (خطورة عالية: {summary.get('flagged_high_risk', 0)} | حظر تلقائي: {summary.get('banned_users', 0)} حساب / {summary.get('banned_devices', 0)} جهاز).",
-            )
+        summary = run_hourly_ai_behavioral_audit(force=True, request=request)
+        return _finish(
+            True,
+            f"تم تشغيل فحص الذكاء الاصطناعي لـ {summary.get('analyzed_users', 0)} مستخدماً (خطورة عالية: {summary.get('flagged_high_risk', 0)} | حظر تلقائي: {summary.get('banned_users', 0)} حساب / {summary.get('banned_devices', 0)} جهاز).",
+            extra={'summary': summary},
+        )
 
     elif action in ('ban_user_only', 'ban_device_only', 'ban_user_and_device'):
         from api_v1.security_engine import enforce_security_ban
@@ -498,20 +572,19 @@ def security_admin_action(request):
         )
         reason = (request.POST.get('reason') or f'حظر أمني ({mode}) من تقارير الذكاء الاصطناعي').strip()
         if target_user is None and not inst_id:
-            messages.error(request, "بيانات المستخدم أو الجهاز غير كافية لتنفيذ الحظر.")
-        else:
-            enforce_security_ban(
-                user=target_user,
-                device=device,
-                installation_id=inst_id,
-                mode=mode,
-                reason=reason,
-                block_type='permanent',
-                duration_hours=24,
-                actor=request.user,
-                request=request,
-            )
-            messages.success(request, "تم تنفيذ الحظر الأمني بنجاح.")
+            return _finish(False, "بيانات المستخدم أو الجهاز غير كافية لتنفيذ الحظر.", status=400)
+        enforce_security_ban(
+            user=target_user,
+            device=device,
+            installation_id=inst_id,
+            mode=mode,
+            reason=reason,
+            block_type='permanent',
+            duration_hours=24,
+            actor=request.user,
+            request=request,
+        )
+        return _finish(True, "تم تنفيذ الحظر الأمني بنجاح.", extra={'mode': mode, 'user_id': raw_uid})
 
     elif action == 'unban_user_and_devices':
         from api_v1.security_engine import unban_user_and_devices
@@ -519,23 +592,23 @@ def security_admin_action(request):
         inst_id = (request.POST.get('installation_id') or '').strip()
         target_user = User.objects.filter(id=raw_uid).first() if raw_uid else None
         if target_user is None and not inst_id:
-            messages.error(request, "بيانات المستخدم غير كافية لرفع الحظر.")
-        else:
-            unban_user_and_devices(
-                user=target_user,
-                installation_id=inst_id,
-                mode='both',
-                actor=request.user,
-                reason=(request.POST.get('reason') or 'فك الحظر من لوحة الأمان').strip(),
-                request=request,
-            )
-            messages.success(request, "تم فك الحظر عن الحساب والأجهزة بنجاح.")
+            return _finish(False, "بيانات المستخدم غير كافية لرفع الحظر.", status=400)
+        unban_user_and_devices(
+            user=target_user,
+            installation_id=inst_id,
+            mode='both',
+            actor=request.user,
+            reason=(request.POST.get('reason') or 'فك الحظر من لوحة الأمان').strip(),
+            request=request,
+        )
+        return _finish(True, "تم فك الحظر عن الحساب والأجهزة بنجاح.", extra={'user_id': raw_uid})
 
     elif action == 'prune_telemetry':
         res = prune_expired_telemetry()
-        messages.success(
-            request,
+        return _finish(
+            True,
             f"تم تنظيف السجلات المنتهية: {res['activities_deleted']} نشاط، {res['events_deleted']} حدث.",
+            extra=res,
         )
 
-    return redirect(next_url)
+    return _finish(False, "إجراء أمني غير معروف.", status=400)

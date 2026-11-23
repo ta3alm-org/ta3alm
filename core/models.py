@@ -75,6 +75,22 @@ class SiteSetting(models.Model):
         cleaned = ''.join(ch for ch in text.lower() if ch in '0123456789abcdef')
         return cleaned if len(cleaned) == 64 else ''
 
+    @staticmethod
+    def normalize_apk_download_url(raw: str) -> str:
+        """تحويل روابط GitHub /blob/ إلى رابط raw المباشر لتفادي تنزيل صفحات HTML بدلاً من ملف الـ APK."""
+        url = str(raw or '').strip()
+        if not url:
+            return ''
+        match = re.match(
+            r'^https?://(?:www\.)?github\.com/([^/]+)/([^/]+)/blob/(.+)$',
+            url,
+            flags=re.IGNORECASE,
+        )
+        if match:
+            owner, repo, rest = match.groups()
+            return f'https://raw.githubusercontent.com/{owner}/{repo}/{rest}'
+        return url
+
     def get_assetlinks_fingerprints(self) -> list:
         """دمج بصمات SHA-256 من لوحة الإدارة ومن متغيرات البيئة لملف assetlinks.json."""
         sources = [
@@ -104,7 +120,7 @@ class SiteSetting(models.Model):
         return min_req
 
     def get_effective_apk_url(self, request=None) -> str:
-        external_url = (self.android_apk_url or '').strip()
+        external_url = self.normalize_apk_download_url(self.android_apk_url)
         if external_url:
             return external_url
         if self.android_apk_file:
@@ -148,6 +164,8 @@ class SiteSetting(models.Model):
         self.android_min_required_version_code = max(
             1, int(self.android_min_required_version_code or 1)
         )
+        if self.android_apk_url:
+            self.android_apk_url = self.normalize_apk_download_url(self.android_apk_url)[:500]
         if self.android_apk_sha256:
             normalized = self.normalize_file_sha256(self.android_apk_sha256)
             self.android_apk_sha256 = normalized
@@ -171,6 +189,7 @@ from core.services.wallet import credit_teacher_wallet_for_sale, reconcile_teach
 # core/models.py
 from django.db import models
 from django.conf import settings
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 class Notification(models.Model):
@@ -361,3 +380,227 @@ class CurriculumLesson(models.Model):
 
     def __str__(self):
         return f"{self.unit.title} - {self.title}"
+
+
+class SupportThread(models.Model):
+    STATUS_OPEN = 'open'
+    STATUS_PENDING = 'pending'
+    STATUS_CLOSED = 'closed'
+    STATUS_CHOICES = (
+        (STATUS_OPEN, _('مفتوحة')),
+        (STATUS_PENDING, _('بانتظار رد')),
+        (STATUS_CLOSED, _('مغلقة')),
+    )
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='support_threads',
+        verbose_name=_("المستخدم"),
+    )
+    subject = models.CharField(
+        max_length=200,
+        default='محادثة الدعم الفني',
+        verbose_name=_("عنوان المحادثة"),
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_OPEN,
+        db_index=True,
+        verbose_name=_("الحالة"),
+    )
+    last_message_preview = models.CharField(
+        max_length=280,
+        blank=True,
+        default='',
+        verbose_name=_("مقتطف آخر رسالة"),
+    )
+    last_message_at = models.DateTimeField(
+        default=timezone.now,
+        db_index=True,
+        verbose_name=_("تاريخ آخر رسالة"),
+    )
+    unread_for_admin = models.PositiveIntegerField(
+        default=0,
+        verbose_name=_("غير مقروء للإدارة"),
+    )
+    unread_for_user = models.PositiveIntegerField(
+        default=0,
+        verbose_name=_("غير مقروء للمستخدم"),
+    )
+    assigned_admin = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assigned_support_threads',
+        verbose_name=_("المشرف المتابع"),
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("تاريخ الإنشاء"))
+    updated_at = models.DateTimeField(auto_now=True, verbose_name=_("آخر تحديث"))
+
+    class Meta:
+        ordering = ['-last_message_at', '-id']
+        verbose_name = _("محادثة دعم فني")
+        verbose_name_plural = _("محادثات الدعم الفني")
+        indexes = [
+            models.Index(fields=['user', 'status'], name='core_sup_usr_st_idx'),
+            models.Index(fields=['status', '-last_message_at'], name='core_sup_st_dt_idx'),
+        ]
+
+    def __str__(self):
+        return f"Thread #{self.pk} - {self.user}"
+
+
+class SupportMessage(models.Model):
+    thread = models.ForeignKey(
+        SupportThread,
+        on_delete=models.CASCADE,
+        related_name='messages',
+        verbose_name=_("المحادثة"),
+    )
+    sender = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='sent_support_messages',
+        verbose_name=_("المرسل"),
+    )
+    is_from_admin = models.BooleanField(
+        default=False,
+        db_index=True,
+        verbose_name=_("من الإدارة"),
+    )
+    body = models.TextField(verbose_name=_("نص الرسالة"))
+    is_read = models.BooleanField(
+        default=False,
+        db_index=True,
+        verbose_name=_("مقروءة"),
+    )
+    via_notification_reply = models.BooleanField(
+        default=False,
+        verbose_name=_("رد من الإشعارات"),
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        db_index=True,
+        verbose_name=_("تاريخ الإرسال"),
+    )
+
+    class Meta:
+        ordering = ['created_at', 'id']
+        verbose_name = _("رسالة دعم فني")
+        verbose_name_plural = _("رسائل الدعم الفني")
+        indexes = [
+            models.Index(fields=['thread', 'id'], name='core_smsg_thr_id_idx'),
+            models.Index(fields=['thread', 'is_from_admin', 'is_read'], name='core_smsg_ad_rd_idx'),
+        ]
+
+    def __str__(self):
+        sender_tag = 'Admin' if self.is_from_admin else 'User'
+        return f"[{sender_tag}] Thread #{self.thread_id}: {self.body[:40]}"
+
+
+class ClientErrorReport(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='client_error_reports',
+        verbose_name=_("المستخدم"),
+    )
+    source = models.CharField(
+        max_length=40,
+        default='flutter_app',
+        verbose_name=_("المصدر"),
+    )
+    screen = models.CharField(
+        max_length=120,
+        blank=True,
+        default='',
+        verbose_name=_("الشاشة"),
+    )
+    error_type = models.CharField(
+        max_length=120,
+        blank=True,
+        default='',
+        verbose_name=_("نوع الخطأ"),
+    )
+    error_message = models.TextField(verbose_name=_("رسالة الخطأ الكاملة"))
+    stack_trace = models.TextField(
+        blank=True,
+        default='',
+        verbose_name=_("تتبع المكدس (Stack Trace)"),
+    )
+    app_version = models.CharField(
+        max_length=40,
+        blank=True,
+        default='',
+        verbose_name=_("إصدار التطبيق"),
+    )
+    app_build = models.CharField(
+        max_length=20,
+        blank=True,
+        default='',
+        verbose_name=_("رقم البناء"),
+    )
+    platform = models.CharField(
+        max_length=32,
+        blank=True,
+        default='android',
+        verbose_name=_("المنصة"),
+    )
+    device_info = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name=_("بيانات الجهاز"),
+    )
+    extra_context = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name=_("سياق إضافي"),
+    )
+    fingerprint = models.CharField(
+        max_length=64,
+        blank=True,
+        default='',
+        db_index=True,
+        verbose_name=_("بصمة الخطأ"),
+    )
+    occurrences = models.PositiveIntegerField(
+        default=1,
+        verbose_name=_("عدد مرات الحدوث"),
+    )
+    is_resolved = models.BooleanField(
+        default=False,
+        db_index=True,
+        verbose_name=_("تم الحل"),
+    )
+    resolved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_("تاريخ الحل"),
+    )
+    resolved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='resolved_error_reports',
+        verbose_name=_("تم الحل بواسطة"),
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("أول ظهور"))
+    last_seen_at = models.DateTimeField(auto_now=True, verbose_name=_("آخر ظهور"))
+
+    class Meta:
+        ordering = ['-last_seen_at', '-id']
+        verbose_name = _("تقرير خطأ تقني")
+        verbose_name_plural = _("تقارير الأخطاء التقنية")
+        indexes = [
+            models.Index(fields=['is_resolved', '-last_seen_at'], name='core_cerr_res_dt_idx'),
+            models.Index(fields=['fingerprint', '-last_seen_at'], name='core_cerr_fp_dt_idx'),
+        ]
+
+    def __str__(self):
+        return f"[{self.source}] {self.error_type or 'Error'}: {self.error_message[:60]}"

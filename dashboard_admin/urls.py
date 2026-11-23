@@ -58,4 +58,9 @@ urlpatterns = [
     path('security/',                         views.security_dashboard,     name='security_dashboard'),
     path('security/devices/<int:device_id>/', views.security_device_detail, name='security_device_detail'),
     path('security/action/',                  views.security_admin_action,  name='security_admin_action'),
+
+    # شات الدعم المباشر وتقارير الأخطاء التقنية
+    path('support-chat/',                     views.admin_support_chat,     name='support_chat'),
+    path('support-chat/<int:thread_id>/',     views.admin_support_chat,     name='support_chat_thread'),
+    path('errors/',                           views.admin_error_reports,    name='error_reports'),
 ]

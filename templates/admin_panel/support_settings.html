@@ -1,165 +1,172 @@
 {% extends 'admin_panel/base_admin.html' %}
 {% load i18n %}
 
-{% block title %}إعدادات Zoho Mail REST API | الإدارة{% endblock %}
+{% block page_title %}إعدادات Zoho Mail REST API{% endblock %}
+{% block body_page %}support{% endblock %}
 {% block nav_support_inbox %}active{% endblock %}
-
 {% block breadcrumb %}
-<span class="sep">/</span> <a href="{% url 'admin_panel:support_inbox' %}">بريد الدعم</a>
-<span class="sep">/</span> <span class="current">إعدادات الربط بـ Zoho</span>
+<span class="sep">/</span>
+<a href="{% url 'admin_panel:support_inbox' %}">بريد الدعم</a>
+<span class="sep">/</span>
+<span class="current">إعدادات الربط بـ Zoho</span>
 {% endblock %}
 
 {% block content %}
-<div class="mb-4">
-    <h4 class="mb-1 fw-bold" style="color:var(--admin-primary)">
-        <i class="bi bi-gear-wide-connected text-primary me-2"></i>إعدادات الربط مع Zoho Mail REST API
-    </h4>
-    <p class="text-muted small mb-0">تهيئة وتخويل بروتوكول OAuth 2.0 لإدارة رسائل الدعم الفني الرسمية من داخل المنصة.</p>
+<div class="ap-page-header">
+    <div>
+        <h1 class="ap-page-title"><i class="bi bi-gear"></i> إعدادات الربط مع Zoho Mail REST API</h1>
+        <p class="ap-page-subtitle">تهيئة وتخويل بروتوكول OAuth 2.0 لإدارة رسائل الدعم الفني الرسمية</p>
+    </div>
+    <div class="ap-page-actions">
+        <a href="{% url 'admin_panel:support_inbox' %}" class="ap-btn ap-btn-secondary">
+            <i class="bi bi-arrow-right"></i> الرجوع لصندوق البريد
+        </a>
+    </div>
 </div>
 
-<div class="row g-4">
-    <!-- 1. بطاقة حالة الاتصال الحالية -->
-    <div class="col-lg-6">
-        <div class="admin-card mb-4 h-100">
-            <div class="admin-card-header bg-white">
-                <h6 class="admin-card-title mb-0">حالة الاتصال بالخدمة</h6>
-            </div>
-            <div class="admin-card-body p-4">
-                {% if service.is_connected %}
-                <div class="alert alert-success d-flex align-items-center gap-3 mb-4">
-                    <i class="bi bi-patch-check-fill fs-2 text-success"></i>
-                    <div>
-                        <h6 class="fw-bold mb-1">متصل بنجاح مع Zoho Mail REST API</h6>
-                        <span class="small">المنصة مخولة لإرسال واستقبال الرسائل عبر <strong>{{ config.get_effective_support_email }}</strong>.</span>
-                    </div>
-                </div>
-
-                <div class="list-group list-group-flush border rounded-3 mb-4 small">
-                    <div class="list-group-item d-flex justify-content-between">
-                        <span class="text-muted">البريد المعتمد:</span>
-                        <strong class="text-dark">{{ config.get_effective_support_email }}</strong>
-                    </div>
-                    <div class="list-group-item d-flex justify-content-between">
-                        <span class="text-muted">Zoho Account ID:</span>
-                        <code>{{ config.get_effective_account_id|default:"(يتم كشفه تلقائياً)" }}</code>
-                    </div>
-                    <div class="list-group-item d-flex justify-content-between">
-                        <span class="text-muted">آخر وقت مزامنة:</span>
-                        <span>{{ config.last_synced_at|default:"لم تتم مزامنة بعد" }}</span>
-                    </div>
-                    <div class="list-group-item d-flex justify-content-between">
-                        <span class="text-muted">صلاحية التوكن الحالي:</span>
-                        <span>{{ config.token_expires_at|default:"ساري المفعول" }}</span>
-                    </div>
-                </div>
-
-                <div class="d-flex flex-wrap gap-2">
-                    <a href="{% url 'admin_panel:support_inbox' %}" class="btn btn-primary fw-bold rounded-pill px-4">
-                        <i class="bi bi-inbox-fill me-1"></i>فتح صندوق الوارد
-                    </a>
-                    <a href="{% url 'admin_panel:support_oauth_connect' %}" class="btn btn-outline-secondary rounded-pill px-3">
-                        <i class="bi bi-arrow-repeat me-1"></i>إعادة المصادقة
-                    </a>
-                    <form method="POST" action="{% url 'admin_panel:support_settings' %}" class="d-inline" onsubmit="return confirm('هل أنت متأكد من قطع الاتصال بحساب Zoho Mail؟');">
-                        {% csrf_token %}
-                        <input type="hidden" name="action" value="disconnect">
-                        <button type="submit" class="btn btn-outline-danger rounded-pill px-3">
-                            <i class="bi bi-power me-1"></i>قطع الاتصال
-                        </button>
-                    </form>
-                </div>
-                {% else %}
-                <div class="alert alert-warning d-flex align-items-center gap-3 mb-4">
-                    <i class="bi bi-exclamation-circle-fill fs-2 text-warning"></i>
-                    <div>
-                        <h6 class="fw-bold mb-1">غير متصل حالياً</h6>
-                        <span class="small">يلزم تسجيل الدخول والموافقة عبر Zoho OAuth 2.0 لتفعيل قراءة وإرسال الإيميلات.</span>
-                    </div>
-                </div>
-
-                {% if service.is_configured %}
-                <div class="text-center py-3">
-                    <a href="{% url 'admin_panel:support_oauth_connect' %}" class="btn btn-danger btn-lg px-4 fw-bold rounded-pill shadow-sm">
-                        <i class="bi bi-box-arrow-in-right me-2"></i>ربط حساب Zoho Mail الآن بضغطة واحدة
-                    </a>
-                    <p class="text-muted small mt-2 mb-0">سيتم نقلك لصفحة الموافقة في Zoho ثم إعادتك تلقائياً.</p>
-                </div>
-                {% else %}
-                <p class="text-muted small">
-                    يرجى إدخال <code>Client ID</code> و <code>Client Secret</code> في النموذج المجاور ثم الضغط على حفظ لتتمكن من التخويل بنقرة واحدة.
-                </p>
-                {% endif %}
-                {% endif %}
-            </div>
+<div class="ap-grid-2 ap-mb-6">
+    <!-- 1. حالة الاتصال -->
+    <div class="ap-card">
+        <div class="ap-card-header">
+            <h2 class="ap-card-title"><i class="bi bi-plug"></i> حالة الاتصال بالخدمة</h2>
         </div>
-    </div>
-
-    <!-- 2. بطاقة مفاتيح OAuth وإعدادات الحساب -->
-    <div class="col-lg-6">
-        <div class="admin-card mb-4 h-100">
-            <div class="admin-card-header bg-white">
-                <h6 class="admin-card-title mb-0">بيانات عميل Zoho (Client Credentials)</h6>
+        <div class="ap-card-body">
+            {% if service.is_connected %}
+            <div class="ap-banner ap-banner-success ap-mb-4">
+                <i class="bi bi-patch-check-fill"></i>
+                <div>
+                    <div class="ap-strong">متصل بنجاح مع Zoho Mail REST API</div>
+                    <div class="ap-xs">المنصة مخوّلة لإرسال واستقبال الرسائل عبر <strong>{{ config.get_effective_support_email }}</strong>.</div>
+                </div>
             </div>
-            <div class="admin-card-body p-4">
-                <form method="POST" action="{% url 'admin_panel:support_settings' %}">
+
+            <div class="ap-kv-list ap-mb-4">
+                <div class="ap-kv-row">
+                    <span class="ap-kv-key">البريد المعتمد</span>
+                    <span class="ap-kv-val ap-ltr">{{ config.get_effective_support_email }}</span>
+                </div>
+                <div class="ap-kv-row">
+                    <span class="ap-kv-key">Zoho Account ID</span>
+                    <span class="ap-kv-val"><code>{{ config.get_effective_account_id|default:"(يتم كشفه تلقائياً)" }}</code></span>
+                </div>
+                <div class="ap-kv-row">
+                    <span class="ap-kv-key">آخر وقت مزامنة</span>
+                    <span class="ap-kv-val">{{ config.last_synced_at|default:"لم تتم مزامنة بعد" }}</span>
+                </div>
+                <div class="ap-kv-row">
+                    <span class="ap-kv-key">صلاحية التوكن الحالي</span>
+                    <span class="ap-kv-val">{{ config.token_expires_at|default:"ساري المفعول" }}</span>
+                </div>
+            </div>
+
+            <div class="ap-flex ap-wrap ap-gap-2">
+                <a href="{% url 'admin_panel:support_inbox' %}" class="ap-btn ap-btn-primary">
+                    <i class="bi bi-inbox"></i> فتح صندوق الوارد
+                </a>
+                <a href="{% url 'admin_panel:support_oauth_connect' %}" class="ap-btn ap-btn-secondary">
+                    <i class="bi bi-arrow-repeat"></i> إعادة المصادقة
+                </a>
+                <form method="POST" action="{% url 'admin_panel:support_settings' %}"
+                      data-ajax-form data-support-settings-form="1"
+                      data-confirm="هل أنت متأكد من قطع الاتصال بحساب Zoho Mail؟"
+                      data-confirm-title="قطع اتصال Zoho"
+                      data-confirm-variant="danger">
                     {% csrf_token %}
-                    <input type="hidden" name="action" value="save_keys">
-
-                    <div class="mb-3">
-                        <label class="form-label small fw-bold">البريد الإلكتروني المعتمد للدعم:</label>
-                        <input type="email" name="support_email" class="form-control"
-                               value="{{ config.get_effective_support_email }}" placeholder="support@ta3alm.online" required>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label small fw-bold">Zoho Client ID:</label>
-                        <input type="text" name="client_id" class="form-control"
-                               value="{{ config.client_id }}" placeholder="1000.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX">
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label small fw-bold">Zoho Client Secret:</label>
-                        <input type="password" name="client_secret" class="form-control"
-                               value="{{ config.client_secret }}" placeholder="••••••••••••••••••••••••••••••••">
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label small fw-bold">Refresh Token (اختياري / يدوي):</label>
-                        <textarea name="refresh_token" class="form-control font-monospace small" rows="2"
-                                  placeholder="1000.xxxxxxxxxxxx.xxxxxxxxxxxx (يتم حفظه تلقائياً عند الضغط على زر الربط)">{{ config.refresh_token }}</textarea>
-                        <span class="text-muted" style="font-size: 0.75rem;">إذا استخدمت زر الربط التلقائي، لا تحتاج لكتابة التوكن يدوياً.</span>
-                    </div>
-
-                    <button type="submit" class="btn btn-primary fw-bold px-4 rounded-pill">
-                        <i class="bi bi-check2-circle me-1"></i>حفظ المفاتيح
+                    <input type="hidden" name="action" value="disconnect">
+                    <button type="submit" class="ap-btn ap-btn-danger-outline">
+                        <i class="bi bi-power"></i> قطع الاتصال
                     </button>
                 </form>
             </div>
+            {% else %}
+            <div class="ap-banner ap-banner-warning ap-mb-4">
+                <i class="bi bi-exclamation-circle"></i>
+                <div>
+                    <div class="ap-strong">غير متصل حالياً</div>
+                    <div class="ap-xs">يلزم تسجيل الدخول والموافقة عبر Zoho OAuth 2.0 لتفعيل قراءة وإرسال الإيميلات.</div>
+                </div>
+            </div>
+
+            {% if service.is_configured %}
+            <div style="text-align:center; padding:12px 0;">
+                <a href="{% url 'admin_panel:support_oauth_connect' %}" class="ap-btn ap-btn-primary ap-btn-lg">
+                    <i class="bi bi-box-arrow-in-right"></i> ربط حساب Zoho Mail الآن (OAuth 2.0)
+                </a>
+                <p class="ap-muted ap-xs ap-mt-2">سيتم نقلك لصفحة الموافقة في Zoho ثم إعادتك تلقائياً.</p>
+            </div>
+            {% else %}
+            <p class="ap-muted ap-sm">
+                يرجى إدخال <code>Client ID</code> و <code>Client Secret</code> في النموذج المجاور ثم الضغط على حفظ لتفعيل زر التخويل.
+            </p>
+            {% endif %}
+            {% endif %}
         </div>
     </div>
 
-    <!-- 3. دليل الإعداد السريع لمالك المنصة -->
-    <div class="col-12">
-        <div class="admin-card p-4">
-            <h6 class="fw-bold mb-3" style="color: var(--admin-primary)">
-                <i class="bi bi-info-circle-fill text-primary me-2"></i>كيفية الحصول على مفاتيح Zoho REST API:
-            </h6>
-            <ol class="small text-muted lh-lg mb-0 ps-3">
-                <li>توجه إلى وحدة تحكم مطوري زوهو: <a href="https://api-console.zoho.com" target="_blank" class="fw-bold text-primary">Zoho API Console</a>.</li>
-                <li>اضغط على <strong>Add Client</strong> واختر نوع التطبيق: <strong>Server-based Applications</strong>.</li>
-                <li>ضع اسم التطبيق: <code>Ta3alm Platform</code>.</li>
-                <li>في حقل <strong>Authorized Redirect URIs</strong>، ضع الرابط التالي بدقة:
-                    <div class="input-group input-group-sm mt-1 mb-2" style="max-width: 550px;">
-                        <input type="text" id="redirectUriInput" class="form-control font-monospace" value="{{ redirect_uri }}" readonly>
-                        <button class="btn btn-outline-secondary" type="button" onclick="navigator.clipboard.writeText('{{ redirect_uri }}'); alert('تم نسخ الرابط!');">
-                            <i class="bi bi-clipboard"></i> نسخ
-                        </button>
-                    </div>
-                </li>
-                <li>بعد الضغط على <strong>Create</strong>، انسخ كلاً من <strong>Client ID</strong> و <strong>Client Secret</strong> وضعهما في النموذج أعلاه ثم اضغط "حفظ".</li>
-                <li>اضغط على زر <strong>"ربط حساب Zoho Mail الآن بضغطة واحدة"</strong> للموافقة على الصلاحيات وستصبح المنصة جاهزة لاستقبال وإرسال الإيميلات فوراً!</li>
-            </ol>
+    <!-- 2. مفاتيح OAuth -->
+    <div class="ap-card">
+        <div class="ap-card-header">
+            <h2 class="ap-card-title"><i class="bi bi-key"></i> بيانات عميل Zoho (Client Credentials)</h2>
         </div>
+        <div class="ap-card-body">
+            <form method="POST" action="{% url 'admin_panel:support_settings' %}"
+                  data-ajax-form data-support-settings-form="1">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="save_keys">
+
+                <div class="ap-field ap-mb-3">
+                    <label class="ap-label" for="zohoSupportEmail">البريد الإلكتروني المعتمد للدعم</label>
+                    <input id="zohoSupportEmail" type="email" name="support_email" class="ap-input ap-ltr"
+                           value="{{ config.get_effective_support_email }}" placeholder="support@ta3alm.online" required>
+                </div>
+
+                <div class="ap-field ap-mb-3">
+                    <label class="ap-label" for="zohoClientId">Zoho Client ID</label>
+                    <input id="zohoClientId" type="text" name="client_id" class="ap-input ap-ltr ap-mono"
+                           value="{{ config.client_id }}" placeholder="1000.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX">
+                </div>
+
+                <div class="ap-field ap-mb-3">
+                    <label class="ap-label" for="zohoClientSecret">Zoho Client Secret</label>
+                    <input id="zohoClientSecret" type="password" name="client_secret" class="ap-input ap-ltr"
+                           value="{{ config.client_secret }}" placeholder="••••••••••••••••••••••••••••••••">
+                </div>
+
+                <div class="ap-field ap-mb-4">
+                    <label class="ap-label" for="zohoRefreshToken">Refresh Token (اختياري / يدوي)</label>
+                    <textarea id="zohoRefreshToken" name="refresh_token" class="ap-textarea ap-mono ap-ltr" rows="2"
+                              placeholder="1000.xxxxxxxxxxxx.xxxxxxxxxxxx">{{ config.refresh_token }}</textarea>
+                    <span class="ap-help">عند استخدام زر الربط التلقائي لا حاجة لإدخال التوكن يدوياً.</span>
+                </div>
+
+                <button type="submit" class="ap-btn ap-btn-primary">
+                    <i class="bi bi-check2-circle"></i> حفظ المفاتيح
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 3. دليل الإعداد -->
+<div class="ap-card">
+    <div class="ap-card-header">
+        <h2 class="ap-card-title"><i class="bi bi-info-circle"></i> خطوات الحصول على مفاتيح Zoho REST API</h2>
+    </div>
+    <div class="ap-card-body">
+        <ol class="ap-sm ap-muted" style="line-height:1.9; margin:0; padding-inline-start:20px;">
+            <li>توجه إلى وحدة تحكم مطوري زوهو: <a href="https://api-console.zoho.com" target="_blank" rel="noopener" class="ap-strong">Zoho API Console</a>.</li>
+            <li>اضغط على <strong>Add Client</strong> واختر <strong>Server-based Applications</strong>.</li>
+            <li>ضع اسم التطبيق <code>Ta3alm Platform</code>، ثم في <strong>Authorized Redirect URIs</strong> أضف الرابط التالي بدقة:
+                <div class="ap-input-group ap-mt-2 ap-mb-2" style="max-width:560px;">
+                    <input type="text" id="redirectUriInput" class="ap-input ap-input-sm ap-mono ap-ltr" value="{{ redirect_uri }}" readonly>
+                    <button type="button" class="ap-btn ap-btn-sm ap-btn-secondary" data-copy-target="#redirectUriInput" data-copy-message="تم نسخ رابط Redirect URI بنجاح.">
+                        <i class="bi bi-clipboard"></i> نسخ
+                    </button>
+                </div>
+            </li>
+            <li>انسخ <strong>Client ID</strong> و <strong>Client Secret</strong> وأدخلهما في النموذج أعلاه ثم اضغط حفظ.</li>
+            <li>اضغط على زر الربط التلقائي للموافقة على الصلاحيات وتفعيل الصندوق فوراً.</li>
+        </ol>
     </div>
 </div>
 {% endblock %}

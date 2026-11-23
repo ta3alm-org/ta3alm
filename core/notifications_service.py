@@ -42,8 +42,12 @@ from core.services.notifications.delivery import (
 )
 from core.services.notifications.pull_tokens import (
     _password_epoch_digest,
+    build_support_reply_metadata,
+    extract_support_thread_id,
     generate_notif_pull_token,
+    generate_support_reply_token,
     verify_notif_pull_token,
+    verify_support_reply_token,
 )
 from core.services.notifications.campaigns import (
     _serialize_recipient_brief,

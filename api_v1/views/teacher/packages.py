@@ -3,7 +3,7 @@ Extracted from api_v1/views_teacher.py.
 """
 
 from decimal import Decimal
-from django.db import transaction
+from django.db import DataError, transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -157,12 +157,27 @@ class TeacherPackageDetailAPIView(APIView):
 
         action = request.data.get('action')
         if action == 'add_lecture':
-            lec = Lecture.objects.create(
-                group=None,
-                title=str(request.data.get('title', '')).strip(),
-                video_link=str(request.data.get('video_link', '')).strip(),
-                description=str(request.data.get('description', '')).strip(),
-            )
+            title = str(request.data.get('title', '')).strip()
+            video_link = Lecture.normalize_video_link(request.data.get('video_link', ''))
+            description = str(request.data.get('description', '')).strip()
+            if not title or not video_link:
+                return Response({'error': 'عنوان المحاضرة ورابط الفيديو مطلوبان.'}, status=status.HTTP_400_BAD_REQUEST)
+            if len(title) > 200:
+                return Response({'error': 'عنوان المحاضرة طويل جداً (الحد الأقصى 200 حرف).'}, status=status.HTTP_400_BAD_REQUEST)
+            if len(video_link) > 2000:
+                return Response({'error': 'رابط الفيديو طويل جداً (الحد الأقصى 2000 حرف).'}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                lec = Lecture.objects.create(
+                    group=None,
+                    title=title,
+                    video_link=video_link,
+                    description=description,
+                )
+            except DataError:
+                return Response(
+                    {'error': 'الرابط أو العنوان أطول من الحد المسموح به في قاعدة البيانات حالياً. يرجى استخدام رابط أقصر أو تطبيق تحديثات قاعدة البيانات (migrate).'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             package.lectures.add(lec)
             return Response({'message': 'تم إضافة المحاضرة للحزمة.', 'lecture': LectureSerializer(lec).data}, status=status.HTTP_201_CREATED)
 

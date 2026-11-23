@@ -1,0 +1,76 @@
+<div class="ap-grid-3">
+    {% for p in plans %}
+    <div class="ap-plan-card {% if p.is_default %}is-default{% endif %}">
+        <div class="ap-flex ap-items-center ap-justify-between ap-gap-2">
+            <div>
+                <div class="ap-flex ap-items-center ap-gap-2">
+                    <h3 style="margin:0; font-size:1.05rem; font-weight:800;">{{ p.name }}</h3>
+                    {% if p.is_default %}
+                    <span class="ap-badge ap-badge-accent">افتراضية</span>
+                    {% endif %}
+                </div>
+                <div class="ap-plan-price ap-mt-1">
+                    {{ p.price }} <small>EGP / شهر</small>
+                </div>
+            </div>
+            <div class="ap-inline-flex ap-gap-1">
+                <button type="button" class="ap-icon-btn" title="تعديل الباقة"
+                        data-plan-edit
+                        data-plan-id="{{ p.id }}"
+                        data-plan-name="{{ p.name }}"
+                        data-plan-price="{{ p.price }}"
+                        data-plan-desc="{{ p.description|default:'' }}"
+                        data-plan-student-limit="{{ p.student_limit }}"
+                        data-plan-group-limit="{{ p.group_limit }}"
+                        data-plan-assistant-limit="{{ p.assistant_limit }}"
+                        data-plan-allow-online="{% if p.allow_online_packages %}1{% else %}0{% endif %}"
+                        data-plan-allow-images="{% if p.allow_question_images %}1{% else %}0{% endif %}"
+                        data-plan-is-default="{% if p.is_default %}1{% else %}0{% endif %}">
+                    <i class="bi bi-pencil"></i>
+                </button>
+                <form method="POST" action="{% url 'admin_panel:manage_plans' %}"
+                      data-ajax-form data-plan-form="1"
+                      data-confirm="هل أنت متأكد من حذف باقة «{{ p.name }}»؟"
+                      data-confirm-title="حذف الباقة"
+                      data-confirm-variant="danger"
+                      data-confirm-ok="حذف">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="plan_id" value="{{ p.id }}">
+                    <button type="submit" class="ap-icon-btn" title="حذف الباقة" style="color:var(--danger);">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        {% if p.description %}
+        <p class="ap-muted ap-xs" style="margin:0;">{{ p.description }}</p>
+        {% endif %}
+
+        <div class="ap-plan-meta-grid">
+            <div class="ap-plan-meta-item"><i class="bi bi-people"></i> {{ p.student_limit }} طالب</div>
+            <div class="ap-plan-meta-item"><i class="bi bi-collection"></i> {{ p.group_limit }} مجموعة</div>
+            <div class="ap-plan-meta-item"><i class="bi bi-person-badge"></i> {{ p.assistant_limit }} مساعد</div>
+            <div class="ap-plan-meta-item"><i class="bi bi-stars"></i> {{ p.ai_exams_limit }} امتحان AI</div>
+        </div>
+
+        <div class="ap-flex ap-gap-3 ap-xs" style="margin-top:auto; padding-top:8px; border-top:1px solid var(--border-subtle);">
+            <span class="{% if p.allow_online_packages %}ap-text-success ap-strong{% else %}ap-subtle-text{% endif %}">
+                <i class="bi bi-{% if p.allow_online_packages %}check-circle-fill{% else %}x-circle{% endif %}"></i> حزم أونلاين
+            </span>
+            <span class="{% if p.allow_question_images %}ap-text-success ap-strong{% else %}ap-subtle-text{% endif %}">
+                <i class="bi bi-{% if p.allow_question_images %}check-circle-fill{% else %}x-circle{% endif %}"></i> صور الأسئلة
+            </span>
+        </div>
+    </div>
+    {% empty %}
+    <div class="ap-card ap-col-full">
+        <div class="ap-empty">
+            <i class="bi bi-tags"></i>
+            <p class="ap-empty-title">لا توجد باقات مُعرَّفة بعد</p>
+            <p class="ap-empty-sub">أضف باقة جديدة للبدء في تعيين اشتراكات المعلمين.</p>
+        </div>
+    </div>
+    {% endfor %}
+</div>

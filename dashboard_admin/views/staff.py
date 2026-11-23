@@ -20,7 +20,15 @@ from dashboard_admin.forms import (
     CreateAdminForm,
 )
 
+from django.template.loader import render_to_string
+
 from dashboard_admin.views.base import _base_context
+from dashboard_admin.views.ajax import (
+    ajax_error,
+    ajax_success,
+    form_errors_dict,
+    is_ajax_request,
+)
 
 User = get_user_model()
 
@@ -36,6 +44,10 @@ def manage_staff(request):
 
     if request.method == 'POST':
         action = request.POST.get('action')
+        ok = False
+        msg = ''
+        errs = {}
+        err_status = 400
 
         if action == 'create':
             form = CreateAdminForm(request.POST)
@@ -67,11 +79,18 @@ def manage_staff(request):
                              target_label=target.get_full_name() or email,
                              target_id=target.id,
                              details={'role': admin_role, 'created_new': True})
-                messages.success(request, f"تم إنشاء حساب المسؤول {target.get_full_name()} بنجاح.")
+                msg = f"تم إنشاء حساب المسؤول {target.get_full_name()} بنجاح."
+                ok = True
+                if not is_ajax_request(request):
+                    messages.success(request, msg)
             else:
-                for field, errs in form.errors.items():
-                    for err in errs:
-                        messages.error(request, f"{err}")
+                errs = form_errors_dict(form)
+                first_err = next((v[0] for v in errs.values() if v), "بيانات غير صحيحة.")
+                msg = first_err
+                if not is_ajax_request(request):
+                    for field, field_errs in form.errors.items():
+                        for err in field_errs:
+                            messages.error(request, f"{err}")
 
         elif action == 'appoint':
             form = AppointAdminForm(request.POST)
@@ -98,11 +117,21 @@ def manage_staff(request):
                                  target_label=target.get_full_name() or email,
                                  target_id=target.id,
                                  details={'role': admin_role})
-                    messages.success(request, f"تم تعيين {target.get_full_name() or email} كمسؤول.")
+                    msg = f"تم تعيين {target.get_full_name() or email} كمسؤول."
+                    ok = True
+                    if not is_ajax_request(request):
+                        messages.success(request, msg)
                 except User.DoesNotExist:
-                    messages.error(request, "لا يوجد مستخدم بهذا البريد الإلكتروني.")
+                    msg = "لا يوجد مستخدم بهذا البريد الإلكتروني."
+                    errs = {'user_email': [msg]}
+                    err_status = 404
+                    if not is_ajax_request(request):
+                        messages.error(request, msg)
             else:
-                messages.error(request, "بيانات غير صحيحة.")
+                errs = form_errors_dict(form)
+                msg = next((v[0] for v in errs.values() if v), "بيانات غير صحيحة.")
+                if not is_ajax_request(request):
+                    messages.error(request, "بيانات غير صحيحة.")
 
         elif action == 'remove':
             profile_id = request.POST.get('profile_id')
@@ -115,7 +144,30 @@ def manage_staff(request):
             AuditLog.log(request, AuditLog.ACTION_REMOVE_ADMIN,
                          target_label=name, target_id=profile.user.id)
             profile.delete()
-            messages.warning(request, f"تم إزالة {name} من الفريق الإداري.")
+            msg = f"تم إزالة {name} من الفريق الإداري."
+            ok = True
+            if not is_ajax_request(request):
+                messages.warning(request, msg)
+        else:
+            msg = "إجراء غير معروف."
+
+        if is_ajax_request(request):
+            if ok:
+                updated_staff = AdminProfile.objects.select_related('user', 'appointed_by').order_by('admin_role')
+                table_html = render_to_string(
+                    'admin_panel/partials/_staff_table.html',
+                    {'staff_list': updated_staff},
+                    request=request,
+                )
+                return ajax_success(
+                    msg,
+                    data={
+                        'action': action,
+                        'staff_count': updated_staff.count(),
+                        'table_html': table_html,
+                    },
+                )
+            return ajax_error(msg, errors=errs, status=err_status)
 
         return redirect('admin_panel:manage_staff')
 

@@ -1,0 +1,97 @@
+{% if reports %}
+<div class="ap-flex" style="flex-direction:column; gap:14px;">
+    {% for r in reports %}
+    <div class="ap-card ap-error-card {% if r.is_resolved %}is-resolved{% endif %}" data-error-card="{{ r.id }}">
+        <div class="ap-card-header">
+            <div class="ap-flex ap-items-center ap-gap-2 ap-wrap">
+                <span class="ap-badge {% if r.is_resolved %}ap-badge-success{% else %}ap-badge-danger{% endif %}">
+                    {% if r.is_resolved %}تم الحل{% else %}مفتوح{% endif %}
+                </span>
+                <span class="ap-strong ap-ltr">{{ r.error_type|default:"RuntimeError" }}</span>
+                {% if r.screen %}
+                <span class="ap-badge ap-badge-neutral ap-ltr">{{ r.screen }}</span>
+                {% endif %}
+                <span class="ap-badge ap-badge-accent">×{{ r.occurrences }}</span>
+            </div>
+            <div class="ap-xs ap-muted">
+                آخر ظهور: {{ r.last_seen_at|date:"Y-m-d H:i" }} · {{ r.platform|upper }} v{{ r.app_version|default:"?" }} (+{{ r.app_build|default:"?" }})
+            </div>
+        </div>
+
+        <div class="ap-card-body">
+            <div class="ap-xs ap-muted ap-mb-2">
+                <strong>المستخدم:</strong>
+                {% if r.user %}
+                    {{ r.user.get_full_name|default:r.user.email }} ({{ r.user.email }})
+                {% else %}
+                    زائر / قبل تسجيل الدخول
+                {% endif %}
+                {% if r.device_info %}
+                    · <strong>الجهاز:</strong>
+                    <span class="ap-ltr">
+                        {{ r.device_info.manufacturer|default:"" }} {{ r.device_info.model|default:"" }}
+                        {% if r.device_info.android_version %}(Android {{ r.device_info.android_version }}){% endif %}
+                    </span>
+                {% endif %}
+            </div>
+
+            <pre class="ap-code-block" id="errCopyTarget-{{ r.id }}">[{{ r.error_type|default:"Error" }} | {{ r.screen|default:"unknown" }}]
+{{ r.error_message }}{% if r.stack_trace %}
+
+--- STACK TRACE ---
+{{ r.stack_trace }}{% endif %}</pre>
+
+            <div class="ap-flex ap-items-center ap-justify-between ap-wrap ap-gap-2 ap-mt-3">
+                <div class="ap-flex ap-gap-2">
+                    <button type="button" class="ap-btn ap-btn-sm ap-btn-secondary"
+                            data-copy-target="#errCopyTarget-{{ r.id }}"
+                            data-copy-message="تم نسخ تفاصيل الخطأ الكاملة.">
+                        <i class="bi bi-clipboard"></i> نسخ التقرير الكامل
+                    </button>
+                </div>
+
+                <div class="ap-flex ap-gap-2">
+                    <form method="POST" action="{% url 'admin_panel:error_reports' %}" class="ap-inline-flex"
+                          data-ajax-form data-error-action="1">
+                        {% csrf_token %}
+                        <input type="hidden" name="report_id" value="{{ r.id }}">
+                        {% if r.is_resolved %}
+                        <input type="hidden" name="action" value="reopen">
+                        <button type="submit" class="ap-btn ap-btn-sm ap-btn-warning">
+                            <i class="bi bi-arrow-counterclockwise"></i> إعادة فتح
+                        </button>
+                        {% else %}
+                        <input type="hidden" name="action" value="resolve">
+                        <button type="submit" class="ap-btn ap-btn-sm ap-btn-success">
+                            <i class="bi bi-check-lg"></i> تم الحل
+                        </button>
+                        {% endif %}
+                    </form>
+
+                    <form method="POST" action="{% url 'admin_panel:error_reports' %}" class="ap-inline-flex"
+                          data-ajax-form data-error-action="1"
+                          data-confirm="هل تريد حذف تقرير الخطأ هذا نهائياً؟"
+                          data-confirm-title="تأكيد حذف التقرير"
+                          data-confirm-variant="danger">
+                        {% csrf_token %}
+                        <input type="hidden" name="report_id" value="{{ r.id }}">
+                        <input type="hidden" name="action" value="delete">
+                        <button type="submit" class="ap-btn ap-btn-sm ap-btn-danger-outline">
+                            <i class="bi bi-trash"></i> حذف
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="ap-card">
+    <div class="ap-empty">
+        <i class="bi bi-shield-check"></i>
+        <p class="ap-empty-title">لا توجد أخطاء تقنية مطابقة</p>
+        <p class="ap-empty-sub">أي خطأ تقني يظهر على أجهزة المستخدمين سيتم إخفاؤه عنهم وتجميعه هنا تلقائياً.</p>
+    </div>
+</div>
+{% endif %}

@@ -1,83 +1,138 @@
 {% extends 'admin_panel/base_admin.html' %}
 {% load i18n %}
+
 {% block page_title %}طلبات السحب{% endblock %}
+{% block body_page %}finance{% endblock %}
 {% block nav_withdrawals %}active{% endblock %}
 {% block breadcrumb %}<span class="sep">/</span><span class="current">طلبات السحب</span>{% endblock %}
 
 {% block content %}
-<div class="page-header"><h1><i class="bi bi-bank me-2" style="color:var(--admin-accent);"></i>طلبات السحب</h1></div>
+<div class="ap-page-header">
+    <div>
+        <h1 class="ap-page-title"><i class="bi bi-bank"></i> طلبات السحب</h1>
+        <p class="ap-page-subtitle">مراجعة طلبات سحب أرباح المعلمين وتسديدها أو إعادتها للمحفظة</p>
+    </div>
+</div>
 
-<div class="admin-card">
-    <div class="table-responsive">
-        <table class="admin-table">
+<div class="ap-card" data-table-scope="withdrawals">
+    <div class="ap-toolbar">
+        <div class="ap-filter-pills">
+            <button type="button" class="ap-pill-btn active" data-filter-pill="all">الكل</button>
+            <button type="button" class="ap-pill-btn" data-filter-pill="pending">قيد المراجعة</button>
+            <button type="button" class="ap-pill-btn" data-filter-pill="paid">تم التحويل</button>
+            <button type="button" class="ap-pill-btn" data-filter-pill="rejected">مرفوض</button>
+        </div>
+        <div class="ap-search-box">
+            <i class="bi bi-search"></i>
+            <input type="text" class="ap-search-input" data-table-search placeholder="تصفية بالمعلم أو بيانات التحويل...">
+        </div>
+    </div>
+
+    <div class="ap-table-wrap">
+        <table class="ap-table">
             <thead>
-                <tr><th>المعلم</th><th>المبلغ</th><th>بيانات التحويل</th><th>التاريخ</th><th>الحالة</th><th>إجراء</th></tr>
+                <tr>
+                    <th>المعلم</th>
+                    <th>المبلغ</th>
+                    <th>بيانات التحويل</th>
+                    <th>التاريخ</th>
+                    <th>الحالة</th>
+                    <th class="ap-cell-actions">إجراء</th>
+                </tr>
             </thead>
             <tbody>
                 {% for r in requests %}
-                <tr>
+                <tr data-row data-status="{{ r.status }}">
                     <td>
-                        <div class="d-flex align-items-center gap-2">
+                        <div class="ap-user-cell">
                             {% if r.wallet.teacher.image %}
-                            <img src="{{ r.wallet.teacher.image.url }}" alt="{{ r.wallet.teacher.user.get_full_name }}" class="user-avatar" style="object-fit:cover;padding:0;border:1px solid rgba(0,0,0,0.08);">
+                            <img src="{{ r.wallet.teacher.image.url }}" alt="{{ r.wallet.teacher.user.get_full_name }}" class="ap-avatar">
                             {% else %}
-                            <div class="user-avatar">{{ r.wallet.teacher.user.first_name|slice:":1"|default:"T" }}</div>
+                            <div class="ap-avatar">{{ r.wallet.teacher.user.first_name|slice:":1"|upper|default:"T" }}</div>
                             {% endif %}
                             <div>
-                                <div class="fw-bold" style="font-size:0.875rem;">{{ r.wallet.teacher.user.get_full_name }}</div>
-                                <div class="text-muted" style="font-size:0.75rem;">{{ r.wallet.teacher.user.phone }}</div>
+                                <div class="ap-user-cell-name">{{ r.wallet.teacher.user.get_full_name|default:r.wallet.teacher.user.username }}</div>
+                                <div class="ap-user-cell-sub ap-ltr">{{ r.wallet.teacher.user.phone }}</div>
                             </div>
                         </div>
                     </td>
-                    <td class="fw-bold" style="color:var(--admin-success);">{{ r.amount }} EGP</td>
-                    <td style="font-size:0.8rem;">
-                        <div><span class="badge bg-light text-dark border mb-1">{{ r.get_method_display }}</span></div>
-                        <div dir="ltr" class="text-muted">{{ r.details|default:"—" }}</div>
+                    <td class="ap-strong ap-text-success">{{ r.amount }} EGP</td>
+                    <td class="ap-xs">
+                        <div><span class="ap-badge ap-badge-neutral">{{ r.get_method_display }}</span></div>
+                        <div class="ap-muted ap-ltr ap-mt-1">{{ r.details|default:"—" }}</div>
                     </td>
-                    <td class="text-muted" style="font-size:0.85rem;">{{ r.created_at|date:"j M Y · H:i" }}</td>
-                    <td>
+                    <td class="ap-muted ap-sm">{{ r.created_at|date:"j M Y · H:i" }}</td>
+                    <td data-status-cell>
                         {% if r.status == 'paid' %}
-                        <span class="role-badge status-active"><i class="bi bi-check2 me-1"></i>تم التحويل</span>
+                        <span class="ap-badge ap-badge-success"><span class="ap-dot"></span>تم التحويل</span>
                         {% elif r.status == 'rejected' %}
-                        <span class="role-badge status-banned"><i class="bi bi-x-circle me-1"></i>مرفوض</span>
+                        <span class="ap-badge ap-badge-danger"><span class="ap-dot"></span>مرفوض</span>
                         {% if r.rejection_reason %}
-                        <div class="text-danger small mt-1">{{ r.rejection_reason }}</div>
+                        <div class="ap-xs ap-text-danger ap-mt-1">{{ r.rejection_reason }}</div>
                         {% endif %}
                         {% else %}
-                        <span class="role-badge status-expired"><i class="bi bi-clock me-1"></i>قيد المراجعة</span>
+                        <span class="ap-badge ap-badge-warning"><span class="ap-dot"></span>قيد المراجعة</span>
                         {% endif %}
                     </td>
-                    <td>
+                    <td class="ap-cell-actions" data-actions-cell>
                         {% if r.status == 'pending' %}
-                        <div class="d-flex flex-wrap gap-2">
-                            <form method="POST" class="d-inline" onsubmit="return confirm('تأكيد تسديد {{ r.amount }} EGP؟');">
+                        <div class="ap-inline-flex ap-gap-2">
+                            <form method="POST" action="{% url 'admin_panel:withdrawals' %}"
+                                  data-ajax-form data-finance-context="withdrawal"
+                                  data-confirm="تأكيد تسديد مبلغ {{ r.amount }} EGP للمعلم {{ r.wallet.teacher.user.get_full_name }}؟"
+                                  data-confirm-title="تأكيد التحويل"
+                                  data-confirm-variant="success"
+                                  data-confirm-ok="تسديد المبلغ">
                                 {% csrf_token %}
                                 <input type="hidden" name="req_id" value="{{ r.id }}">
                                 <input type="hidden" name="action" value="approve">
-                                <button type="submit" class="btn btn-sm btn-success fw-bold px-3">
-                                    <i class="bi bi-check-circle me-1"></i>تسديد
+                                <button type="submit" class="ap-btn ap-btn-sm ap-btn-success">
+                                    <i class="bi bi-check-circle"></i> تسديد
                                 </button>
                             </form>
-                            <form method="POST" class="d-inline" onsubmit="var r = prompt('سبب الرفض (اختياري):'); if (r === null) return false; this.querySelector('[name=rejection_reason]').value = r; return true;">
+                            <form method="POST" action="{% url 'admin_panel:withdrawals' %}"
+                                  data-ajax-form data-finance-context="withdrawal"
+                                  data-confirm="سيتم رفض طلب السحب وإعادة {{ r.amount }} EGP تلقائياً إلى محفظة المعلم."
+                                  data-confirm-title="رفض طلب السحب"
+                                  data-confirm-variant="danger"
+                                  data-confirm-ok="تأكيد الرفض"
+                                  data-prompt-label="سبب الرفض (اختياري)"
+                                  data-prompt-placeholder="اكتب سبب الرفض ليظهر للمعلم..."
+                                  data-prompt-name="rejection_reason">
                                 {% csrf_token %}
                                 <input type="hidden" name="req_id" value="{{ r.id }}">
                                 <input type="hidden" name="action" value="reject">
                                 <input type="hidden" name="rejection_reason" value="">
-                                <button type="submit" class="btn btn-sm btn-outline-danger fw-bold px-3">
-                                    <i class="bi bi-x-circle me-1"></i>رفض
+                                <button type="submit" class="ap-btn ap-btn-sm ap-btn-danger-outline">
+                                    <i class="bi bi-x-circle"></i> رفض
                                 </button>
                             </form>
                         </div>
                         {% elif r.status == 'rejected' %}
-                        <span class="text-danger small">تم الرفض وإعادة الرصيد</span>
+                        <span class="ap-xs ap-text-danger">تم الرفض وإعادة الرصيد</span>
                         {% else %}
-                        <span class="text-success small">تم التحويل</span>
+                        <span class="ap-xs ap-text-success ap-strong">تم التحويل</span>
                         {% endif %}
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="6"><div class="empty-state"><i class="bi bi-inbox"></i>لا توجد طلبات</div></td></tr>
+                <tr>
+                    <td colspan="6">
+                        <div class="ap-empty">
+                            <i class="bi bi-inbox"></i>
+                            <p class="ap-empty-title">لا توجد طلبات سحب حالياً</p>
+                        </div>
+                    </td>
+                </tr>
                 {% endfor %}
+                <tr data-client-empty class="ap-hidden">
+                    <td colspan="6">
+                        <div class="ap-empty">
+                            <i class="bi bi-search"></i>
+                            <p class="ap-empty-title">لا توجد طلبات مطابقة للتصفية</p>
+                        </div>
+                    </td>
+                </tr>
             </tbody>
         </table>
     </div>

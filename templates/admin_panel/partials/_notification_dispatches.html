@@ -1,0 +1,20 @@
+{% for log in recent_dispatches %}
+<div class="ap-timeline-item">
+    <div class="ap-timeline-dot is-info"></div>
+    <div style="flex:1; min-width:0;">
+        <div class="ap-strong ap-sm">{{ log.details.title|default:log.target_label }}</div>
+        <div class="ap-xs ap-muted ap-mt-1">
+            {{ log.target_label }} · {{ log.details.recipient_count|default:0 }} مستلم
+            {% if log.details.fcm_user_count %} ({{ log.details.fcm_user_count }} FCM){% endif %}
+        </div>
+        <div class="ap-xs ap-subtle-text ap-mt-1">
+            {{ log.admin.get_full_name|default:log.admin.email|default:"—" }} · {{ log.created_at|date:"j M Y H:i" }}
+        </div>
+    </div>
+</div>
+{% empty %}
+<div class="ap-empty">
+    <i class="bi bi-bell-slash"></i>
+    <p class="ap-empty-title">لم يتم إرسال إشعارات مخصصة بعد</p>
+</div>
+{% endfor %}

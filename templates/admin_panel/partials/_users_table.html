@@ -1,0 +1,347 @@
+<div data-tabs="users-role" data-tabs-sync-url="1" data-tabs-container="#usersTabPanels" class="ap-tabs">
+    <button type="button" class="ap-tab-btn {% if active_tab|default:'teachers' == 'teachers' %}active{% endif %}"
+            data-tab-target="tab-teachers">
+        <i class="bi bi-person-video3"></i>
+        <span>المعلمون</span>
+        <span class="ap-tab-count" id="tabCountTeachers">{{ teachers|length }}</span>
+    </button>
+    <button type="button" class="ap-tab-btn {% if active_tab == 'students' %}active{% endif %}"
+            data-tab-target="tab-students">
+        <i class="bi bi-mortarboard"></i>
+        <span>الطلاب</span>
+        <span class="ap-tab-count" id="tabCountStudents">{{ students|length }}</span>
+    </button>
+    <button type="button" class="ap-tab-btn {% if active_tab == 'assistants' %}active{% endif %}"
+            data-tab-target="tab-assistants">
+        <i class="bi bi-person-badge"></i>
+        <span>المساعدون</span>
+        <span class="ap-tab-count" id="tabCountAssistants">{{ assistants|length }}</span>
+    </button>
+</div>
+
+<div id="usersTabPanels">
+    <!-- ══════════ TEACHERS ══════════ -->
+    <div class="ap-tab-panel {% if active_tab|default:'teachers' == 'teachers' %}active{% endif %}"
+         id="tab-teachers" data-tab-group="users-role">
+        <div class="ap-card">
+            <div class="ap-table-wrap">
+                <table class="ap-table">
+                    <thead>
+                        <tr>
+                            <th>المعلم</th>
+                            <th>الهاتف</th>
+                            <th>الباقة</th>
+                            <th>الاشتراك</th>
+                            <th>الرصيد</th>
+                            <th>الحالة</th>
+                            <th class="ap-cell-actions">إجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for t in teachers %}
+                        <tr>
+                            <td>
+                                <div class="ap-user-cell">
+                                    {% if t.image %}
+                                    <img src="{{ t.image.url }}" alt="{{ t.user.get_full_name }}" class="ap-avatar">
+                                    {% else %}
+                                    <div class="ap-avatar">{{ t.user.first_name|slice:":1"|upper|default:"T" }}</div>
+                                    {% endif %}
+                                    <div>
+                                        <div class="ap-user-cell-name">{{ t.user.get_full_name|default:t.user.username }}</div>
+                                        <div class="ap-user-cell-sub">{{ t.user.email }}</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="ap-muted ap-ltr">{{ t.user.phone|default:"—" }}</td>
+                            <td><span class="ap-badge ap-badge-neutral">{{ t.current_plan.name|default:"—" }}</span></td>
+                            <td>
+                                {% if t.has_active_subscription %}
+                                <span class="ap-badge ap-badge-success"><span class="ap-dot"></span>{{ t.days_remaining }} يوم</span>
+                                {% else %}
+                                <span class="ap-badge ap-badge-danger"><span class="ap-dot"></span>منتهي</span>
+                                {% endif %}
+                            </td>
+                            <td class="ap-strong ap-text-success">{% if t.wallet %}{{ t.wallet.balance }} EGP{% else %}—{% endif %}</td>
+                            <td>
+                                {% if t.user.is_banned %}
+                                <span class="ap-badge ap-badge-danger"><span class="ap-dot"></span>محظور</span>
+                                {% elif t.is_approved %}
+                                <span class="ap-badge ap-badge-success"><span class="ap-dot"></span>معتمد</span>
+                                {% else %}
+                                <span class="ap-badge ap-badge-warning"><span class="ap-dot"></span>بانتظار الموافقة</span>
+                                {% endif %}
+                            </td>
+                            <td class="ap-cell-actions">
+                                <div class="ap-inline-flex ap-items-center ap-gap-1">
+                                    {% if can_manage_users %}
+                                    <a href="{% url 'admin_panel:edit_user' t.user.id %}" class="ap-btn ap-btn-sm ap-btn-secondary">
+                                        <i class="bi bi-pencil"></i> تعديل
+                                    </a>
+                                    <div class="ap-dropdown">
+                                        <button type="button" class="ap-icon-btn" data-dropdown-trigger aria-expanded="false" title="المزيد من الإجراءات">
+                                            <i class="bi bi-three-dots-vertical"></i>
+                                        </button>
+                                        <div class="ap-dropdown-menu">
+                                            <form method="POST" action="{% url 'admin_panel:user_action' %}" data-ajax-form data-users-action="1">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="user_id" value="{{ t.user.id }}">
+                                                <input type="hidden" name="action" value="{% if t.is_approved %}unapprove_teacher{% else %}approve_teacher{% endif %}">
+                                                <button type="submit" class="ap-dropdown-item">
+                                                    <i class="bi bi-{% if t.is_approved %}eye-slash{% else %}patch-check{% endif %}"></i>
+                                                    {% if t.is_approved %}سحب الاعتماد{% else %}اعتماد المعلم{% endif %}
+                                                </button>
+                                            </form>
+                                            <button type="button" class="ap-dropdown-item"
+                                                    data-renew-open
+                                                    data-user-id="{{ t.user.id }}"
+                                                    data-user-name="{{ t.user.get_full_name|default:t.user.email }}"
+                                                    data-plan-id="{{ t.current_plan.id|default:'' }}">
+                                                <i class="bi bi-gift"></i> تجديد الاشتراك مجاناً
+                                            </button>
+                                            <a href="{% url 'admin_panel:send_notifications' %}?mode=users&user_id={{ t.user.id }}" class="ap-dropdown-item">
+                                                <i class="bi bi-bell"></i> إرسال إشعار مخصص
+                                            </a>
+                                            <div class="ap-dropdown-sep"></div>
+                                            <form method="POST" action="{% url 'admin_panel:user_action' %}" data-ajax-form data-users-action="1">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="user_id" value="{{ t.user.id }}">
+                                                <input type="hidden" name="action" value="{% if t.user.is_banned %}unban{% else %}ban{% endif %}">
+                                                <button type="submit" class="ap-dropdown-item {% if not t.user.is_banned %}is-danger{% endif %}">
+                                                    <i class="bi bi-{% if t.user.is_banned %}unlock{% else %}slash-circle{% endif %}"></i>
+                                                    {% if t.user.is_banned %}رفع الحظر{% else %}حظر الحساب{% endif %}
+                                                </button>
+                                            </form>
+                                            {% if can_delete_users %}
+                                            <form method="POST" action="{% url 'admin_panel:user_action' %}"
+                                                  data-ajax-form data-users-action="1"
+                                                  data-confirm="حذف نهائي للمعلم «{{ t.user.get_full_name|default:t.user.email }}» وجميع بياناته؟ لا يمكن التراجع!"
+                                                  data-confirm-title="تأكيد الحذف النهائي"
+                                                  data-confirm-variant="danger"
+                                                  data-confirm-ok="حذف نهائي">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="user_id" value="{{ t.user.id }}">
+                                                <input type="hidden" name="action" value="delete">
+                                                <button type="submit" class="ap-dropdown-item is-danger">
+                                                    <i class="bi bi-trash"></i> حذف نهائي
+                                                </button>
+                                            </form>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7">
+                                <div class="ap-empty">
+                                    <i class="bi bi-person-x"></i>
+                                    <p class="ap-empty-title">لا يوجد معلمون مطابقون</p>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════ STUDENTS ══════════ -->
+    <div class="ap-tab-panel {% if active_tab == 'students' %}active{% endif %}"
+         id="tab-students" data-tab-group="users-role">
+        <div class="ap-card">
+            <div class="ap-table-wrap">
+                <table class="ap-table">
+                    <thead>
+                        <tr>
+                            <th>الطالب</th>
+                            <th>هاتف الطالب</th>
+                            <th>هاتف ولي الأمر</th>
+                            <th>الكود</th>
+                            <th>الحالة</th>
+                            <th class="ap-cell-actions">إجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in students %}
+                        <tr>
+                            <td>
+                                <div class="ap-user-cell">
+                                    <div class="ap-avatar">{{ s.user.first_name|slice:":1"|upper|default:"S" }}</div>
+                                    <div>
+                                        <div class="ap-user-cell-name">{{ s.user.get_full_name|default:s.user.username }}</div>
+                                        <div class="ap-user-cell-sub">{{ s.user.email }}</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="ap-muted ap-ltr">{{ s.user.phone|default:"—" }}</td>
+                            <td class="ap-muted ap-ltr">{{ s.parent_phone|default:"—" }}</td>
+                            <td><code>{{ s.user.custom_id|default:"—" }}</code></td>
+                            <td>
+                                {% if s.user.is_banned %}
+                                <span class="ap-badge ap-badge-danger"><span class="ap-dot"></span>محظور</span>
+                                {% else %}
+                                <span class="ap-badge ap-badge-success"><span class="ap-dot"></span>نشط</span>
+                                {% endif %}
+                            </td>
+                            <td class="ap-cell-actions">
+                                {% if can_manage_users %}
+                                <div class="ap-inline-flex ap-items-center ap-gap-1">
+                                    <a href="{% url 'admin_panel:edit_user' s.user.id %}" class="ap-btn ap-btn-sm ap-btn-secondary">
+                                        <i class="bi bi-pencil"></i> تعديل
+                                    </a>
+                                    <div class="ap-dropdown">
+                                        <button type="button" class="ap-icon-btn" data-dropdown-trigger aria-expanded="false">
+                                            <i class="bi bi-three-dots-vertical"></i>
+                                        </button>
+                                        <div class="ap-dropdown-menu">
+                                            <a href="{% url 'admin_panel:send_notifications' %}?mode=users&user_id={{ s.user.id }}" class="ap-dropdown-item">
+                                                <i class="bi bi-bell"></i> إرسال إشعار مخصص
+                                            </a>
+                                            <form method="POST" action="{% url 'admin_panel:user_action' %}" data-ajax-form data-users-action="1">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="user_id" value="{{ s.user.id }}">
+                                                <input type="hidden" name="action" value="{% if s.user.is_banned %}unban{% else %}ban{% endif %}">
+                                                <button type="submit" class="ap-dropdown-item {% if not s.user.is_banned %}is-danger{% endif %}">
+                                                    <i class="bi bi-{% if s.user.is_banned %}unlock{% else %}slash-circle{% endif %}"></i>
+                                                    {% if s.user.is_banned %}رفع الحظر{% else %}حظر الحساب{% endif %}
+                                                </button>
+                                            </form>
+                                            {% if can_delete_users %}
+                                            <div class="ap-dropdown-sep"></div>
+                                            <form method="POST" action="{% url 'admin_panel:user_action' %}"
+                                                  data-ajax-form data-users-action="1"
+                                                  data-confirm="حذف نهائي للطالب «{{ s.user.get_full_name|default:s.user.email }}»؟ لا يمكن التراجع!"
+                                                  data-confirm-title="تأكيد الحذف النهائي"
+                                                  data-confirm-variant="danger"
+                                                  data-confirm-ok="حذف نهائي">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="user_id" value="{{ s.user.id }}">
+                                                <input type="hidden" name="action" value="delete">
+                                                <button type="submit" class="ap-dropdown-item is-danger">
+                                                    <i class="bi bi-trash"></i> حذف نهائي
+                                                </button>
+                                            </form>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6">
+                                <div class="ap-empty">
+                                    <i class="bi bi-person-x"></i>
+                                    <p class="ap-empty-title">لا يوجد طلاب مطابقون</p>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════ ASSISTANTS ══════════ -->
+    <div class="ap-tab-panel {% if active_tab == 'assistants' %}active{% endif %}"
+         id="tab-assistants" data-tab-group="users-role">
+        <div class="ap-card">
+            <div class="ap-table-wrap">
+                <table class="ap-table">
+                    <thead>
+                        <tr>
+                            <th>المساعد</th>
+                            <th>الهاتف</th>
+                            <th>الكود</th>
+                            <th>الحالة</th>
+                            <th class="ap-cell-actions">إجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for a in assistants %}
+                        <tr>
+                            <td>
+                                <div class="ap-user-cell">
+                                    <div class="ap-avatar">{{ a.user.first_name|slice:":1"|upper|default:"A" }}</div>
+                                    <div>
+                                        <div class="ap-user-cell-name">{{ a.user.get_full_name|default:a.user.username }}</div>
+                                        <div class="ap-user-cell-sub">{{ a.user.email }}</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="ap-muted ap-ltr">{{ a.phone|default:"—" }}</td>
+                            <td><code>{{ a.user.custom_id|default:"—" }}</code></td>
+                            <td>
+                                {% if a.user.is_banned %}
+                                <span class="ap-badge ap-badge-danger"><span class="ap-dot"></span>محظور</span>
+                                {% else %}
+                                <span class="ap-badge ap-badge-success"><span class="ap-dot"></span>نشط</span>
+                                {% endif %}
+                            </td>
+                            <td class="ap-cell-actions">
+                                {% if can_manage_users %}
+                                <div class="ap-inline-flex ap-items-center ap-gap-1">
+                                    <a href="{% url 'admin_panel:edit_user' a.user.id %}" class="ap-btn ap-btn-sm ap-btn-secondary">
+                                        <i class="bi bi-pencil"></i> تعديل
+                                    </a>
+                                    <div class="ap-dropdown">
+                                        <button type="button" class="ap-icon-btn" data-dropdown-trigger aria-expanded="false">
+                                            <i class="bi bi-three-dots-vertical"></i>
+                                        </button>
+                                        <div class="ap-dropdown-menu">
+                                            <a href="{% url 'admin_panel:send_notifications' %}?mode=users&user_id={{ a.user.id }}" class="ap-dropdown-item">
+                                                <i class="bi bi-bell"></i> إرسال إشعار مخصص
+                                            </a>
+                                            <form method="POST" action="{% url 'admin_panel:user_action' %}" data-ajax-form data-users-action="1">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="user_id" value="{{ a.user.id }}">
+                                                <input type="hidden" name="action" value="{% if a.user.is_banned %}unban{% else %}ban{% endif %}">
+                                                <button type="submit" class="ap-dropdown-item {% if not a.user.is_banned %}is-danger{% endif %}">
+                                                    <i class="bi bi-{% if a.user.is_banned %}unlock{% else %}slash-circle{% endif %}"></i>
+                                                    {% if a.user.is_banned %}رفع الحظر{% else %}حظر الحساب{% endif %}
+                                                </button>
+                                            </form>
+                                            {% if can_delete_users %}
+                                            <div class="ap-dropdown-sep"></div>
+                                            <form method="POST" action="{% url 'admin_panel:user_action' %}"
+                                                  data-ajax-form data-users-action="1"
+                                                  data-confirm="حذف نهائي للمساعد «{{ a.user.get_full_name|default:a.user.email }}»؟"
+                                                  data-confirm-title="تأكيد الحذف النهائي"
+                                                  data-confirm-variant="danger"
+                                                  data-confirm-ok="حذف نهائي">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="user_id" value="{{ a.user.id }}">
+                                                <input type="hidden" name="action" value="delete">
+                                                <button type="submit" class="ap-dropdown-item is-danger">
+                                                    <i class="bi bi-trash"></i> حذف نهائي
+                                                </button>
+                                            </form>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5">
+                                <div class="ap-empty">
+                                    <i class="bi bi-person-x"></i>
+                                    <p class="ap-empty-title">لا يوجد مساعدون مطابقون</p>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

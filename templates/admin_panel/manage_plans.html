@@ -1,141 +1,54 @@
 {% extends 'admin_panel/base_admin.html' %}
 {% load i18n %}
+
 {% block page_title %}إدارة الباقات{% endblock %}
+{% block body_page %}plans{% endblock %}
 {% block nav_plans %}active{% endblock %}
-{% block breadcrumb %}<span class="sep">/</span><span class="current">الباقات</span>{% endblock %}
+{% block breadcrumb %}<span class="sep">/</span><span class="current">إدارة الباقات</span>{% endblock %}
 
 {% block content %}
-<div class="page-header d-flex align-items-center justify-content-between">
+<div class="ap-page-header">
     <div>
-        <h1><i class="bi bi-tags-fill me-2" style="color:var(--admin-accent);"></i>إدارة الباقات</h1>
-        <p>{{ plans|length }} باقة مُعرَّفة</p>
+        <h1 class="ap-page-title"><i class="bi bi-tags"></i> إدارة الباقات</h1>
+        <p class="ap-page-subtitle" id="plansCountSubtitle">{{ plans|length }} باقة مُعرَّفة</p>
     </div>
-    <button class="btn fw-bold px-4" style="background:var(--admin-accent); color:white;"
-            data-bs-toggle="modal" data-bs-target="#addPlanModal">
-        <i class="bi bi-plus-circle me-1"></i>باقة جديدة
-    </button>
+    <div class="ap-page-actions">
+        <button type="button" class="ap-btn ap-btn-primary" data-plan-add>
+            <i class="bi bi-plus-lg"></i> إضافة باقة جديدة
+        </button>
+    </div>
 </div>
 
-<!-- Plans Grid -->
-<div class="row g-3">
-    {% for p in plans %}
-    <div class="col-md-6 col-xl-4">
-        <div class="admin-card h-100 position-relative" style="{% if p.is_default %}border: 2px solid var(--admin-accent);{% endif %}">
-            {% if p.is_default %}
-            <div style="position:absolute; top:-10px; right:16px;
-                        background:var(--admin-accent); color:white;
-                        padding:2px 12px; border-radius:20px; font-size:0.72rem; font-weight:700;">
-                افتراضية
-            </div>
-            {% endif %}
-            <div class="p-4">
-                <div class="d-flex justify-content-between align-items-start mb-3">
-                    <div>
-                        <h5 class="fw-bold mb-0">{{ p.name }}</h5>
-                        <div style="font-size:1.5rem; font-weight:900; color:var(--admin-accent);">
-                            {{ p.price }} <small style="font-size:0.9rem; color:#888;">EGP/شهر</small>
-                        </div>
-                    </div>
-                    <div class="d-flex gap-1">
-                        <button class="action-btn action-btn-edit"
-                                data-bs-toggle="modal" data-bs-target="#editModal{{ p.id }}"
-                                title="تعديل"><i class="bi bi-pencil-fill"></i></button>
-                        <form method="POST"
-                              onsubmit="return confirm('حذف باقة {{ p.name }}؟');">
-                            {% csrf_token %}
-                            <input type="hidden" name="action" value="delete">
-                            <input type="hidden" name="plan_id" value="{{ p.id }}">
-                            <button class="action-btn action-btn-delete" title="حذف">
-                                <i class="bi bi-trash-fill"></i>
-                            </button>
-                        </form>
-                    </div>
-                </div>
-
-                <!-- Limits -->
-                <div class="d-flex flex-wrap gap-2 mb-3">
-                    <span class="role-badge role-teacher">
-                        <i class="bi bi-people-fill me-1"></i>{{ p.student_limit }} طالب
-                    </span>
-                    <span class="role-badge role-student">
-                        <i class="bi bi-collection-fill me-1"></i>{{ p.group_limit }} مجموعة
-                    </span>
-                    <span class="role-badge role-assistant">
-                        <i class="bi bi-person-badge me-1"></i>{{ p.assistant_limit }} مساعد
-                    </span>
-                    <span class="role-badge bg-primary text-white border-0 shadow-sm">
-                        <i class="fas fa-robot me-1"></i>{{ p.ai_exams_limit }} امتحان AI
-                    </span>
-                </div>
-
-                <!-- Features -->
-                <div class="d-flex gap-3" style="font-size:0.8rem;">
-                    <span style="color:{% if p.allow_online_packages %}var(--admin-success){% else %}#ccc{% endif %};">
-                        <i class="bi bi-{% if p.allow_online_packages %}check-circle-fill{% else %}x-circle{% endif %} me-1"></i>
-                        حزم أونلاين
-                    </span>
-                    <span style="color:{% if p.allow_question_images %}var(--admin-success){% else %}#ccc{% endif %};">
-                        <i class="bi bi-{% if p.allow_question_images %}check-circle-fill{% else %}x-circle{% endif %} me-1"></i>
-                        صور الأسئلة
-                    </span>
-                </div>
-            </div>
-
-            <!-- Edit Modal -->
-            <div class="modal fade" id="editModal{{ p.id }}" tabindex="-1">
-                <div class="modal-dialog modal-dialog-centered">
-                    <div class="modal-content" style="border-radius:16px; border:none;">
-                        <div class="modal-header border-0">
-                            <h5 class="modal-title fw-bold"><i class="bi bi-pencil me-2"></i>تعديل: {{ p.name }}</h5>
-                            <button class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <form method="POST">
-                            {% csrf_token %}
-                            <input type="hidden" name="action" value="edit">
-                            <input type="hidden" name="plan_id" value="{{ p.id }}">
-                            <div class="modal-body">
-                                {% include 'admin_panel/_plan_form_fields.html' with obj=p %}
-                            </div>
-                            <div class="modal-footer border-0">
-                                <button type="button" class="btn btn-light" data-bs-dismiss="modal">إلغاء</button>
-                                <button type="submit" class="btn btn-primary fw-bold px-4">حفظ التعديل</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    {% empty %}
-    <div class="col-12">
-        <div class="admin-card p-5 text-center">
-            <i class="bi bi-tags fs-1 text-muted d-block mb-3"></i>
-            <p class="text-muted fw-bold">لا توجد باقات. أضف أولى باقاتك.</p>
-        </div>
-    </div>
-    {% endfor %}
+<div id="plansGridContainer">
+    {% include 'admin_panel/partials/_plans_grid.html' %}
 </div>
 
-<!-- Add Plan Modal -->
-<div class="modal fade" id="addPlanModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content" style="border-radius:16px; border:none;">
-            <div class="modal-header border-0">
-                <h5 class="modal-title fw-bold"><i class="bi bi-plus-circle me-2" style="color:var(--admin-accent);"></i>إضافة باقة جديدة</h5>
-                <button class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <form method="POST">
-                {% csrf_token %}
-                <input type="hidden" name="action" value="add">
-                <div class="modal-body">{% include 'admin_panel/_plan_form_fields.html' %}</div>
-                <div class="modal-footer border-0">
-                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">إلغاء</button>
-                    <button type="submit" class="btn fw-bold px-4" style="background:var(--admin-accent); color:white;">
-                        <i class="bi bi-plus me-1"></i>إضافة
-                    </button>
-                </div>
-            </form>
+<!-- Shared Add / Edit Plan Slide-Over Drawer -->
+<div class="ap-drawer" id="apPlanDrawer" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="ap-overlay-backdrop" data-drawer-close></div>
+    <div class="ap-drawer-panel">
+        <div class="ap-drawer-header">
+            <h3 class="ap-modal-title" id="apPlanDrawerTitle">إضافة باقة جديدة</h3>
+            <button type="button" class="ap-icon-btn" data-drawer-close aria-label="إغلاق">
+                <i class="bi bi-x-lg"></i>
+            </button>
         </div>
+        <form method="POST" action="{% url 'admin_panel:manage_plans' %}" id="apPlanDrawerForm"
+              data-ajax-form data-plan-form="1" data-close-overlay="1"
+              style="display:flex; flex-direction:column; flex:1;">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="add">
+            <input type="hidden" name="plan_id" value="">
+            <div class="ap-drawer-body">
+                {% include 'admin_panel/_plan_form_fields.html' %}
+            </div>
+            <div class="ap-drawer-footer">
+                <button type="button" class="ap-btn ap-btn-secondary" data-drawer-close>إلغاء</button>
+                <button type="submit" class="ap-btn ap-btn-primary">
+                    <i class="bi bi-check2-circle"></i> <span data-plan-submit-label>حفظ الباقة</span>
+                </button>
+            </div>
+        </form>
     </div>
 </div>
 {% endblock %}

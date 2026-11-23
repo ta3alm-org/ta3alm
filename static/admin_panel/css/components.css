@@ -1,0 +1,759 @@
+/* ============================================================
+   Ta3alm Admin Design System — Reusable UI Components
+   ============================================================ */
+
+/* ── Buttons ── */
+.ap-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 36px;
+    padding: 0 14px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong);
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    font-size: 0.84rem;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+    transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease), opacity var(--t-fast) var(--ease);
+}
+
+.ap-btn:hover {
+    background: var(--bg-subtle);
+    border-color: var(--text-muted);
+    color: var(--text-primary);
+}
+
+.ap-btn:disabled,
+.ap-btn.is-loading {
+    opacity: 0.6;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.ap-btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--text-on-accent);
+}
+
+.ap-btn-primary:hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+    color: var(--text-on-accent);
+}
+
+.ap-btn-secondary {
+    background: var(--bg-surface);
+    border-color: var(--border-strong);
+    color: var(--text-primary);
+}
+
+.ap-btn-ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--text-secondary);
+}
+
+.ap-btn-ghost:hover {
+    background: var(--bg-subtle);
+    border-color: transparent;
+    color: var(--text-primary);
+}
+
+.ap-btn-success {
+    background: var(--success);
+    border-color: var(--success);
+    color: #fff;
+}
+
+.ap-btn-success:hover {
+    background: var(--success-hover);
+    border-color: var(--success-hover);
+    color: #fff;
+}
+
+.ap-btn-warning {
+    background: var(--warning-soft);
+    border-color: var(--warning-border);
+    color: var(--warning-hover);
+}
+
+.ap-btn-warning:hover {
+    background: #faeacc;
+    color: var(--warning-hover);
+}
+
+.ap-btn-danger {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: #fff;
+}
+
+.ap-btn-danger:hover {
+    background: var(--danger-hover);
+    border-color: var(--danger-hover);
+    color: #fff;
+}
+
+.ap-btn-danger-outline {
+    background: var(--bg-surface);
+    border-color: var(--danger-border);
+    color: var(--danger);
+}
+
+.ap-btn-danger-outline:hover {
+    background: var(--danger-soft);
+    border-color: var(--danger);
+    color: var(--danger);
+}
+
+.ap-btn-sm {
+    height: 30px;
+    padding: 0 10px;
+    font-size: 0.78rem;
+}
+
+.ap-btn-lg {
+    height: 42px;
+    padding: 0 18px;
+    font-size: 0.9rem;
+}
+
+.ap-icon-btn {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-default);
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+
+.ap-icon-btn:hover {
+    background: var(--bg-subtle);
+    border-color: var(--border-strong);
+    color: var(--text-primary);
+}
+
+.ap-btn .ap-spinner,
+.ap-icon-btn .ap-spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: ap-spin 0.65s linear infinite;
+}
+
+@keyframes ap-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ── Cards ── */
+.ap-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-xs);
+    overflow: hidden;
+}
+
+.ap-card-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border-default);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    background: var(--bg-surface);
+}
+
+.ap-card-title {
+    margin: 0;
+    font-size: 0.96rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ap-card-title i {
+    color: var(--accent);
+}
+
+.ap-card-body {
+    padding: 20px;
+}
+
+.ap-card-body-flush {
+    padding: 0;
+}
+
+.ap-card-footer {
+    padding: 12px 20px;
+    border-top: 1px solid var(--border-default);
+    background: var(--bg-hover);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+/* ── Stat Cards (Calm Shopify KPI Style) ── */
+.ap-stat {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    padding: 18px 20px;
+    box-shadow: var(--shadow-xs);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    height: 100%;
+}
+
+.ap-stat-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.ap-stat-label {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+}
+
+.ap-stat-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-subtle);
+    color: var(--accent);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+.ap-stat-value {
+    font-size: 1.65rem;
+    font-weight: 800;
+    line-height: 1.15;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
+}
+
+.ap-stat-sub {
+    font-size: 0.76rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ap-stat-sub.is-positive { color: var(--success); font-weight: 700; }
+.ap-stat-sub.is-warning { color: var(--warning); font-weight: 700; }
+.ap-stat-sub.is-danger { color: var(--danger); font-weight: 700; }
+
+/* ── Forms & Controls (includes .form-control / .form-select compatibility for Django forms) ── */
+.ap-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.ap-form-grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.ap-col-full {
+    grid-column: 1 / -1;
+}
+
+@media (max-width: 768px) {
+    .ap-form-grid,
+    .ap-form-grid-3 {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+.ap-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.ap-label {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.ap-help {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+.ap-field-error {
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: var(--danger);
+}
+
+.ap-input,
+.ap-select,
+.ap-textarea,
+.form-control,
+.form-select {
+    width: 100%;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: 8px 12px;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+    line-height: 1.45;
+    transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+}
+
+.ap-input,
+.ap-select,
+input.form-control,
+select.form-select {
+    min-height: 38px;
+}
+
+.ap-input-sm,
+.form-control-sm,
+.form-select-sm {
+    min-height: 32px;
+    padding: 5px 10px;
+    font-size: 0.82rem;
+}
+
+.ap-input:focus,
+.ap-select:focus,
+.ap-textarea:focus,
+.form-control:focus,
+.form-select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(48, 63, 58, 0.12);
+}
+
+.ap-input[readonly],
+.form-control[readonly],
+.ap-select:disabled,
+.form-select:disabled {
+    background: var(--bg-subtle);
+    color: var(--text-secondary);
+}
+
+.is-invalid {
+    border-color: var(--danger) !important;
+}
+
+/* Switch toggle */
+.ap-switch-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    background: var(--bg-hover);
+}
+
+.ap-switch-label {
+    font-size: 0.84rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    cursor: pointer;
+}
+
+.ap-switch-desc {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    display: block;
+    font-weight: 400;
+}
+
+.ap-switch {
+    position: relative;
+    width: 38px;
+    height: 22px;
+    appearance: none;
+    -webkit-appearance: none;
+    background: var(--border-strong);
+    border-radius: 999px;
+    border: none;
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: background var(--t-fast) var(--ease);
+}
+
+.ap-switch::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: var(--shadow-xs);
+    transition: transform var(--t-fast) var(--ease);
+}
+
+.ap-switch:checked {
+    background: var(--accent);
+}
+
+.ap-switch:checked::after {
+    transform: translateX(-16px);
+}
+
+.ap-input-group {
+    display: flex;
+    align-items: stretch;
+    gap: 6px;
+}
+
+.ap-input-group > .ap-input,
+.ap-input-group > .form-control {
+    flex: 1;
+    min-width: 0;
+}
+
+/* ── Badges & Status Pills ── */
+.ap-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    border-radius: var(--radius-pill);
+    font-size: 0.73rem;
+    font-weight: 700;
+    line-height: 1.3;
+    border: 1px solid transparent;
+    white-space: nowrap;
+}
+
+.ap-badge-neutral {
+    background: var(--bg-subtle);
+    border-color: var(--border-default);
+    color: var(--text-secondary);
+}
+
+.ap-badge-accent {
+    background: var(--accent-soft);
+    border-color: var(--accent-border);
+    color: var(--accent);
+}
+
+.ap-badge-success {
+    background: var(--success-soft);
+    border-color: var(--success-border);
+    color: var(--success);
+}
+
+.ap-badge-warning {
+    background: var(--warning-soft);
+    border-color: var(--warning-border);
+    color: var(--warning-hover);
+}
+
+.ap-badge-danger {
+    background: var(--danger-soft);
+    border-color: var(--danger-border);
+    color: var(--danger);
+}
+
+.ap-badge-info {
+    background: var(--info-soft);
+    border-color: var(--info-border);
+    color: var(--info);
+}
+
+.ap-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    flex-shrink: 0;
+}
+
+/* ── Tabs ── */
+.ap-tabs {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    border-bottom: 1px solid var(--border-default);
+    margin-bottom: 20px;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.ap-tabs::-webkit-scrollbar {
+    display: none;
+}
+
+.ap-tab-btn {
+    padding: 10px 14px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 700;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+}
+
+.ap-tab-btn:hover {
+    color: var(--text-primary);
+}
+
+.ap-tab-btn.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+}
+
+.ap-tab-count {
+    font-size: 0.72rem;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--bg-subtle);
+    color: var(--text-secondary);
+}
+
+.ap-tab-btn.active .ap-tab-count {
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+.ap-tab-panel {
+    display: none;
+}
+
+.ap-tab-panel.active {
+    display: block;
+}
+
+/* ── Banners & Alerts ── */
+.ap-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-default);
+    background: var(--bg-surface);
+    font-size: 0.84rem;
+    line-height: 1.6;
+}
+
+.ap-banner-info {
+    background: var(--info-soft);
+    border-color: var(--info-border);
+    color: var(--info);
+}
+
+.ap-banner-warning {
+    background: var(--warning-soft);
+    border-color: var(--warning-border);
+    color: var(--warning-hover);
+}
+
+.ap-banner-success {
+    background: var(--success-soft);
+    border-color: var(--success-border);
+    color: var(--success);
+}
+
+.ap-banner-danger {
+    background: var(--danger-soft);
+    border-color: var(--danger-border);
+    color: var(--danger);
+}
+
+/* ── Avatars ── */
+.ap-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: var(--radius-sm);
+    background: var(--accent-soft);
+    color: var(--accent);
+    border: 1px solid var(--border-default);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 0.8rem;
+    flex-shrink: 0;
+    object-fit: cover;
+}
+
+.ap-avatar-lg {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-md);
+    font-size: 1.05rem;
+}
+
+/* ── Dropdown Menus ── */
+.ap-dropdown {
+    position: relative;
+    display: inline-flex;
+}
+
+.ap-dropdown-menu {
+    position: fixed;
+    min-width: 196px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    padding: 6px;
+    z-index: var(--z-dropdown);
+    display: none;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.ap-dropdown-menu.open {
+    display: flex;
+}
+
+.ap-dropdown-item {
+    width: 100%;
+    padding: 7px 10px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 0.82rem;
+    font-weight: 600;
+    text-align: start;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background var(--t-fast) var(--ease);
+}
+
+.ap-dropdown-item:hover {
+    background: var(--bg-subtle);
+    color: var(--text-primary);
+}
+
+.ap-dropdown-item.is-danger {
+    color: var(--danger);
+}
+
+.ap-dropdown-item.is-danger:hover {
+    background: var(--danger-soft);
+}
+
+.ap-dropdown-sep {
+    height: 1px;
+    background: var(--border-default);
+    margin: 4px 0;
+}
+
+/* ── Audit Timeline ── */
+.ap-timeline-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 13px 20px;
+    border-bottom: 1px solid var(--border-subtle);
+    transition: background var(--t-fast) var(--ease);
+}
+
+.ap-timeline-item:last-child {
+    border-bottom: 0;
+}
+
+.ap-timeline-item:hover {
+    background: var(--bg-hover);
+}
+
+.ap-timeline-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-top: 7px;
+    flex-shrink: 0;
+    background: var(--accent);
+}
+
+.ap-timeline-dot.is-danger { background: var(--danger); }
+.ap-timeline-dot.is-success { background: var(--success); }
+.ap-timeline-dot.is-warning { background: var(--warning); }
+.ap-timeline-dot.is-info { background: var(--info); }
+
+/* ── Empty State & Skeletons ── */
+.ap-empty {
+    padding: 44px 20px;
+    text-align: center;
+    color: var(--text-muted);
+}
+
+.ap-empty i {
+    font-size: 2.2rem;
+    display: block;
+    margin-bottom: 10px;
+    color: var(--border-strong);
+}
+
+.ap-empty-title {
+    margin: 0 0 4px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+}
+
+.ap-empty-sub {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.ap-skeleton-box {
+    background: linear-gradient(90deg, var(--bg-subtle) 25%, #e8eae7 50%, var(--bg-subtle) 75%);
+    background-size: 200% 100%;
+    animation: ap-shimmer 1.3s ease-in-out infinite;
+    border-radius: var(--radius-sm);
+    height: 16px;
+}
+
+@keyframes ap-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+.ap-is-loading {
+    opacity: 0.55;
+    pointer-events: none;
+    transition: opacity var(--t-fast) var(--ease);
+}

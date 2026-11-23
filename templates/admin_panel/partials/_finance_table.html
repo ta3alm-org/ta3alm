@@ -1,0 +1,36 @@
+<div class="ap-table-wrap">
+    <table class="ap-table">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>المعلم</th>
+                <th>رقم المعاملة</th>
+                <th>المبلغ</th>
+                <th>التاريخ</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for t in transactions %}
+            <tr>
+                <td class="ap-muted ap-xs">{{ forloop.counter }}</td>
+                <td>
+                    <div class="ap-strong ap-sm">{{ t.teacher.user.get_full_name|default:t.teacher.user.username }}</div>
+                    <div class="ap-xs ap-subtle-text ap-ltr">{{ t.teacher.user.phone|default:"—" }}</div>
+                </td>
+                <td><code>{{ t.transaction_id }}</code></td>
+                <td class="ap-strong ap-text-success">{{ t.amount }} EGP</td>
+                <td class="ap-muted ap-sm">{{ t.date|date:"j M Y · H:i" }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="5">
+                    <div class="ap-empty">
+                        <i class="bi bi-receipt-cutoff"></i>
+                        <p class="ap-empty-title">لا توجد معاملات مطابقة</p>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>

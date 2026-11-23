@@ -5,561 +5,409 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block page_title %}لوحة الإدارة{% endblock %} | منصة تَعَلَّم</title>
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    <title>{% block page_title %}{% block title %}لوحة الإدارة{% endblock %}{% endblock %} | منصة تَعَلَّم</title>
     <link rel="icon" href="{% static 'images/favicon.png' %}" type="image/png">
 
-    <!-- Bootstrap RTL -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
-    <!-- Bootstrap Icons -->
+    <script>
+        (function () {
+            try {
+                if (localStorage.getItem('ta3alm_admin_sidebar_collapsed') === '1') {
+                    document.documentElement.classList.add('ap-sidebar-collapsed');
+                }
+            } catch (e) {}
+        })();
+    </script>
+
+    <!-- Typography & Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    <!-- Cairo Font -->
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 
-    <style>
-        :root {
-            --admin-primary:   #1a1a2e;
-            --admin-secondary: #16213e;
-            --admin-accent:    #e94560;
-            --admin-gold:      #f5a623;
-            --admin-success:   #0f9b58;
-            --admin-sidebar-w: 260px;
-            --admin-topbar-h:  64px;
-        }
-
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: 'Cairo', sans-serif;
-            background: #f0f2f5;
-            color: #1a1a2e;
-            min-height: 100vh;
-        }
-
-        /* ── Sidebar ── */
-        .admin-sidebar {
-            position: fixed;
-            top: 0; right: 0;
-            width: var(--admin-sidebar-w);
-            height: 100vh;
-            background: linear-gradient(180deg, var(--admin-primary) 0%, var(--admin-secondary) 100%);
-            z-index: 1000;
-            display: flex;
-            flex-direction: column;
-            overflow-y: auto;
-            transition: transform 0.3s ease;
-        }
-        .admin-sidebar::-webkit-scrollbar { width: 4px; }
-        .admin-sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
-
-        .sidebar-brand {
-            display: flex; align-items: center; gap: 12px;
-            padding: 20px 24px;
-            border-bottom: 1px solid rgba(255,255,255,0.08);
-            text-decoration: none;
-        }
-        .sidebar-brand-icon {
-            width: 40px; height: 40px;
-            background: var(--admin-accent);
-            border-radius: 10px;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 20px; color: white;
-        }
-        .sidebar-brand-text { color: white; font-weight: 800; font-size: 1.1rem; line-height: 1.2; }
-        .sidebar-brand-sub  { color: rgba(255,255,255,0.5); font-size: 0.7rem; font-weight: 400; }
-
-        .sidebar-section-title {
-            padding: 16px 24px 6px;
-            font-size: 0.65rem;
-            font-weight: 700;
-            color: rgba(255,255,255,0.35);
-            letter-spacing: 1.5px;
-            text-transform: uppercase;
-        }
-
-        .sidebar-nav { padding: 8px 12px; flex: 1; }
-        .sidebar-link {
-            display: flex; align-items: center; gap: 12px;
-            padding: 10px 14px;
-            color: rgba(255,255,255,0.65);
-            text-decoration: none;
-            border-radius: 10px;
-            margin-bottom: 2px;
-            font-weight: 600;
-            font-size: 0.9rem;
-            transition: all 0.2s ease;
-            position: relative;
-        }
-        .sidebar-link i { font-size: 1.1rem; min-width: 20px; }
-        .sidebar-link:hover {
-            background: rgba(255,255,255,0.08);
-            color: white;
-            transform: translateX(-4px);
-        }
-        .sidebar-link.active {
-            background: var(--admin-accent);
-            color: white;
-            box-shadow: 0 4px 15px rgba(233,69,96,0.4);
-        }
-        .sidebar-link .badge-dot {
-            width: 8px; height: 8px;
-            background: var(--admin-gold);
-            border-radius: 50%;
-            margin-right: auto;
-        }
-
-        .sidebar-footer {
-            padding: 16px 12px;
-            border-top: 1px solid rgba(255,255,255,0.08);
-        }
-        .sidebar-user-card {
-            display: flex; align-items: center; gap: 10px;
-            padding: 10px;
-            background: rgba(255,255,255,0.06);
-            border-radius: 10px;
-        }
-        .sidebar-avatar {
-            width: 36px; height: 36px;
-            background: var(--admin-accent);
-            border-radius: 8px;
-            display: flex; align-items: center; justify-content: center;
-            color: white; font-weight: 800; font-size: 0.85rem;
-        }
-        .sidebar-username { color: white; font-weight: 700; font-size: 0.85rem; }
-        .sidebar-role-badge { color: rgba(255,255,255,0.45); font-size: 0.7rem; }
-
-        /* ── Topbar ── */
-        .admin-topbar {
-            position: fixed;
-            top: 0; right: var(--admin-sidebar-w); left: 0;
-            height: var(--admin-topbar-h);
-            background: white;
-            border-bottom: 1px solid #e8eaf0;
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 0 28px;
-            z-index: 900;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-        }
-        .topbar-breadcrumb { display: flex; align-items: center; gap: 8px; }
-        .topbar-breadcrumb a { color: #888; text-decoration: none; font-size: 0.85rem; transition: color 0.2s; }
-        .topbar-breadcrumb a:hover { color: var(--admin-accent); }
-        .topbar-breadcrumb .sep { color: #ccc; }
-        .topbar-breadcrumb .current { color: var(--admin-primary); font-weight: 700; font-size: 0.9rem; }
-
-        .topbar-actions { display: flex; align-items: center; gap: 12px; }
-        .topbar-btn {
-            width: 38px; height: 38px;
-            background: #f5f6fa;
-            border: none; border-radius: 10px;
-            display: flex; align-items: center; justify-content: center;
-            color: #555; cursor: pointer;
-            transition: all 0.2s; text-decoration: none;
-            font-size: 1.1rem;
-        }
-        .topbar-btn:hover { background: var(--admin-accent); color: white; }
-        .topbar-btn .notif-badge {
-            position: absolute; top: -4px; left: -4px;
-            width: 16px; height: 16px;
-            background: var(--admin-accent);
-            color: white; font-size: 9px; font-weight: 700;
-            border-radius: 50%; display: flex; align-items: center; justify-content: center;
-        }
-
-        /* ── Main Content ── */
-        .admin-main {
-            margin-right: var(--admin-sidebar-w);
-            margin-top: var(--admin-topbar-h);
-            padding: 28px;
-            min-height: calc(100vh - var(--admin-topbar-h));
-        }
-
-        /* ── Stat Cards ── */
-        .stat-card {
-            background: white;
-            border-radius: 16px;
-            padding: 24px;
-            border: none;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.05);
-            transition: all 0.3s ease;
-            height: 100%;
-        }
-        .stat-card:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.1); }
-        .stat-icon {
-            width: 52px; height: 52px;
-            border-radius: 14px;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 1.4rem; margin-bottom: 14px;
-        }
-        .stat-number { font-size: 2rem; font-weight: 900; line-height: 1; color: var(--admin-primary); }
-        .stat-label  { color: #888; font-size: 0.85rem; font-weight: 600; margin-top: 4px; }
-        .stat-change { font-size: 0.75rem; font-weight: 700; margin-top: 8px; }
-        .stat-change.up   { color: var(--admin-success); }
-        .stat-change.down { color: var(--admin-accent); }
-
-        /* ── Content Cards ── */
-        .admin-card {
-            background: white;
-            border-radius: 16px;
-            border: none;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.05);
-            overflow: hidden;
-        }
-        .admin-card-header {
-            padding: 18px 24px;
-            border-bottom: 1px solid #f0f2f5;
-            display: flex; align-items: center; justify-content: space-between;
-            background: white;
-        }
-        .admin-card-title { font-weight: 800; font-size: 1rem; color: var(--admin-primary); }
-        .admin-card-body  { padding: 0; }
-
-        /* ── Tables ── */
-        .admin-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; white-space: nowrap; }
-        .admin-table thead th {
-            background: #f8f9fc;
-            color: #888;
-            font-weight: 700;
-            font-size: 0.75rem;
-            letter-spacing: 0.5px;
-            text-transform: uppercase;
-            padding: 12px 20px;
-            border-bottom: 1px solid #eee;
-            white-space: nowrap;
-        }
-        .admin-table tbody tr { transition: background 0.15s; }
-        .admin-table tbody tr:hover { background: #fafbff; }
-        .admin-table tbody td {
-            padding: 14px 20px;
-            border-bottom: 1px solid #f5f5f5;
-            vertical-align: middle;
-            color: #2d2d2d;
-        }
-
-        /* ── User Avatar ── */
-        .user-avatar {
-            width: 36px; height: 36px;
-            border-radius: 10px;
-            display: inline-flex; align-items: center; justify-content: center;
-            font-weight: 800; font-size: 0.85rem; color: white;
-        }
-
-        /* ── Badges ── */
-        .role-badge {
-            padding: 4px 10px; border-radius: 20px;
-            font-size: 0.72rem; font-weight: 700;
-        }
-        .role-teacher   { background: #e8f4fd; color: #0d6efd; }
-        .role-student   { background: #e8fdf4; color: #0f9b58; }
-        .role-assistant { background: #fff8e1; color: #f5a623; }
-        .role-admin     { background: #fde8ea; color: #e94560; }
-
-        .status-active   { background: #e8fdf4; color: #0f9b58; }
-        .status-expired  { background: #fde8ea; color: #e94560; }
-        .status-banned   { background: #f5f5f5; color: #888; }
-
-        /* ── Action Buttons ── */
-        .action-btn {
-            width: 32px; height: 32px;
-            border-radius: 8px; border: none;
-            display: inline-flex; align-items: center; justify-content: center;
-            cursor: pointer; transition: all 0.2s; font-size: 0.9rem;
-        }
-        .action-btn-edit   { background: #e8f4fd; color: #0d6efd; }
-        .action-btn-notify { background: #f3e8fd; color: #6f42c1; }
-        .action-btn-ban    { background: #fff3e0; color: #f57c00; }
-        .action-btn-delete { background: #fde8ea; color: #e94560; }
-        .action-btn-renew  { background: #e8fdf4; color: #0f9b58; }
-        .action-btn:hover  { filter: brightness(0.9); transform: scale(1.1); }
-
-        /* ── Search Bar ── */
-        .admin-search {
-            display: flex; gap: 8px;
-            background: white;
-            border: 1px solid #e8eaf0;
-            border-radius: 12px;
-            padding: 6px 12px;
-            align-items: center;
-        }
-        .admin-search input {
-            border: none; outline: none;
-            font-family: 'Cairo', sans-serif;
-            font-size: 0.9rem; color: #333; width: 260px;
-            background: transparent;
-        }
-        .admin-search button {
-            border: none; background: var(--admin-accent);
-            color: white; border-radius: 8px;
-            padding: 6px 14px; font-family: 'Cairo', sans-serif;
-            font-weight: 700; cursor: pointer; transition: opacity 0.2s;
-        }
-        .admin-search button:hover { opacity: 0.85; }
-
-        /* ── Empty State ── */
-        .empty-state {
-            text-align: center; padding: 48px 24px;
-            color: #aaa;
-        }
-        .empty-state i { font-size: 3rem; margin-bottom: 16px; display: block; }
-
-        /* ── Page Header ── */
-        .page-header { margin-bottom: 28px; }
-        .page-header h1 { font-size: 1.6rem; font-weight: 900; color: var(--admin-primary); }
-        .page-header p  { color: #888; margin: 0; font-size: 0.9rem; }
-
-        /* ── Audit log ── */
-        .audit-item {
-            display: flex; align-items: flex-start; gap: 14px;
-            padding: 12px 20px;
-            border-bottom: 1px solid #f5f5f5;
-            transition: background 0.15s;
-        }
-        .audit-item:hover { background: #fafbff; }
-        .audit-dot {
-            width: 10px; height: 10px; border-radius: 50%;
-            margin-top: 5px; flex-shrink: 0;
-        }
-
-        /* ── Responsive ── */
-        @media (max-width: 991px) {
-            .admin-sidebar { transform: translateX(100%); }
-            .admin-sidebar.open { transform: translateX(0); }
-            .admin-topbar  { right: 0; }
-            .admin-main    { margin-right: 0; }
-        }
-        @media (max-width: 576px) {
-            .admin-main { padding: 16px; }
-            .stat-number { font-size: 1.5rem; }
-        }
-
-        /* Toasts / Alerts */
-        .alert { border-radius: 12px; border: none; font-weight: 600; }
-        .alert-success { background: #e8fdf4; color: #0f9b58; }
-        .alert-warning { background: #fff8e1; color: #f57c00; }
-        .alert-danger  { background: #fde8ea; color: #c62828; }
-        .alert-info    { background: #e8f4fd; color: #0d6efd; }
-    </style>
-
+    <!-- Design System CSS -->
+    <link rel="stylesheet" href="{% static 'admin_panel/css/tokens.css' %}">
+    <link rel="stylesheet" href="{% static 'admin_panel/css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'admin_panel/css/layout.css' %}">
+    <link rel="stylesheet" href="{% static 'admin_panel/css/components.css' %}">
+    <link rel="stylesheet" href="{% static 'admin_panel/css/tables.css' %}">
+    <link rel="stylesheet" href="{% static 'admin_panel/css/overlays.css' %}">
+    <link rel="stylesheet" href="{% static 'admin_panel/css/pages.css' %}">
     {% block extra_css %}{% endblock %}
 </head>
-<body>
+<body data-page="{% block body_page %}{% endblock %}">
 
-<!-- ═══════════════════════════════════ SIDEBAR ═══════════════════════════════════ -->
-<aside class="admin-sidebar" id="adminSidebar">
+<div class="ap-shell">
+    <!-- Backdrop للموبايل -->
+    <div class="ap-sidebar-backdrop" id="apSidebarBackdrop"></div>
 
-    <!-- Brand -->
-    <a href="{% url 'admin_panel:dashboard' %}" class="sidebar-brand">
-        <div class="sidebar-brand-icon"><i class="bi bi-shield-fill-check"></i></div>
-        <div>
-            <div class="sidebar-brand-text">تَعَلَّم</div>
-            <div class="sidebar-brand-sub">لوحة الإدارة</div>
+    <!-- ════════════════════════ SIDEBAR ════════════════════════ -->
+    <aside class="ap-sidebar" id="adminSidebar" aria-label="القائمة الرئيسية">
+        <div class="ap-sidebar-head">
+            <a href="{% url 'admin_panel:dashboard' %}" class="ap-brand">
+                <span class="ap-brand-mark"><i class="bi bi-shield-check"></i></span>
+                <span class="ap-brand-meta">
+                    <span class="ap-brand-title">تَعَلَّم</span>
+                    <span class="ap-brand-sub">إدارة المنصة</span>
+                </span>
+            </a>
+            <button type="button" class="ap-sidebar-collapse-btn" id="apSidebarCollapseBtn"
+                    aria-label="طي أو توسيع القائمة الجانبية" title="تصغير القائمة">
+                <i class="bi bi-layout-sidebar-inset-reverse"></i>
+            </button>
+            <button type="button" class="ap-icon-btn ap-sidebar-close-mobile" id="apSidebarCloseMobile"
+                    aria-label="إغلاق القائمة">
+                <i class="bi bi-x-lg"></i>
+            </button>
         </div>
-    </a>
 
-    <!-- Navigation -->
-    <nav class="sidebar-nav">
-        <div class="sidebar-section-title">القائمة الرئيسية</div>
-
-        <a href="{% url 'admin_panel:dashboard' %}"
-           class="sidebar-link {% block nav_dashboard %}{% endblock %}">
-            <i class="bi bi-speedometer2"></i> الإحصاءات
-        </a>
-
-        {% if can_manage_users %}
-        <a href="{% url 'admin_panel:manage_users' %}"
-           class="sidebar-link {% block nav_users %}{% endblock %}">
-            <i class="bi bi-people-fill"></i> إدارة المستخدمين
-        </a>
-        <a href="{% url 'admin_panel:send_notifications' %}"
-           class="sidebar-link {% block nav_notifications %}{% endblock %}">
-            <i class="bi bi-bell-fill"></i> إرسال إشعارات
-        </a>
-        <a href="{% url 'admin_panel:security_dashboard' %}"
-           class="sidebar-link {% block nav_security %}{% endblock %}">
-            <i class="bi bi-shield-lock-fill"></i> مركز أمان الأجهزة والحماية
-        </a>
-        {% endif %}
-
-        {% if can_manage_support %}
-        <div class="sidebar-section-title">خدمة العملاء والبريد</div>
-        <a href="{% url 'admin_panel:support_inbox' %}"
-           class="sidebar-link {% block nav_support_inbox %}{% endblock %}">
-            <i class="bi bi-envelope-at-fill"></i> بريد الدعم (Zoho)
-            {% if zoho_connected %}
-            <span class="badge-dot" style="background:#00d26a;" title="متصل"></span>
-            {% else %}
-            <span class="badge-dot" style="background:#e94560;" title="غير متصل"></span>
-            {% endif %}
-        </a>
-        {% endif %}
-
-        {% if can_view_finance %}
-        <div class="sidebar-section-title">المالية</div>
-        <a href="{% url 'admin_panel:finance_report' %}"
-           class="sidebar-link {% block nav_finance %}{% endblock %}">
-            <i class="bi bi-cash-stack"></i> التقارير المالية
-        </a>
-        <a href="{% url 'admin_panel:withdrawals' %}"
-           class="sidebar-link {% block nav_withdrawals %}{% endblock %}">
-            <i class="bi bi-bank"></i> طلبات السحب
-        </a>
-        <a href="{% url 'admin_panel:student_payments' %}"
-           class="sidebar-link {% block nav_sp %}{% endblock %}">
-            <i class="bi bi-cart-check-fill"></i> مبيعات الحزم
-        </a>
-        <a href="{% url 'admin_panel:manual_payments' %}"
-           class="sidebar-link {% block nav_mp %}{% endblock %}">
-            <i class="bi bi-wallet2"></i> طلبات الدفع اليدوي
-        </a>
-        {% endif %}
-
-        {% if can_manage_plans %}
-        <div class="sidebar-section-title">الإعدادات</div>
-        <a href="{% url 'admin_panel:manage_plans' %}"
-           class="sidebar-link {% block nav_plans %}{% endblock %}">
-            <i class="bi bi-tags-fill"></i> الباقات
-        </a>
-        {% if is_owner %}
-        <a href="{% url 'admin_panel:app_release_settings' %}"
-           class="sidebar-link {% block nav_app_release %}{% endblock %}">
-            <i class="bi bi-android2"></i> إصدارات التطبيق ورابط APK
-        </a>
-        {% endif %}
-        {% endif %}
-
-        {% if is_owner %}
-        <div class="sidebar-section-title">المناهج والبيانات الأساسية</div>
-        <a href="{% url 'admin_panel:manage_curriculum' %}"
-           class="sidebar-link {% block nav_curriculum %}{% endblock %}">
-            <i class="bi bi-journal-bookmark-fill"></i> إدارة المناهج (الوحدات والدروس)
-        </a>
-        <a href="/admin/core/subject/"
-           class="sidebar-link" target="_blank">
-            <i class="bi bi-book-half"></i> المواد الدراسية (Django Admin)
-        </a>
-
-        <div class="sidebar-section-title">فريق الإدارة وسجل الأحداث</div>
-        <a href="{% url 'admin_panel:manage_staff' %}"
-           class="sidebar-link {% block nav_staff %}{% endblock %}">
-            <i class="bi bi-person-badge-fill"></i> فريق الإدارة
-        </a>
-        <a href="{% url 'admin_panel:audit_log' %}"
-           class="sidebar-link {% block nav_audit %}{% endblock %}">
-            <i class="bi bi-journal-text"></i> سجل الأحداث
-        </a>
-        {% endif %}
-
-        <div class="sidebar-section-title">روابط سريعة</div>
-        <a href="{% url 'home' %}" class="sidebar-link" target="_blank">
-            <i class="bi bi-house-fill"></i> الموقع الرئيسي
-        </a>
-        <a href="{% url 'admin:index' %}" class="sidebar-link">
-            <i class="bi bi-wrench-adjustable"></i> Django Admin
-        </a>
-    </nav>
-
-    <!-- User Footer -->
-    <div class="sidebar-footer">
-        <div class="sidebar-user-card">
-            <div class="sidebar-avatar">
-                {{ request.user.first_name|slice:":1"|upper }}{{ request.user.last_name|slice:":1"|upper }}
+        <nav class="ap-sidebar-scroll">
+            <div class="ap-nav-group">
+                <div class="ap-nav-group-label">نظرة عامة</div>
+                <a href="{% url 'admin_panel:dashboard' %}"
+                   class="ap-nav-link {% block nav_dashboard %}{% endblock %}"
+                   data-tooltip="لوحة القيادة">
+                    <i class="bi bi-grid-1x2"></i>
+                    <span class="ap-nav-label">لوحة القيادة</span>
+                </a>
             </div>
-            <div>
-                <div class="sidebar-username">{{ request.user.get_full_name|default:request.user.email }}</div>
-                <div class="sidebar-role-badge">
-                    {% if request.user.is_superuser %}مالك المنصة
-                    {% elif admin_profile %}{{ admin_profile.get_admin_role_display }}
-                    {% else %}مسؤول{% endif %}
+
+            {% if can_manage_users %}
+            <div class="ap-nav-group">
+                <div class="ap-nav-group-label">المستخدمون والأمان</div>
+                <a href="{% url 'admin_panel:manage_users' %}"
+                   class="ap-nav-link {% block nav_users %}{% endblock %}"
+                   data-tooltip="إدارة المستخدمين">
+                    <i class="bi bi-people"></i>
+                    <span class="ap-nav-label">إدارة المستخدمين</span>
+                </a>
+                <a href="{% url 'admin_panel:security_dashboard' %}"
+                   class="ap-nav-link {% block nav_security %}{% endblock %}"
+                   data-tooltip="مركز الأمان والحماية">
+                    <i class="bi bi-shield-lock"></i>
+                    <span class="ap-nav-label">مركز الأمان والحماية</span>
+                </a>
+                <a href="{% url 'admin_panel:error_reports' %}"
+                   class="ap-nav-link {% block nav_error_reports %}{% endblock %}"
+                   data-tooltip="الأخطاء التقنية">
+                    <i class="bi bi-bug"></i>
+                    <span class="ap-nav-label">الأخطاء التقنية</span>
+                    <span class="ap-nav-count{% if client_errors_unresolved_count <= 0 %} ap-hidden{% endif %}"
+                          data-nav-count="error_reports">{{ client_errors_unresolved_count }}</span>
+                </a>
+            </div>
+            {% endif %}
+
+            {% if can_manage_users or can_manage_support %}
+            <div class="ap-nav-group">
+                <div class="ap-nav-group-label">التواصل والدعم</div>
+                {% if can_manage_support %}
+                <a href="{% url 'admin_panel:support_chat' %}"
+                   class="ap-nav-link {% block nav_support_chat %}{% endblock %}"
+                   data-tooltip="شات الدعم المباشر">
+                    <i class="bi bi-chat-dots"></i>
+                    <span class="ap-nav-label">شات الدعم المباشر</span>
+                    <span class="ap-nav-count{% if support_chat_unread_count <= 0 %} ap-hidden{% endif %}"
+                          data-nav-count="support_chat">{{ support_chat_unread_count }}</span>
+                </a>
+                {% endif %}
+                {% if can_manage_users %}
+                <a href="{% url 'admin_panel:send_notifications' %}"
+                   class="ap-nav-link {% block nav_notifications %}{% endblock %}"
+                   data-tooltip="إرسال إشعارات">
+                    <i class="bi bi-bell"></i>
+                    <span class="ap-nav-label">إرسال إشعارات</span>
+                </a>
+                {% endif %}
+                {% if can_manage_support %}
+                <a href="{% url 'admin_panel:support_inbox' %}"
+                   class="ap-nav-link {% block nav_support_inbox %}{% endblock %}"
+                   data-tooltip="بريد الدعم (Zoho)">
+                    <i class="bi bi-envelope"></i>
+                    <span class="ap-nav-label">بريد الدعم (Zoho)</span>
+                    <span class="ap-nav-status-dot {% if zoho_connected %}is-online{% else %}is-offline{% endif %}"
+                          title="{% if zoho_connected %}متصل بـ Zoho{% else %}غير متصل{% endif %}"></span>
+                </a>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% if can_view_finance %}
+            <div class="ap-nav-group">
+                <div class="ap-nav-group-label">المالية</div>
+                <a href="{% url 'admin_panel:finance_report' %}"
+                   class="ap-nav-link {% block nav_finance %}{% endblock %}"
+                   data-tooltip="التقارير المالية">
+                    <i class="bi bi-bar-chart-line"></i>
+                    <span class="ap-nav-label">التقارير المالية</span>
+                </a>
+                <a href="{% url 'admin_panel:withdrawals' %}"
+                   class="ap-nav-link {% block nav_withdrawals %}{% endblock %}"
+                   data-tooltip="طلبات السحب">
+                    <i class="bi bi-bank"></i>
+                    <span class="ap-nav-label">طلبات السحب</span>
+                </a>
+                <a href="{% url 'admin_panel:student_payments' %}"
+                   class="ap-nav-link {% block nav_sp %}{% endblock %}"
+                   data-tooltip="مبيعات الحزم">
+                    <i class="bi bi-bag-check"></i>
+                    <span class="ap-nav-label">مبيعات الحزم</span>
+                </a>
+                <a href="{% url 'admin_panel:manual_payments' %}"
+                   class="ap-nav-link {% block nav_mp %}{% endblock %}"
+                   data-tooltip="طلبات الدفع اليدوي">
+                    <i class="bi bi-wallet2"></i>
+                    <span class="ap-nav-label">طلبات الدفع اليدوي</span>
+                </a>
+            </div>
+            {% endif %}
+
+            {% if can_manage_plans or is_owner %}
+            <div class="ap-nav-group">
+                <div class="ap-nav-group-label">الباقات والمناهج</div>
+                {% if can_manage_plans %}
+                <a href="{% url 'admin_panel:manage_plans' %}"
+                   class="ap-nav-link {% block nav_plans %}{% endblock %}"
+                   data-tooltip="إدارة الباقات">
+                    <i class="bi bi-tags"></i>
+                    <span class="ap-nav-label">الباقات</span>
+                </a>
+                {% endif %}
+                {% if is_owner %}
+                <a href="{% url 'admin_panel:manage_curriculum' %}"
+                   class="ap-nav-link {% block nav_curriculum %}{% endblock %}"
+                   data-tooltip="المناهج والدروس">
+                    <i class="bi bi-journal-bookmark"></i>
+                    <span class="ap-nav-label">المناهج والدروس</span>
+                </a>
+                <a href="/admin/core/subject/" target="_blank" rel="noopener"
+                   class="ap-nav-link" data-tooltip="المواد الدراسية">
+                    <i class="bi bi-book"></i>
+                    <span class="ap-nav-label">المواد الدراسية</span>
+                </a>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% if is_owner %}
+            <div class="ap-nav-group">
+                <div class="ap-nav-group-label">النظام والحوكمة</div>
+                <a href="{% url 'admin_panel:manage_staff' %}"
+                   class="ap-nav-link {% block nav_staff %}{% endblock %}"
+                   data-tooltip="فريق الإدارة">
+                    <i class="bi bi-person-badge"></i>
+                    <span class="ap-nav-label">فريق الإدارة</span>
+                </a>
+                <a href="{% url 'admin_panel:audit_log' %}"
+                   class="ap-nav-link {% block nav_audit %}{% endblock %}"
+                   data-tooltip="سجل الأحداث">
+                    <i class="bi bi-journal-text"></i>
+                    <span class="ap-nav-label">سجل الأحداث</span>
+                </a>
+                <a href="{% url 'admin_panel:app_release_settings' %}"
+                   class="ap-nav-link {% block nav_app_release %}{% endblock %}"
+                   data-tooltip="إصدارات التطبيق و APK">
+                    <i class="bi bi-phone"></i>
+                    <span class="ap-nav-label">إصدارات التطبيق و APK</span>
+                </a>
+                <a href="{% url 'admin:index' %}"
+                   class="ap-nav-link" data-tooltip="Django Admin">
+                    <i class="bi bi-sliders"></i>
+                    <span class="ap-nav-label">Django Admin</span>
+                </a>
+            </div>
+            {% endif %}
+        </nav>
+
+        <div class="ap-sidebar-footer">
+            <div class="ap-sidebar-user">
+                <div class="ap-avatar">
+                    {{ request.user.first_name|slice:":1"|upper|default:"A" }}{{ request.user.last_name|slice:":1"|upper }}
+                </div>
+                <div class="ap-sidebar-user-meta">
+                    <div class="ap-sidebar-user-name">{{ request.user.get_full_name|default:request.user.email }}</div>
+                    <div class="ap-sidebar-user-role">
+                        {% if request.user.is_superuser %}مالك المنصة
+                        {% elif admin_profile %}{{ admin_profile.get_admin_role_display }}
+                        {% else %}مسؤول{% endif %}
+                    </div>
+                </div>
+                <a href="{% url 'account_logout' %}" class="ap-icon-btn" title="تسجيل خروج" aria-label="تسجيل خروج">
+                    <i class="bi bi-box-arrow-left"></i>
+                </a>
+            </div>
+        </div>
+    </aside>
+
+    <!-- ════════════════════════ WORKSPACE ════════════════════════ -->
+    <div class="ap-workspace">
+        <header class="ap-topbar">
+            <div class="ap-topbar-start">
+                <button type="button" class="ap-topbar-icon-btn ap-mobile-menu-btn" id="apMobileMenuBtn"
+                        aria-label="فتح القائمة الجانبية">
+                    <i class="bi bi-list"></i>
+                </button>
+                <nav class="ap-breadcrumbs" aria-label="مسار التنقل">
+                    <a href="{% url 'admin_panel:dashboard' %}">لوحة الإدارة</a>
+                    {% block breadcrumb %}{% endblock %}
+                </nav>
+            </div>
+
+            <div class="ap-topbar-center">
+                <button type="button" class="ap-quickjump-trigger" id="apQuickJumpTrigger">
+                    <span class="ap-flex ap-items-center ap-gap-2">
+                        <i class="bi bi-search"></i>
+                        <span>انتقال سريع إلى صفحة...</span>
+                    </span>
+                    <kbd class="ap-kbd">Ctrl K</kbd>
+                </button>
+            </div>
+
+            <div class="ap-topbar-end">
+                {% if is_owner %}
+                <form method="POST" action="{% url 'admin_panel:toggle_maintenance' %}"
+                      data-ajax-form data-maintenance-form="1"
+                      data-confirm="هل تريد تبديل حالة وضع الصيانة على المنصة بالكامل؟"
+                      data-confirm-title="وضع الصيانة"
+                      data-confirm-variant="warning">
+                    {% csrf_token %}
+                    <button type="submit" id="apTopbarMaintBtn"
+                            class="ap-maint-pill {% if site_settings.is_maintenance_mode %}is-active{% endif %}"
+                            title="{% if site_settings.is_maintenance_mode %}وضع الصيانة مفعّل — اضغط للإيقاف{% else %}تفعيل وضع الصيانة{% endif %}">
+                        <i class="bi bi-tools"></i>
+                        <span data-topbar-maint-text>{% if site_settings.is_maintenance_mode %}الصيانة مفعّلة{% else %}وضع الصيانة{% endif %}</span>
+                    </button>
+                </form>
+                {% endif %}
+
+                <a href="{% url 'all_notifications' %}" class="ap-topbar-icon-btn" title="الإشعارات" aria-label="الإشعارات">
+                    <i class="bi bi-bell"></i>
+                    {% if unread_count %}
+                    <span class="ap-topbar-badge">{{ unread_count }}</span>
+                    {% endif %}
+                </a>
+
+                <div class="ap-dropdown">
+                    <button type="button" class="ap-user-menu-btn" data-dropdown-trigger aria-expanded="false">
+                        <span class="ap-avatar" style="width:24px;height:24px;font-size:0.7rem;">
+                            {{ request.user.first_name|slice:":1"|upper|default:"A" }}
+                        </span>
+                        <span class="ap-user-menu-name">{{ request.user.get_full_name|default:request.user.email|truncatechars:18 }}</span>
+                        <i class="bi bi-chevron-down ap-xs ap-muted"></i>
+                    </button>
+                    <div class="ap-dropdown-menu" role="menu">
+                        <a href="{% url 'home' %}" target="_blank" rel="noopener" class="ap-dropdown-item">
+                            <i class="bi bi-globe"></i> فتح الموقع الرئيسي
+                        </a>
+                        {% if is_owner %}
+                        <a href="{% url 'admin_panel:app_release_settings' %}" class="ap-dropdown-item">
+                            <i class="bi bi-phone"></i> إعدادات التطبيق والـ APK
+                        </a>
+                        <a href="{% url 'admin_panel:manage_staff' %}" class="ap-dropdown-item">
+                            <i class="bi bi-person-badge"></i> فريق الإدارة
+                        </a>
+                        {% endif %}
+                        <div class="ap-dropdown-sep"></div>
+                        <a href="{% url 'account_logout' %}" class="ap-dropdown-item is-danger">
+                            <i class="bi bi-box-arrow-left"></i> تسجيل الخروج
+                        </a>
+                    </div>
                 </div>
             </div>
-            <a href="{% url 'account_logout' %}" class="topbar-btn me-auto" title="تسجيل خروج"
-               style="background:rgba(255,255,255,0.08); color: white;">
-                <i class="bi bi-box-arrow-left"></i>
-            </a>
-        </div>
-    </div>
-</aside>
+        </header>
 
-<!-- ═══════════════════════════════════ TOPBAR ═══════════════════════════════════ -->
-<header class="admin-topbar">
-    <!-- Breadcrumb -->
-    <div class="topbar-breadcrumb">
-        <button class="topbar-btn d-lg-none" onclick="toggleSidebar()">
-            <i class="bi bi-list fs-5"></i>
-        </button>
-        <a href="{% url 'admin_panel:dashboard' %}">الرئيسية</a>
-        {% block breadcrumb %}{% endblock %}
-    </div>
-
-    <!-- Actions -->
-    <div class="topbar-actions">
-        <!-- وضع الصيانة -->
-        {% if is_owner %}
-        <form method="POST" action="{% url 'admin_panel:toggle_maintenance' %}" class="d-inline">
-            {% csrf_token %}
-            <button type="submit" class="topbar-btn position-relative"
-                    title="{% if site_settings.is_maintenance_mode %}إيقاف الصيانة{% else %}تفعيل الصيانة{% endif %}">
-                <i class="bi bi-tools {% if site_settings.is_maintenance_mode %}text-warning{% endif %}"></i>
-                {% if site_settings.is_maintenance_mode %}
-                <span class="notif-badge" style="background:orange;">!</span>
+        <main class="ap-main">
+            <div class="ap-container">
+                {% if messages %}
+                <div id="apDjangoMessages" class="ap-hidden" aria-hidden="true">
+                    {% for msg in messages %}
+                    <div data-toast-msg="{{ msg }}" data-toast-tag="{{ msg.tags }}"></div>
+                    {% endfor %}
+                </div>
+                <noscript>
+                    <div class="ap-mb-4">
+                        {% for msg in messages %}
+                        <div class="ap-banner ap-banner-{% if 'error' in msg.tags or 'danger' in msg.tags %}danger{% elif 'warning' in msg.tags %}warning{% elif 'success' in msg.tags %}success{% else %}info{% endif %} ap-mb-2">
+                            {{ msg }}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </noscript>
                 {% endif %}
+
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+</div>
+
+<!-- ════════════════════════ GLOBAL OVERLAYS ════════════════════════ -->
+<div id="apToastStack" class="ap-toast-stack" aria-live="polite" aria-atomic="true"></div>
+
+<!-- Confirm / Prompt Dialog -->
+<div class="ap-modal is-confirm" id="apConfirmModal" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="ap-overlay-backdrop" data-confirm-cancel></div>
+    <div class="ap-modal-dialog is-sm">
+        <div class="ap-modal-header">
+            <h3 class="ap-modal-title" data-confirm-title>تأكيد الإجراء</h3>
+            <button type="button" class="ap-icon-btn" data-confirm-cancel aria-label="إغلاق">
+                <i class="bi bi-x-lg"></i>
             </button>
-        </form>
-        {% endif %}
-
-        <!-- الإشعارات -->
-        <a href="{% url 'all_notifications' %}" class="topbar-btn position-relative" title="الإشعارات">
-            <i class="bi bi-bell-fill"></i>
-            {% if unread_count %}<span class="notif-badge">{{ unread_count }}</span>{% endif %}
-        </a>
-
-        <!-- الموقع -->
-        <a href="{% url 'home' %}" class="topbar-btn" title="الموقع الرئيسي" target="_blank">
-            <i class="bi bi-globe"></i>
-        </a>
-    </div>
-</header>
-
-<!-- ═══════════════════════════════════ MAIN ═══════════════════════════════════ -->
-<main class="admin-main">
-
-    <!-- Django Messages -->
-    {% if messages %}
-    <div style="margin-bottom: 20px;">
-        {% for msg in messages %}
-        <div class="alert alert-{{ msg.tags }} alert-dismissible fade show" role="alert">
-            <i class="bi bi-{% if msg.tags == 'success' %}check-circle{% elif msg.tags == 'error' or msg.tags == 'danger' %}x-circle{% elif msg.tags == 'warning' %}exclamation-triangle{% else %}info-circle{% endif %} me-2"></i>
-            {{ msg }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
-        {% endfor %}
+        <div class="ap-modal-body">
+            <p class="ap-sm" style="margin:0;" data-confirm-message></p>
+            <div class="ap-field ap-mt-4 ap-hidden" data-confirm-prompt-wrap>
+                <label class="ap-label" data-confirm-prompt-label></label>
+                <textarea class="ap-textarea" rows="3" data-confirm-prompt-input></textarea>
+            </div>
+        </div>
+        <div class="ap-modal-footer">
+            <button type="button" class="ap-btn ap-btn-secondary" data-confirm-cancel data-confirm-cancel-btn>إلغاء</button>
+            <button type="button" class="ap-btn ap-btn-primary" data-confirm-ok>تأكيد</button>
+        </div>
     </div>
-    {% endif %}
+</div>
 
-    {% block content %}{% endblock %}
-</main>
+<!-- Image Lightbox Modal -->
+<div class="ap-modal" id="apLightboxModal" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="ap-overlay-backdrop" data-modal-close></div>
+    <div class="ap-modal-dialog is-lg">
+        <div class="ap-modal-header">
+            <h3 class="ap-modal-title" data-lightbox-title>معاينة المرفق</h3>
+            <button type="button" class="ap-icon-btn" data-modal-close aria-label="إغلاق">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+        <div class="ap-modal-body" style="text-align:center;">
+            <img src="" alt="" class="ap-lightbox-img" data-lightbox-img>
+        </div>
+        <div class="ap-modal-footer">
+            <a href="#" target="_blank" rel="noopener" class="ap-btn ap-btn-secondary ap-btn-sm" data-lightbox-external>
+                <i class="bi bi-box-arrow-up-left"></i> فتح في تبويب جديد
+            </a>
+            <button type="button" class="ap-btn ap-btn-primary ap-btn-sm" data-modal-close>إغلاق</button>
+        </div>
+    </div>
+</div>
 
-<!-- Bootstrap JS -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<script>
-    function toggleSidebar() {
-        document.getElementById('adminSidebar').classList.toggle('open');
-    }
+<!-- Quick Jump Palette -->
+<div class="ap-modal" id="apQuickJumpModal" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="ap-overlay-backdrop" data-modal-close></div>
+    <div class="ap-modal-dialog is-sm">
+        <div class="ap-modal-header">
+            <h3 class="ap-modal-title"><i class="bi bi-command"></i> انتقال سريع</h3>
+            <button type="button" class="ap-icon-btn" data-modal-close aria-label="إغلاق">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+        <div class="ap-modal-body">
+            <input type="text" id="apQuickJumpInput" class="ap-input" placeholder="اكتب اسم القسم..." autofocus>
+            <div id="apQuickJumpList" class="ap-cmd-list"></div>
+        </div>
+    </div>
+</div>
 
-    // إغلاق الـ sidebar عند النقر خارجه (موبايل)
-    document.addEventListener('click', function(e) {
-        const sidebar = document.getElementById('adminSidebar');
-        if (window.innerWidth < 992 && sidebar.classList.contains('open')) {
-            if (!sidebar.contains(e.target) && !e.target.closest('.topbar-btn')) {
-                sidebar.classList.remove('open');
-            }
-        }
-    });
-
-    // Auto-dismiss alerts
-    setTimeout(() => {
-        document.querySelectorAll('.alert').forEach(el => {
-            new bootstrap.Alert(el).close();
-        });
-    }, 5000);
-</script>
+<script type="module" src="{% static 'admin_panel/js/app.js' %}"></script>
 {% block extra_js %}{% endblock %}
 </body>
 </html>

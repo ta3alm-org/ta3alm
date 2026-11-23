@@ -103,6 +103,14 @@ from .views_security import (
     SecurityEventReportAPIView,
     SecurityAdminActionAPIView,
 )
+from .views_support import (
+    AdminClientErrorReportsAPIView,
+    AdminSupportChatDetailAPIView,
+    AdminSupportChatListAPIView,
+    ClientErrorReportSubmitAPIView,
+    SupportChatAPIView,
+    SupportChatQuickReplyAPIView,
+)
 
 urlpatterns = [
     # OpenAPI & Swagger Docs
@@ -215,5 +223,13 @@ urlpatterns = [
     path('security/events/report/', SecurityEventReportAPIView.as_view(), name='api_v1_security_event_report'),
     path('security/sessions/', SecuritySessionsListAPIView.as_view(), name='api_v1_security_sessions'),
     path('security/admin/actions/', SecurityAdminActionAPIView.as_view(), name='api_v1_security_admin_actions'),
+
+    # 8. In-App Support Chat, WhatsApp-style Notification Quick Reply & Client Error Reporting
+    path('public/client-errors/', ClientErrorReportSubmitAPIView.as_view(), name='api_v1_public_client_errors'),
+    path('admin/client-errors/', AdminClientErrorReportsAPIView.as_view(), name='api_v1_admin_client_errors'),
+    path('support/chat/', SupportChatAPIView.as_view(), name='api_v1_support_chat'),
+    path('support/chat/quick-reply/', SupportChatQuickReplyAPIView.as_view(), name='api_v1_support_chat_quick_reply'),
+    path('admin/support/chats/', AdminSupportChatListAPIView.as_view(), name='api_v1_admin_support_chats'),
+    path('admin/support/chats/<int:thread_id>/', AdminSupportChatDetailAPIView.as_view(), name='api_v1_admin_support_chat_detail'),
 ]
 

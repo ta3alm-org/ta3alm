@@ -19,6 +19,68 @@ from dashboard_admin.decorators import (
 )
 
 from dashboard_admin.views.base import _base_context
+from dashboard_admin.views.ajax import (
+    ajax_error,
+    ajax_success,
+    is_ajax_request,
+)
+
+
+def _app_release_preview_data(request, site_settings):
+    """بناء بيانات معاينة إعدادات إصدار الأندرويد وملف assetlinks.json."""
+    import json
+    import os
+
+    package_name = (
+        os.environ.get('PLAY_INTEGRITY_PACKAGE_NAME', 'online.ta3alm.ta3alm_flutter').strip()
+        or 'online.ta3alm.ta3alm_flutter'
+    )
+    fingerprints = site_settings.get_assetlinks_fingerprints()
+    packages = [package_name]
+    if not package_name.endswith('.debug'):
+        packages.append(f'{package_name}.debug')
+    assetlinks_preview = json.dumps(
+        [
+            {
+                'relation': ['delegate_permission/common.handle_all_urls'],
+                'target': {
+                    'namespace': 'android_app',
+                    'package_name': pkg,
+                    'sha256_cert_fingerprints': fingerprints,
+                },
+            }
+            for pkg in packages
+        ],
+        ensure_ascii=False,
+        indent=2,
+    )
+    return {
+        'effective_apk_url': site_settings.get_effective_apk_url(request=request),
+        'assetlinks_fingerprints': fingerprints,
+        'assetlinks_preview': assetlinks_preview,
+        'env_sha256_configured': bool(
+            os.environ.get('ANDROID_ASSETLINKS_SHA256', '').strip()
+            or os.environ.get('ANDROID_RELEASE_CERT_SHA256', '').strip()
+        ),
+    }
+
+
+def _app_release_ajax_payload(request, site_settings):
+    """حزمة JSON الموحّدة لحالة إصدار التطبيق بعد التحديث."""
+    preview_data = _app_release_preview_data(request, site_settings)
+    return {
+        'latest_version_code': site_settings.android_latest_version_code,
+        'min_required_version_code': site_settings.android_min_required_version_code,
+        'latest_version_name': site_settings.android_latest_version_name,
+        'force_update': bool(site_settings.android_force_update),
+        'android_apk_url': site_settings.android_apk_url,
+        'android_apk_sha256': site_settings.android_apk_sha256,
+        'effective_apk_url': preview_data['effective_apk_url'],
+        'has_apk_file': bool(site_settings.android_apk_file),
+        'apk_file_name': site_settings.android_apk_file.name if site_settings.android_apk_file else '',
+        'assetlinks_fingerprints_count': len(preview_data['assetlinks_fingerprints']),
+        'assetlinks_preview': preview_data['assetlinks_preview'],
+    }
 
 
 # ==========================================================
@@ -56,7 +118,12 @@ def toggle_maintenance(request):
         status = "تفعيل" if settings.is_maintenance_mode else "إلغاء"
         AuditLog.log(request, AuditLog.ACTION_TOGGLE_MAINT,
                      details={'maintenance': settings.is_maintenance_mode})
-        messages.warning(request, f"تم {status} وضع الصيانة.")
+        msg = f"تم {status} وضع الصيانة."
+        if is_ajax_request(request):
+            return ajax_success(msg, data={'is_maintenance_mode': settings.is_maintenance_mode})
+        messages.warning(request, msg)
+    elif is_ajax_request(request):
+        return ajax_error("طريقة الطلب غير مدعومة.", status=405)
     return redirect('admin_panel:dashboard')
 
 
@@ -67,11 +134,17 @@ def update_platform_commission(request):
         try:
             commission = int(raw_val)
         except (TypeError, ValueError):
-            messages.error(request, "يرجى إدخال نسبة عمولة صحيحة بين 0 و 100.")
+            msg = "يرجى إدخال نسبة عمولة صحيحة بين 0 و 100."
+            if is_ajax_request(request):
+                return ajax_error(msg, errors={'platform_commission_percentage': [msg]}, status=400)
+            messages.error(request, msg)
             return redirect(request.META.get('HTTP_REFERER') or 'admin_panel:dashboard')
 
         if commission < 0 or commission > 100:
-            messages.error(request, "يجب أن تكون نسبة العمولة بين 0% و 100%.")
+            msg = "يجب أن تكون نسبة العمولة بين 0% و 100%."
+            if is_ajax_request(request):
+                return ajax_error(msg, errors={'platform_commission_percentage': [msg]}, status=400)
+            messages.error(request, msg)
             return redirect(request.META.get('HTTP_REFERER') or 'admin_panel:dashboard')
 
         site_settings = SiteSetting.load()
@@ -83,13 +156,22 @@ def update_platform_commission(request):
             target_label='تحديث عمولة المنصة',
             details={'platform_commission_percentage': commission},
         )
-        messages.success(request, f"تم تحديث نسبة عمولة المنصة إلى {commission}%.")
+        msg = f"تم تحديث نسبة عمولة المنصة إلى {commission}%."
+        if is_ajax_request(request):
+            return ajax_success(msg, data={'platform_commission_percentage': commission})
+        messages.success(request, msg)
+    elif is_ajax_request(request):
+        return ajax_error("طريقة الطلب غير مدعومة.", status=405)
     return redirect(request.META.get('HTTP_REFERER') or 'admin_panel:dashboard')
 
 
 def _apply_app_release_post(request, site_settings):
     """منطق موحّد لحفظ إعدادات إصدار التطبيق ورابط GitHub APK وبصمة App Links."""
     import hashlib
+
+    old_url = SiteSetting.normalize_apk_download_url(site_settings.android_apk_url)
+    old_version_code = int(site_settings.android_latest_version_code or 1)
+    old_sha = SiteSetting.normalize_file_sha256(site_settings.android_apk_sha256)
 
     try:
         latest_code = max(
@@ -107,7 +189,7 @@ def _apply_app_release_post(request, site_settings):
     except (TypeError, ValueError):
         return False, "يرجى إدخال أقل رقم بناء مسموح صحيح."
 
-    apk_url = str(request.POST.get('android_apk_url', '')).strip()[:500]
+    apk_url = SiteSetting.normalize_apk_download_url(request.POST.get('android_apk_url', ''))[:500]
     if apk_url and not apk_url.lower().startswith(('https://', 'http://')):
         return False, "يجب أن يبدأ رابط ملف APK بـ https:// أو http://."
 
@@ -138,6 +220,7 @@ def _apply_app_release_post(request, site_settings):
             pass
         site_settings.android_apk_file = None
 
+    stale_sha_cleared = False
     uploaded_apk = request.FILES.get('android_apk_file')
     if uploaded_apk is not None:
         sha256 = hashlib.sha256()
@@ -145,8 +228,12 @@ def _apply_app_release_post(request, site_settings):
             sha256.update(chunk)
         uploaded_apk.seek(0)
         site_settings.android_apk_file = uploaded_apk
-        if not manual_sha:
+        if not manual_sha or (old_sha and manual_sha == old_sha):
             manual_sha = sha256.hexdigest().lower()
+    elif apk_url and old_sha and manual_sha == old_sha and (apk_url != old_url or latest_code != old_version_code):
+        # تفريغ بصمة SHA-256 القديمة تلقائياً عند تغيير رابط الـ APK أو رقم الإصدار دون تغيير البصمة
+        manual_sha = ''
+        stale_sha_cleared = True
 
     site_settings.android_apk_sha256 = manual_sha
     site_settings.save()
@@ -162,57 +249,33 @@ def _apply_app_release_post(request, site_settings):
             'has_external_apk_url': bool(site_settings.android_apk_url),
         },
     )
-    return True, (
+    msg = (
         f"تم حفظ إعدادات تحديث تطبيق الأندرويد (الإصدار {site_settings.android_latest_version_name}"
         f" · بناء {site_settings.android_latest_version_code})."
     )
+    if stale_sha_cleared:
+        msg += " تم مسح بصمة SHA-256 القديمة تلقائياً حتى لا تفشل تحديثات المستخدمين؛ يمكنك إدخال بصمة الملف الجديد يدوياً إذا أردت التحقق الصارم."
+    return True, msg
 
 
 @owner_required
 def app_release_settings(request):
     """صفحة مخصصة لإدارة رابط APK الخارجي (GitHub Releases) وإصدارات التطبيق وروابط App Links."""
-    import json
-    import os
-
     site_settings = SiteSetting.load()
     if request.method == 'POST':
         ok, msg = _apply_app_release_post(request, site_settings)
+        if is_ajax_request(request):
+            if ok:
+                return ajax_success(msg, data=_app_release_ajax_payload(request, site_settings))
+            return ajax_error(msg, status=400)
         if ok:
             messages.success(request, msg)
         else:
             messages.error(request, msg)
         return redirect('admin_panel:app_release_settings')
 
-    package_name = os.environ.get('PLAY_INTEGRITY_PACKAGE_NAME', 'online.ta3alm.ta3alm_flutter').strip() or 'online.ta3alm.ta3alm_flutter'
-    fingerprints = site_settings.get_assetlinks_fingerprints()
-    packages = [package_name]
-    if not package_name.endswith('.debug'):
-        packages.append(f'{package_name}.debug')
-    assetlinks_preview = json.dumps(
-        [
-            {
-                'relation': ['delegate_permission/common.handle_all_urls'],
-                'target': {
-                    'namespace': 'android_app',
-                    'package_name': pkg,
-                    'sha256_cert_fingerprints': fingerprints,
-                },
-            }
-            for pkg in packages
-        ],
-        ensure_ascii=False,
-        indent=2,
-    )
     context = _base_context(request)
-    context.update({
-        'effective_apk_url': site_settings.get_effective_apk_url(request=request),
-        'assetlinks_fingerprints': fingerprints,
-        'assetlinks_preview': assetlinks_preview,
-        'env_sha256_configured': bool(
-            os.environ.get('ANDROID_ASSETLINKS_SHA256', '').strip()
-            or os.environ.get('ANDROID_RELEASE_CERT_SHA256', '').strip()
-        ),
-    })
+    context.update(_app_release_preview_data(request, site_settings))
     return render(request, 'admin_panel/app_release.html', context)
 
 
@@ -222,6 +285,10 @@ def update_app_release_settings(request):
     if request.method == 'POST':
         site_settings = SiteSetting.load()
         ok, msg = _apply_app_release_post(request, site_settings)
+        if is_ajax_request(request):
+            if ok:
+                return ajax_success(msg, data=_app_release_ajax_payload(request, site_settings))
+            return ajax_error(msg, status=400)
         if ok:
             messages.success(request, msg)
         else:
@@ -229,4 +296,6 @@ def update_app_release_settings(request):
         next_target = request.POST.get('next', '').strip()
         if next_target == 'app_release':
             return redirect('admin_panel:app_release_settings')
+    elif is_ajax_request(request):
+        return ajax_error("طريقة الطلب غير مدعومة.", status=405)
     return redirect('admin_panel:dashboard')

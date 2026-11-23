@@ -1,195 +1,119 @@
 {% extends 'admin_panel/base_admin.html' %}
 {% load i18n %}
+
 {% block page_title %}فريق الإدارة{% endblock %}
+{% block body_page %}staff{% endblock %}
 {% block nav_staff %}active{% endblock %}
 {% block breadcrumb %}<span class="sep">/</span><span class="current">فريق الإدارة</span>{% endblock %}
 
 {% block content %}
-<div class="page-header d-flex align-items-center justify-content-between">
+<div class="ap-page-header">
     <div>
-        <h1><i class="bi bi-person-badge-fill me-2" style="color:var(--admin-accent);"></i>فريق الإدارة</h1>
-        <p>{{ staff_list|length }} مسؤول مُعيَّن</p>
+        <h1 class="ap-page-title"><i class="bi bi-person-badge"></i> فريق الإدارة</h1>
+        <p class="ap-page-subtitle" id="staffCountSubtitle">{{ staff_list|length }} مسؤول مُعيَّن</p>
     </div>
-    <button class="btn fw-bold px-4" style="background:var(--admin-accent); color:white;"
-            data-bs-toggle="modal" data-bs-target="#appointModal">
-        <i class="bi bi-person-plus-fill me-1"></i>تعيين مسؤول
-    </button>
+    <div class="ap-page-actions">
+        <button type="button" class="ap-btn ap-btn-primary" data-modal-open="appointModal">
+            <i class="bi bi-person-plus"></i> تعيين مسؤول جديد
+        </button>
+    </div>
 </div>
 
-<!-- Role legend -->
-<div class="d-flex gap-2 mb-4 flex-wrap">
+<!-- Role Legend -->
+<div class="ap-flex ap-wrap ap-gap-2 ap-mb-4">
     {% for val, lbl in admin_roles %}
-    <span class="role-badge
-        {% if val == 'owner' %}role-admin
-        {% elif val == 'moderator' %}role-teacher
-        {% elif val == 'support' %}role-student
-        {% else %}role-assistant{% endif %}">
+    <span class="ap-badge {% if val == 'owner' %}ap-badge-accent{% elif val == 'moderator' %}ap-badge-info{% elif val == 'support' %}ap-badge-success{% else %}ap-badge-warning{% endif %}">
         {{ lbl }}
     </span>
     {% endfor %}
 </div>
 
-<div class="admin-card">
-    <div class="table-responsive">
-        <table class="admin-table">
-            <thead>
-                <tr>
-                    <th>المسؤول</th>
-                    <th>الدور</th>
-                    <th>الحالة</th>
-                    <th>عيَّنه</th>
-                    <th>تاريخ التعيين</th>
-                    <th>إجراء</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for s in staff_list %}
-                <tr>
-                    <td>
-                        <div class="d-flex align-items-center gap-2">
-                            <div class="user-avatar" style="background:var(--admin-accent);">
-                                {{ s.user.first_name|slice:":1"|upper }}
-                            </div>
-                            <div>
-                                <div class="fw-bold" style="font-size:0.875rem;">{{ s.user.get_full_name }}</div>
-                                <div class="text-muted" style="font-size:0.75rem;">{{ s.user.email }}</div>
-                            </div>
-                        </div>
-                    </td>
-                    <td>
-                        <span class="role-badge
-                            {% if s.admin_role == 'owner' %}role-admin
-                            {% elif s.admin_role == 'moderator' %}role-teacher
-                            {% elif s.admin_role == 'support' %}role-student
-                            {% else %}role-assistant{% endif %}">
-                            {{ s.get_admin_role_display }}
-                        </span>
-                    </td>
-                    <td>
-                        {% if s.is_active_admin %}
-                        <span class="role-badge status-active">نشط</span>
-                        {% else %}
-                        <span class="role-badge status-expired">موقوف</span>
-                        {% endif %}
-                    </td>
-                    <td class="text-muted" style="font-size:0.85rem;">
-                        {{ s.appointed_by.get_full_name|default:"النظام" }}
-                    </td>
-                    <td class="text-muted" style="font-size:0.85rem;">
-                        {{ s.appointed_at|date:"j M Y" }}
-                    </td>
-                    <td>
-                        <div class="d-flex align-items-center gap-1">
-                            <a href="{% url 'admin_panel:edit_user' s.user.id %}"
-                               class="action-btn action-btn-edit"
-                               title="تعديل الإعدادات والمرور">
-                                <i class="bi bi-gear-fill"></i>
-                            </a>
-                            <form method="POST"
-                                  onsubmit="return confirm('إزالة {{ s.user.get_full_name }} من فريق الإدارة؟');">
-                                {% csrf_token %}
-                                <input type="hidden" name="action" value="remove">
-                                <input type="hidden" name="profile_id" value="{{ s.id }}">
-                                <button class="action-btn action-btn-delete" title="إزالة">
-                                    <i class="bi bi-person-dash-fill"></i>
-                                </button>
-                            </form>
-                        </div>
-                    </td>
-                </tr>
-                {% empty %}
-                <tr><td colspan="6">
-                    <div class="empty-state">
-                        <i class="bi bi-people-fill"></i>
-                        لا يوجد مسؤولون مُعيَّنون بعد
-                    </div>
-                </td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+<div class="ap-card" id="staffTableContainer">
+    {% include 'admin_panel/partials/_staff_table.html' %}
 </div>
 
 <!-- Appoint / Create Admin Modal -->
-<div class="modal fade" id="appointModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content" style="border-radius:16px; border:none;">
-            <div class="modal-header border-0 pb-0">
-                <h5 class="modal-title fw-bold">
-                    <i class="bi bi-person-plus-fill me-2" style="color:var(--admin-accent);"></i>إضافة مسؤول إداري
-                </h5>
-                <button class="btn-close" data-bs-dismiss="modal"></button>
+<div class="ap-modal" id="appointModal" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="ap-overlay-backdrop" data-modal-close></div>
+    <div class="ap-modal-dialog">
+        <div class="ap-modal-header">
+            <h3 class="ap-modal-title"><i class="bi bi-person-plus"></i> إضافة مسؤول إداري</h3>
+            <button type="button" class="ap-icon-btn" data-modal-close aria-label="إغلاق">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+        <div class="ap-modal-body">
+            <div data-tabs="staff-modal" data-tabs-container="#staffModalTabPanels" class="ap-tabs">
+                <button type="button" class="ap-tab-btn active" data-tab-target="create-pane">
+                    <i class="bi bi-person-plus"></i> إنشاء حساب جديد
+                </button>
+                <button type="button" class="ap-tab-btn" data-tab-target="appoint-pane">
+                    <i class="bi bi-person-check"></i> ترقية مستخدم موجود
+                </button>
             </div>
-            <div class="modal-body pt-3">
-                <!-- Tabs -->
-                <ul class="nav nav-pills nav-fill mb-3 p-1 bg-light rounded-3" role="tablist">
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link active fw-bold small" data-bs-toggle="pill" data-bs-target="#create-pane" type="button">
-                            <i class="bi bi-person-fill-add me-1"></i>إنشاء حساب مسؤول جديد
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link fw-bold small" data-bs-toggle="pill" data-bs-target="#appoint-pane" type="button">
-                            <i class="bi bi-person-check-fill me-1"></i>ترقية مستخدم موجود
-                        </button>
-                    </li>
-                </ul>
 
-                <div class="tab-content">
-                    <!-- Tab 1: Create new admin user from scratch -->
-                    <div class="tab-pane fade show active" id="create-pane" role="tabpanel">
-                        <form method="POST">
-                            {% csrf_token %}
-                            <input type="hidden" name="action" value="create">
-                            <p class="text-muted small mb-3">إنشاء حساب إداري جديد بالكامل (تعيين كـ مالك يمنحه صلاحيات Superuser كاملة).</p>
-                            <div class="row g-2">
-                                {% for field in create_form %}
-                                <div class="{% if field.name in 'first_name,last_name' %}col-6{% else %}col-12{% endif %} mb-2">
-                                    <label class="form-label fw-bold small text-muted mb-1">{{ field.label }}</label>
-                                    {{ field }}
-                                    {% if field.errors %}<div class="text-danger small">{{ field.errors|join:", " }}</div>{% endif %}
-                                </div>
-                                {% endfor %}
-                            </div>
-                            <div class="d-flex justify-content-end gap-2 mt-3">
-                                <button type="button" class="btn btn-light" data-bs-dismiss="modal">إلغاء</button>
-                                <button type="submit" class="btn fw-bold px-4" style="background:var(--admin-accent); color:white;">
-                                    <i class="bi bi-plus-circle me-1"></i>إنشاء وتعيين
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-
-                    <!-- Tab 2: Appoint existing user -->
-                    <div class="tab-pane fade" id="appoint-pane" role="tabpanel">
-                        <form method="POST">
-                            {% csrf_token %}
-                            <input type="hidden" name="action" value="appoint">
-                            <p class="text-muted small mb-3">أدخل البريد الإلكتروني لمستخدم مسجل مسبقاً في المنصة لترقيته إلى فريق الإدارة.</p>
-                            {% for field in appoint_form %}
-                            <div class="mb-3">
-                                <label class="form-label fw-bold small text-muted">{{ field.label }}</label>
+            <div id="staffModalTabPanels">
+                <div class="ap-tab-panel active" id="create-pane" data-tab-group="staff-modal">
+                    <form method="POST" action="{% url 'admin_panel:manage_staff' %}"
+                          data-ajax-form data-staff-form="1" data-close-overlay="1" data-reset-on-success="1">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="create">
+                        <p class="ap-muted ap-xs ap-mb-3">
+                            إنشاء حساب إداري جديد بالكامل (اختيار دور «مالك» يمنح صلاحيات Superuser كاملة).
+                        </p>
+                        <div class="ap-form-grid">
+                            {% for field in create_form %}
+                            <div class="ap-field {% if field.name not in 'first_name,last_name' %}ap-col-full{% endif %}">
+                                <label class="ap-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
                                 {{ field }}
-                                {% if field.errors %}<div class="text-danger small">{{ field.errors|join:", " }}</div>{% endif %}
+                                {% if field.errors %}<div class="ap-field-error">{{ field.errors|join:", " }}</div>{% endif %}
                             </div>
                             {% endfor %}
-                            <div class="d-flex justify-content-end gap-2 mt-3">
-                                <button type="button" class="btn btn-light" data-bs-dismiss="modal">إلغاء</button>
-                                <button type="submit" class="btn fw-bold px-4" style="background:var(--admin-accent); color:white;">
-                                    <i class="bi bi-check-circle me-1"></i>ترقية وتعيين
-                                </button>
-                            </div>
-                        </form>
-                    </div>
+                        </div>
+                        <div class="ap-flex ap-justify-end ap-gap-2 ap-mt-4">
+                            <button type="button" class="ap-btn ap-btn-secondary" data-modal-close>إلغاء</button>
+                            <button type="submit" class="ap-btn ap-btn-primary">
+                                <i class="bi bi-plus-circle"></i> إنشاء وتعيين
+                            </button>
+                        </div>
+                    </form>
                 </div>
 
-                <!-- Role descriptions -->
-                <div class="alert alert-info small p-2 mt-3 mb-0" style="border-radius:10px;">
-                    <strong>صلاحيات الأدوار:</strong><br>
-                    🔴 <strong>مالك (Superuser):</strong> كل الصلاحيات + لوحة Django Admin<br>
-                    🔵 <strong>مشرف:</strong> إدارة + تعديل المستخدمين<br>
-                    🟢 <strong>دعم فني:</strong> عرض المستخدمين + صندوق البريد<br>
-                    🟡 <strong>مسؤول مالي:</strong> التقارير المالية وطلبات السحب والدفع
+                <div class="ap-tab-panel" id="appoint-pane" data-tab-group="staff-modal">
+                    <form method="POST" action="{% url 'admin_panel:manage_staff' %}"
+                          data-ajax-form data-staff-form="1" data-close-overlay="1" data-reset-on-success="1">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="appoint">
+                        <p class="ap-muted ap-xs ap-mb-3">
+                            أدخل البريد الإلكتروني لمستخدم مسجل مسبقاً في المنصة لترقيته إلى فريق الإدارة.
+                        </p>
+                        <div class="ap-form-grid">
+                            {% for field in appoint_form %}
+                            <div class="ap-field ap-col-full">
+                                <label class="ap-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                                {{ field }}
+                                {% if field.errors %}<div class="ap-field-error">{{ field.errors|join:", " }}</div>{% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <div class="ap-flex ap-justify-end ap-gap-2 ap-mt-4">
+                            <button type="button" class="ap-btn ap-btn-secondary" data-modal-close>إلغاء</button>
+                            <button type="submit" class="ap-btn ap-btn-primary">
+                                <i class="bi bi-check-circle"></i> ترقية وتعيين
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="ap-banner ap-banner-info ap-mt-4 ap-xs">
+                <i class="bi bi-info-circle"></i>
+                <div>
+                    <strong>صلاحيات الأدوار:</strong>
+                    <strong>مالك (Superuser):</strong> كافة الصلاحيات + Django Admin ·
+                    <strong>مشرف:</strong> إدارة وتعديل المستخدمين والأمان ·
+                    <strong>دعم فني:</strong> بريد الدعم والمستخدمون ·
+                    <strong>مسؤول مالي:</strong> التقارير المالية والسحوبات.
                 </div>
             </div>
         </div>

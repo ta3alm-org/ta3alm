@@ -15,7 +15,17 @@ from dashboard_admin.forms import (
     CurriculumLessonFormSet,
 )
 
+from django.db import transaction
+from django.urls import reverse
+
 from dashboard_admin.views.base import _base_context
+from dashboard_admin.views.ajax import (
+    ajax_error,
+    ajax_success,
+    form_errors_dict,
+    formset_errors_list,
+    is_ajax_request,
+)
 
 
 @owner_required
@@ -32,14 +42,33 @@ def curriculum_unit_create(request):
     if request.method == 'POST':
         form = CurriculumUnitForm(request.POST)
         if form.is_valid():
-            unit = form.save()
-            formset = CurriculumLessonFormSet(request.POST, instance=unit)
-            if formset.is_valid():
-                formset.save()
-                messages.success(request, "تم إضافة الوحدة ودروسها بنجاح.")
-                return redirect('admin_panel:manage_curriculum')
+            with transaction.atomic():
+                sid = transaction.savepoint()
+                unit = form.save()
+                formset = CurriculumLessonFormSet(request.POST, instance=unit)
+                if formset.is_valid():
+                    formset.save()
+                    msg = "تم إضافة الوحدة ودروسها بنجاح."
+                    if is_ajax_request(request):
+                        return ajax_success(
+                            msg,
+                            data={
+                                'unit_id': unit.id,
+                                'redirect_url': reverse('admin_panel:manage_curriculum'),
+                            },
+                        )
+                    messages.success(request, msg)
+                    return redirect('admin_panel:manage_curriculum')
+                transaction.savepoint_rollback(sid)
         else:
             formset = CurriculumLessonFormSet(request.POST)
+
+        if is_ajax_request(request):
+            merged = form_errors_dict(form)
+            fs_msgs, fs_errs = formset_errors_list(formset)
+            merged.update(fs_errs)
+            err_msg = fs_msgs[0] if fs_msgs else "يرجى مراجعة الحقول المطلوبة."
+            return ajax_error(err_msg, errors=merged, status=400)
     else:
         form = CurriculumUnitForm()
         formset = CurriculumLessonFormSet()
@@ -60,8 +89,24 @@ def curriculum_unit_edit(request, unit_id):
         if form.is_valid() and formset.is_valid():
             form.save()
             formset.save()
-            messages.success(request, "تم تعديل الوحدة ودروسها بنجاح.")
+            msg = "تم تعديل الوحدة ودروسها بنجاح."
+            if is_ajax_request(request):
+                return ajax_success(
+                    msg,
+                    data={
+                        'unit_id': unit.id,
+                        'redirect_url': reverse('admin_panel:manage_curriculum'),
+                    },
+                )
+            messages.success(request, msg)
             return redirect('admin_panel:manage_curriculum')
+
+        if is_ajax_request(request):
+            merged = form_errors_dict(form)
+            fs_msgs, fs_errs = formset_errors_list(formset)
+            merged.update(fs_errs)
+            err_msg = fs_msgs[0] if fs_msgs else "يرجى مراجعة الحقول المطلوبة."
+            return ajax_error(err_msg, errors=merged, status=400)
     else:
         form = CurriculumUnitForm(instance=unit)
         formset = CurriculumLessonFormSet(instance=unit)
@@ -78,5 +123,10 @@ def curriculum_unit_delete(request, unit_id):
     if request.method == 'POST':
         unit = get_object_or_404(CurriculumUnit, id=unit_id)
         unit.delete()
-        messages.success(request, "تم حذف الوحدة بجميع دروسها بنجاح.")
+        msg = "تم حذف الوحدة بجميع دروسها بنجاح."
+        if is_ajax_request(request):
+            return ajax_success(msg, data={'unit_id': unit_id, 'deleted': True})
+        messages.success(request, msg)
+    elif is_ajax_request(request):
+        return ajax_error("طريقة الطلب غير مدعومة.", status=405)
     return redirect('admin_panel:manage_curriculum')

@@ -14,7 +14,14 @@ from services.zoho_mail_service import ZohoMailService
 from django.urls import reverse
 import logging
 
+from django.template.loader import render_to_string
+
 from dashboard_admin.views.base import _base_context
+from dashboard_admin.views.ajax import (
+    ajax_error,
+    ajax_success,
+    is_ajax_request,
+)
 
 logger = logging.getLogger('dashboard_admin.views')
 
@@ -24,7 +31,10 @@ def support_inbox(request):
     """صندوق البريد الوارد لإيميلات الدعم الفني support@ta3alm.online"""
     ctx = _base_context(request)
     if not ctx['can_manage_support']:
-        messages.error(request, "ليس لديك صلاحية الوصول لصندوق الدعم الفني.")
+        msg = "ليس لديك صلاحية الوصول لصندوق الدعم الفني."
+        if is_ajax_request(request):
+            return ajax_error(msg, status=403)
+        messages.error(request, msg)
         return redirect('admin_panel:dashboard')
 
     service = ZohoMailService()
@@ -44,6 +54,17 @@ def support_inbox(request):
         except Exception as e:
             ctx['error_message'] = str(e)
             logger.error("Zoho list messages view error: %s", e)
+
+    if is_ajax_request(request) and request.GET.get('partial') == '1':
+        html = render_to_string('admin_panel/partials/_support_inbox_table.html', ctx, request=request)
+        return ajax_success(
+            data={
+                'html': html,
+                'count': len(ctx['messages_list']),
+                'search_query': ctx['search_query'],
+                'error_message': ctx['error_message'],
+            }
+        )
 
     return render(request, 'admin_panel/support_inbox.html', ctx)
 
@@ -134,11 +155,16 @@ def support_message_detail(request, message_id):
 def support_send_reply(request):
     """إرسال رد على رسالة عبر Zoho Mail API"""
     if request.method != 'POST':
+        if is_ajax_request(request):
+            return ajax_error("طريقة الطلب غير مدعومة.", status=405)
         return redirect('admin_panel:support_inbox')
 
     ctx = _base_context(request)
     if not ctx['can_manage_support']:
-        messages.error(request, "ليس لديك صلاحية الرد على إيميلات الدعم.")
+        msg = "ليس لديك صلاحية الرد على إيميلات الدعم."
+        if is_ajax_request(request):
+            return ajax_error(msg, status=403)
+        messages.error(request, msg)
         return redirect('admin_panel:dashboard')
 
     to_email = request.POST.get('to_email', '').strip()
@@ -147,7 +173,15 @@ def support_send_reply(request):
     message_id = request.POST.get('message_id', '').strip()
 
     if not to_email or not content:
-        messages.error(request, "يرجى كتابة البريد الإلكتروني ومحتوى الرد.")
+        msg = "يرجى كتابة البريد الإلكتروني ومحتوى الرد."
+        if is_ajax_request(request):
+            errs = {}
+            if not to_email:
+                errs['to_email'] = ["يرجى إدخال البريد الإلكتروني للمرسل إليه."]
+            if not content:
+                errs['content'] = ["يرجى كتابة محتوى الرد."]
+            return ajax_error(msg, errors=errs, status=400)
+        messages.error(request, msg)
         if message_id:
             return redirect('admin_panel:support_message_detail', message_id=message_id)
         return redirect('admin_panel:support_inbox')
@@ -161,10 +195,16 @@ def support_send_reply(request):
             target_label=f"إرسال رد إلى {to_email}",
             details={'to': to_email, 'subject': subject, 'message_id': message_id}
         )
-        messages.success(request, f"تم إرسال الرد بنجاح إلى {to_email} من {service.support_email}!")
+        msg = f"تم إرسال الرد بنجاح إلى {to_email} من {service.support_email}!"
+        if is_ajax_request(request):
+            return ajax_success(msg, data={'to_email': to_email, 'subject': subject})
+        messages.success(request, msg)
     except Exception as e:
         logger.error("Failed to send reply: %s", e)
-        messages.error(request, f"فشل إرسال الرد عبر Zoho: {e}")
+        err_msg = f"فشل إرسال الرد عبر Zoho: {e}"
+        if is_ajax_request(request):
+            return ajax_error(err_msg, status=502)
+        messages.error(request, err_msg)
 
     if message_id:
         return redirect('admin_panel:support_message_detail', message_id=message_id)
@@ -174,27 +214,55 @@ def support_send_reply(request):
 @admin_required
 def support_compose(request):
     """إنشاء وإرسال رسالة جديدة لأي مستخدم من support@ta3alm.online"""
-    if request.method == 'POST':
-        to_email = request.POST.get('to_email', '').strip()
-        subject = request.POST.get('subject', '').strip()
-        content = request.POST.get('content', '').strip()
+    if request.method != 'POST':
+        if is_ajax_request(request):
+            return ajax_error("طريقة الطلب غير مدعومة.", status=405)
+        return redirect('admin_panel:support_inbox')
 
-        if not to_email or not subject or not content:
-            messages.error(request, "جميع الحقول (المستقبل، الموضوع، المحتوى) مطلوبة.")
-            return redirect('admin_panel:support_inbox')
+    ctx = _base_context(request)
+    if not ctx['can_manage_support']:
+        msg = "ليس لديك صلاحية إرسال إيميلات الدعم."
+        if is_ajax_request(request):
+            return ajax_error(msg, status=403)
+        messages.error(request, msg)
+        return redirect('admin_panel:dashboard')
 
-        service = ZohoMailService()
-        try:
-            service.compose_new_message(to_email=to_email, subject=subject, content=content)
-            AuditLog.log(
-                request,
-                AuditLog.ACTION_ZOHO_COMPOSE,
-                target_label=f"رسالة جديدة إلى {to_email}",
-                details={'to': to_email, 'subject': subject}
-            )
-            messages.success(request, f"تم إرسال الرسالة بنجاح إلى {to_email}!")
-        except Exception as e:
-            messages.error(request, f"فشل إرسال الرسالة: {e}")
+    to_email = request.POST.get('to_email', '').strip()
+    subject = request.POST.get('subject', '').strip()
+    content = request.POST.get('content', '').strip()
+
+    if not to_email or not subject or not content:
+        msg = "جميع الحقول (المستقبل، الموضوع، المحتوى) مطلوبة."
+        if is_ajax_request(request):
+            errs = {}
+            if not to_email:
+                errs['to_email'] = ["يرجى إدخال البريد الإلكتروني."]
+            if not subject:
+                errs['subject'] = ["يرجى إدخال الموضوع."]
+            if not content:
+                errs['content'] = ["يرجى كتابة نص الرسالة."]
+            return ajax_error(msg, errors=errs, status=400)
+        messages.error(request, msg)
+        return redirect('admin_panel:support_inbox')
+
+    service = ZohoMailService()
+    try:
+        service.compose_new_message(to_email=to_email, subject=subject, content=content)
+        AuditLog.log(
+            request,
+            AuditLog.ACTION_ZOHO_COMPOSE,
+            target_label=f"رسالة جديدة إلى {to_email}",
+            details={'to': to_email, 'subject': subject}
+        )
+        msg = f"تم إرسال الرسالة بنجاح إلى {to_email}!"
+        if is_ajax_request(request):
+            return ajax_success(msg, data={'to_email': to_email, 'subject': subject})
+        messages.success(request, msg)
+    except Exception as e:
+        err_msg = f"فشل إرسال الرسالة: {e}"
+        if is_ajax_request(request):
+            return ajax_error(err_msg, status=502)
+        messages.error(request, err_msg)
 
     return redirect('admin_panel:support_inbox')
 
@@ -204,7 +272,10 @@ def support_settings(request):
     """صفحة إعدادات وحالة اتصال Zoho Mail REST API"""
     ctx = _base_context(request)
     if not ctx['is_owner']:
-        messages.error(request, "إعدادات الربط متاحة لمالك المنصة فقط.")
+        msg = "إعدادات الربط متاحة لمالك المنصة فقط."
+        if is_ajax_request(request):
+            return ajax_error(msg, status=403)
+        messages.error(request, msg)
         return redirect('admin_panel:support_inbox')
 
     from dashboard_admin.models import ZohoMailConfig
@@ -226,7 +297,19 @@ def support_settings(request):
             if refresh_token:
                 config.refresh_token = refresh_token
             config.save()
-            messages.success(request, "تم حفظ الإعدادات بنجاح.")
+            msg = "تم حفظ الإعدادات بنجاح."
+            if is_ajax_request(request):
+                service = ZohoMailService(config=config)
+                return ajax_success(
+                    msg,
+                    data={
+                        'action': 'save_keys',
+                        'is_connected': service.is_connected(),
+                        'is_configured': service.is_configured(),
+                        'support_email': config.get_effective_support_email(),
+                    },
+                )
+            messages.success(request, msg)
             return redirect('admin_panel:support_settings')
         elif action == 'disconnect':
             config.refresh_token = ''
@@ -234,8 +317,22 @@ def support_settings(request):
             config.account_id = ''
             config.token_expires_at = None
             config.save()
-            messages.info(request, "تم قطع الاتصال بـ Zoho Mail.")
+            msg = "تم قطع الاتصال بـ Zoho Mail."
+            if is_ajax_request(request):
+                service = ZohoMailService(config=config)
+                return ajax_success(
+                    msg,
+                    data={
+                        'action': 'disconnect',
+                        'is_connected': service.is_connected(),
+                        'is_configured': service.is_configured(),
+                        'support_email': config.get_effective_support_email(),
+                    },
+                )
+            messages.info(request, msg)
             return redirect('admin_panel:support_settings')
+        elif is_ajax_request(request):
+            return ajax_error("إجراء غير معروف.", status=400)
 
     return render(request, 'admin_panel/support_settings.html', ctx)
 

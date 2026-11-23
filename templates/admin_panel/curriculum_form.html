@@ -1,94 +1,107 @@
 {% extends 'admin_panel/base_admin.html' %}
 {% load static %}
-{% block title %}{% if is_edit %}تعديل وحدة{% else %}إضافة وحدة{% endif %} | الإدارة{% endblock %}
+
+{% block page_title %}{% if is_edit %}تعديل وحدة{% else %}إضافة وحدة{% endif %}{% endblock %}
+{% block body_page %}curriculum{% endblock %}
 {% block nav_curriculum %}active{% endblock %}
 {% block breadcrumb %}
-<span class="sep">/</span> <a href="{% url 'admin_panel:manage_curriculum' %}">المناهج والدروس</a>
-<span class="sep">/</span> <span class="current">{% if is_edit %}تعديل وحدة{% else %}إضافة وحدة{% endif %}</span>
+<span class="sep">/</span>
+<a href="{% url 'admin_panel:manage_curriculum' %}">المناهج والدروس</a>
+<span class="sep">/</span>
+<span class="current">{% if is_edit %}تعديل وحدة{% else %}إضافة وحدة{% endif %}</span>
 {% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h4 class="mb-0 fw-bold" style="color:var(--admin-primary)">{% if is_edit %}تعديل الوحدة: {{ unit.title }}{% else %}إضافة وحدة دراسية جديدة{% endif %}</h4>
-    <a href="{% url 'admin_panel:manage_curriculum' %}" class="btn btn-secondary px-4 fw-bold" style="border-radius: 10px;">
-        <i class="bi bi-arrow-right me-1"></i> رجوع للمناهج
-    </a>
+<div class="ap-page-header">
+    <div>
+        <h1 class="ap-page-title">
+            <i class="bi bi-journal-plus"></i>
+            {% if is_edit %}تعديل الوحدة: {{ unit.title }}{% else %}إضافة وحدة دراسية جديدة{% endif %}
+        </h1>
+        <p class="ap-page-subtitle">تحديد بيانات الوحدة الدراسية وإدارة الدروس المرتبطة بها</p>
+    </div>
+    <div class="ap-page-actions">
+        <a href="{% url 'admin_panel:manage_curriculum' %}" class="ap-btn ap-btn-secondary">
+            <i class="bi bi-arrow-right"></i> رجوع للمناهج
+        </a>
+    </div>
 </div>
 
-<form method="POST">
+<form method="POST" data-ajax-form data-redirect-on-success="1">
     {% csrf_token %}
-    
-    <!-- بيانات الوحدة الأساسية -->
-    <div class="admin-card mb-4">
-        <div class="admin-card-header">
-            <h5 class="admin-card-title mb-0">البيانات الأساسية للوحدة</h5>
+
+    <div class="ap-card ap-mb-4">
+        <div class="ap-card-header">
+            <h2 class="ap-card-title"><i class="bi bi-card-text"></i> البيانات الأساسية للوحدة</h2>
         </div>
-        <div class="admin-card-body p-4">
-            <div class="row g-3">
-                <div class="col-md-6">
-                    <label class="form-label fw-bold">اسم الوحدة</label>
+        <div class="ap-card-body">
+            <div class="ap-form-grid">
+                <div class="ap-field">
+                    <label class="ap-label" for="{{ form.title.id_for_label }}">اسم الوحدة</label>
                     {{ form.title }}
+                    {% if form.title.errors %}<div class="ap-field-error">{{ form.title.errors|striptags }}</div>{% endif %}
                 </div>
-                <div class="col-md-6">
-                    <label class="form-label fw-bold">المادة الدراسية</label>
+                <div class="ap-field">
+                    <label class="ap-label" for="{{ form.subject.id_for_label }}">المادة الدراسية</label>
                     {{ form.subject }}
+                    {% if form.subject.errors %}<div class="ap-field-error">{{ form.subject.errors|striptags }}</div>{% endif %}
                 </div>
-                <div class="col-md-4">
-                    <label class="form-label fw-bold">الصف الدراسي</label>
+            </div>
+            <div class="ap-form-grid-3 ap-mt-4">
+                <div class="ap-field">
+                    <label class="ap-label" for="{{ form.grade.id_for_label }}">الصف الدراسي</label>
                     {{ form.grade }}
+                    {% if form.grade.errors %}<div class="ap-field-error">{{ form.grade.errors|striptags }}</div>{% endif %}
                 </div>
-                <div class="col-md-4">
-                    <label class="form-label fw-bold">الترم</label>
+                <div class="ap-field">
+                    <label class="ap-label" for="{{ form.term.id_for_label }}">الترم</label>
                     {{ form.term }}
+                    {% if form.term.errors %}<div class="ap-field-error">{{ form.term.errors|striptags }}</div>{% endif %}
                 </div>
-                <div class="col-md-4">
-                    <label class="form-label fw-bold">الترتيب</label>
+                <div class="ap-field">
+                    <label class="ap-label" for="{{ form.order.id_for_label }}">الترتيب</label>
                     {{ form.order }}
+                    {% if form.order.errors %}<div class="ap-field-error">{{ form.order.errors|striptags }}</div>{% endif %}
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- الدروس -->
-    <div class="admin-card mb-4">
-        <div class="admin-card-header d-flex justify-content-between align-items-center">
-            <h5 class="admin-card-title mb-0">دروس الوحدة</h5>
-            <button type="button" id="add-lesson-btn" class="btn btn-sm btn-outline-primary fw-bold rounded-pill">
+    <div class="ap-card ap-mb-4">
+        <div class="ap-card-header">
+            <h2 class="ap-card-title"><i class="bi bi-list-ol"></i> دروس الوحدة</h2>
+            <button type="button" id="add-lesson-btn" class="ap-btn ap-btn-sm ap-btn-secondary">
                 <i class="bi bi-plus-lg"></i> إضافة درس
             </button>
         </div>
-        <div class="admin-card-body p-0">
+        <div class="ap-table-wrap">
             {{ formset.management_form }}
-            <table class="table admin-table mb-0 align-middle">
+            <table class="ap-table">
                 <thead>
                     <tr>
-                        <th style="width: 60%">اسم الدرس</th>
-                        <th style="width: 20%">الترتيب</th>
-                        <th style="width: 20%" class="text-center">حذف</th>
+                        <th style="width:65%;">اسم الدرس</th>
+                        <th style="width:20%;">الترتيب</th>
+                        <th style="width:15%; text-align:center;">حذف</th>
                     </tr>
                 </thead>
                 <tbody id="lesson-formset-container">
-                    {% for form in formset.forms %}
+                    {% for lesson_form in formset.forms %}
                     <tr class="lesson-form-row">
-                        {% for hidden in form.hidden_fields %}
-                            {{ hidden }}
-                        {% endfor %}
+                        {% for hidden in lesson_form.hidden_fields %}{{ hidden }}{% endfor %}
                         <td>
-                            {{ form.title }}
-                            {% if form.title.errors %}
-                                <div class="text-danger small mt-1">{{ form.title.errors|striptags }}</div>
+                            {{ lesson_form.title }}
+                            {% if lesson_form.title.errors %}
+                            <div class="ap-field-error ap-mt-1">{{ lesson_form.title.errors|striptags }}</div>
                             {% endif %}
                         </td>
                         <td>
-                            {{ form.order }}
-                            {% if form.order.errors %}
-                                <div class="text-danger small mt-1">{{ form.order.errors|striptags }}</div>
+                            {{ lesson_form.order }}
+                            {% if lesson_form.order.errors %}
+                            <div class="ap-field-error ap-mt-1">{{ lesson_form.order.errors|striptags }}</div>
                             {% endif %}
                         </td>
-                        <td class="text-center">
-                            {% if formset.can_delete %}
-                                {{ form.DELETE }}
-                            {% endif %}
+                        <td style="text-align:center;">
+                            {% if formset.can_delete %}{{ lesson_form.DELETE }}{% endif %}
                         </td>
                     </tr>
                     {% endfor %}
@@ -97,51 +110,23 @@
         </div>
     </div>
 
-    <!-- الأزرار -->
-    <div class="d-flex justify-content-end gap-3 mt-4">
-        <a href="{% url 'admin_panel:manage_curriculum' %}" class="btn btn-light px-4 fw-bold">إلغاء</a>
-        <button type="submit" class="btn btn-primary px-5 fw-bold">حفظ الوحدة والدروس</button>
+    <div class="ap-flex ap-justify-end ap-gap-2">
+        <a href="{% url 'admin_panel:manage_curriculum' %}" class="ap-btn ap-btn-secondary">إلغاء</a>
+        <button type="submit" class="ap-btn ap-btn-primary">
+            <i class="bi bi-check2-circle"></i> حفظ الوحدة والدروس
+        </button>
     </div>
 </form>
 
-<!-- نموذج مخفي لاستخدامه في الـ JS عند إضافة سطر جديد -->
-<div id="empty-form" class="d-none">
+<!-- نموذج مخفي لإضافة سطر درس جديد ديناميكياً -->
+<div id="empty-form" class="ap-hidden" aria-hidden="true">
     <table>
         <tr class="lesson-form-row">
-            {% for hidden in formset.empty_form.hidden_fields %}
-                {{ hidden }}
-            {% endfor %}
+            {% for hidden in formset.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
             <td>{{ formset.empty_form.title }}</td>
             <td>{{ formset.empty_form.order }}</td>
-            <td class="text-center">
-                {% if formset.can_delete %}
-                    {{ formset.empty_form.DELETE }}
-                {% endif %}
-            </td>
+            <td style="text-align:center;">{% if formset.can_delete %}{{ formset.empty_form.DELETE }}{% endif %}</td>
         </tr>
     </table>
 </div>
-
-<script>
-    document.addEventListener("DOMContentLoaded", function() {
-        const addButton = document.getElementById("add-lesson-btn");
-        const container = document.getElementById("lesson-formset-container");
-        const totalFormsInput = document.querySelector("input[name$='-TOTAL_FORMS']"); 
-        
-        // Ensure empty form template doesn't get submitted if left alone
-        const emptyFormTemplate = document.getElementById("empty-form").querySelector('tr').outerHTML;
-
-        addButton.addEventListener("click", function() {
-            const formCount = parseInt(totalFormsInput.value);
-            // Replace __prefix__ with the current form count index
-            const newFormHtml = emptyFormTemplate.replace(/__prefix__/g, formCount);
-            
-            // Append the new row
-            container.insertAdjacentHTML('beforeend', newFormHtml);
-            
-            // Increment the form count
-            totalFormsInput.value = formCount + 1;
-        });
-    });
-</script>
 {% endblock %}

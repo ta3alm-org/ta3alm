@@ -15,11 +15,11 @@
                 <div class="modal-body">
                     <div class="mb-3">
                         <label class="form-label fw-bold">{% trans "عنوان المحاضرة" %}</label>
-                        <input type="text" name="title" class="form-control" placeholder="{% trans 'مثال: شرح الدرس الأول' %}" required>
+                        <input type="text" name="title" class="form-control" maxlength="200" placeholder="{% trans 'مثال: شرح الدرس الأول' %}" required>
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-bold">{% trans "رابط الفيديو" %}</label>
-                        <input type="url" name="video_link" class="form-control" placeholder="Youtube, Vimeo, etc..." required>
+                        <input type="url" name="video_link" class="form-control" maxlength="2000" placeholder="Youtube, Vimeo, etc..." required>
                         <div class="form-text">{% trans "انسخ رابط الفيديو المباشر." %}</div>
                     </div>
                     <div class="mb-3">
@@ -51,7 +51,7 @@
                 <div class="modal-body">
                     <div class="mb-3">
                         <label class="form-label fw-bold">{% trans "عنوان الامتحان" %}</label>
-                        <input type="text" name="title" class="form-control" placeholder="{% trans 'مثال: امتحان شامل علي الوحدة' %}" required>
+                        <input type="text" name="title" class="form-control" maxlength="200" placeholder="{% trans 'مثال: امتحان شامل علي الوحدة' %}" required>
                     </div>
                     <div class="row g-2">
                         <div class="col-md-6">

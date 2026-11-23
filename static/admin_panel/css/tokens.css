@@ -1,0 +1,84 @@
+/* ============================================================
+   Ta3alm Admin Design System — Design Tokens
+   Calm, classic, Shopify-inspired SaaS workspace
+   ============================================================ */
+
+:root {
+    /* Surfaces */
+    --bg-main: #f6f6f4;
+    --bg-surface: #ffffff;
+    --bg-subtle: #f1f2f0;
+    --bg-hover: #f8f8f7;
+    --bg-sidebar: #ffffff;
+    --bg-code: #1f2223;
+
+    /* Typography & Text */
+    --text-primary: #202223;
+    --text-secondary: #61666b;
+    --text-muted: #8a9095;
+    --text-on-accent: #ffffff;
+    --font-sans: 'Cairo', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+    /* Borders & Dividers */
+    --border-default: #e5e7e8;
+    --border-strong: #d5d8da;
+    --border-subtle: #eff0ef;
+
+    /* Restrained Accent & Semantic Palette */
+    --accent: #303f3a;
+    --accent-hover: #26332f;
+    --accent-soft: #eef2f0;
+    --accent-border: #cdd6d2;
+
+    --success: #16835d;
+    --success-hover: #126b4c;
+    --success-soft: #ebf7f2;
+    --success-border: #c5e6d8;
+
+    --warning: #b7791f;
+    --warning-hover: #976318;
+    --warning-soft: #fdf6e8;
+    --warning-border: #edd8ad;
+
+    --danger: #c03939;
+    --danger-hover: #a12c2c;
+    --danger-soft: #fcedec;
+    --danger-border: #eec6c5;
+
+    --info: #2c5f8a;
+    --info-soft: #eef4fa;
+    --info-border: #cadceb;
+
+    /* Shadows — minimal and understated */
+    --shadow-xs: 0 1px 2px rgba(32, 34, 35, 0.04);
+    --shadow-sm: 0 1px 3px rgba(32, 34, 35, 0.06), 0 1px 2px rgba(32, 34, 35, 0.04);
+    --shadow-md: 0 6px 18px rgba(32, 34, 35, 0.08), 0 2px 6px rgba(32, 34, 35, 0.04);
+    --shadow-lg: 0 16px 40px rgba(32, 34, 35, 0.14);
+
+    /* Radii */
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --radius-pill: 999px;
+
+    /* Layout Dimensions */
+    --sidebar-w: 256px;
+    --sidebar-collapsed-w: 72px;
+    --topbar-h: 60px;
+
+    /* Transitions */
+    --ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --t-fast: 150ms;
+    --t-normal: 220ms;
+
+    /* Layers */
+    --z-topbar: 80;
+    --z-sidebar: 90;
+    --z-backdrop: 95;
+    --z-dropdown: 110;
+    --z-drawer: 120;
+    --z-modal: 130;
+    --z-confirm: 140;
+    --z-toast: 160;
+}

@@ -1,0 +1,69 @@
+{% if error_message %}
+<div class="ap-banner ap-banner-warning ap-mb-4">
+    <i class="bi bi-exclamation-octagon"></i>
+    <div><strong>تنبيه من Zoho API:</strong> {{ error_message }}</div>
+</div>
+{% endif %}
+
+<div class="ap-table-wrap">
+    <table class="ap-table">
+        <thead>
+            <tr>
+                <th style="width:36px;"></th>
+                <th>المرسل</th>
+                <th>الموضوع والمعاينة</th>
+                <th>التاريخ والوقت</th>
+                <th class="ap-cell-actions">الإجراء</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for msg in messages_list %}
+            <tr {% if msg.status == '0' %}style="background:#fafbfa;"{% endif %}>
+                <td>
+                    {% if msg.status == '0' %}
+                    <span class="ap-badge ap-badge-info" title="غير مقروءة">جديد</span>
+                    {% else %}
+                    <i class="bi bi-envelope-open ap-subtle-text"></i>
+                    {% endif %}
+                </td>
+                <td>
+                    <div class="ap-user-cell">
+                        <div class="ap-avatar">{{ msg.fromAddress|slice:":1"|upper|default:"M" }}</div>
+                        <div style="min-width:0;">
+                            <div class="ap-user-cell-name ap-truncate" style="max-width:180px;">{{ msg.sender|default:msg.fromAddress }}</div>
+                            <div class="ap-user-cell-sub ap-truncate ap-ltr" style="max-width:180px;">{{ msg.fromAddress }}</div>
+                        </div>
+                    </div>
+                </td>
+                <td>
+                    <a href="{% url 'admin_panel:support_message_detail' msg.messageId %}?folder_id={{ msg.folderId }}" style="color:inherit; display:block; max-width:420px;">
+                        <div class="{% if msg.status == '0' %}ap-strong{% endif %} ap-truncate">
+                            {{ msg.subject|default:"(بدون موضوع)" }}
+                        </div>
+                        {% if msg.summary %}
+                        <div class="ap-xs ap-muted ap-truncate">{{ msg.summary }}</div>
+                        {% endif %}
+                    </a>
+                </td>
+                <td class="ap-muted ap-xs" style="white-space:nowrap;">{{ msg.formatted_date|default:msg.receivedTime }}</td>
+                <td class="ap-cell-actions">
+                    <a href="{% url 'admin_panel:support_message_detail' msg.messageId %}?folder_id={{ msg.folderId }}"
+                       class="ap-btn ap-btn-sm ap-btn-secondary">
+                        <i class="bi bi-reply"></i> عرض والرد
+                    </a>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="5">
+                    <div class="ap-empty">
+                        <i class="bi bi-mailbox"></i>
+                        <p class="ap-empty-title">لا توجد رسائل في صندوق الوارد</p>
+                        <p class="ap-empty-sub">جميع الرسائل الواردة إلى {{ support_email }} ستظهر هنا تلقائياً.</p>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>

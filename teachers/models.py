@@ -120,12 +120,32 @@ class Group(models.Model):
 class Lecture(models.Model):
     group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name='lectures', null=True, blank=True)
     title = models.CharField(max_length=200, verbose_name=_('╪º┘ä╪╣┘å┘ê╪º┘å'))
-    video_link = models.URLField(verbose_name=_('╪▒╪º╪¿╪╖ ╪º┘ä┘ü┘è╪»┘è┘ê'))
+    video_link = models.URLField(max_length=2000, verbose_name=_('╪▒╪º╪¿╪╖ ╪º┘ä┘ü┘è╪»┘è┘ê'))
     description = models.TextField(blank=True, verbose_name=_('╪º┘ä┘ê╪╡┘ü'))
     is_active = models.BooleanField(default=True, verbose_name=_("┘à┘ü╪╣┘ä╪⌐"))
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self): return self.title
+
+    @staticmethod
+    def normalize_video_link(raw_link: str) -> str:
+        """تنظيف رابط الفيديو واستخراج الرابط من iframe واختصار روابط يوتيوب الطويلة."""
+        text = str(raw_link or '').strip()
+        if not text:
+            return ''
+        if '<iframe' in text.lower():
+            src_match = re.search(r'src\s*=\s*["\']([^"\']+)["\']', text, flags=re.IGNORECASE)
+            if src_match:
+                text = src_match.group(1).strip()
+        lowered = text.lower()
+        if 'youtube.com' in lowered or 'youtu.be' in lowered or 'youtube-nocookie.com' in lowered:
+            match = re.search(
+                r'(?:[?&]v=|youtu\.be/|youtube(?:-nocookie)?\.com/(?:embed|shorts|live|v)/)([0-9A-Za-z_-]{11})',
+                text,
+            )
+            if match:
+                return f'https://www.youtube.com/watch?v={match.group(1)}'
+        return text
 
     def get_video_id(self):
         if not self.video_link: return None
@@ -165,7 +185,7 @@ class PDFFile(models.Model):
     group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name='pdfs', null=True, blank=True)
     
     title = models.CharField(max_length=200, verbose_name=_('╪╣┘å┘ê╪º┘å ╪º┘ä┘à┘ä┘ü'))
-    link = models.URLField(verbose_name=_('╪▒╪º╪¿╪╖ ╪º┘ä┘à┘ä┘ü (Drive/Direct)'))
+    link = models.URLField(max_length=2000, verbose_name=_('╪▒╪º╪¿╪╖ ╪º┘ä┘à┘ä┘ü (Drive/Direct)'))
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self): return self.title

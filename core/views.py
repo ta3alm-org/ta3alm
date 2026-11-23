@@ -260,3 +260,83 @@ def one_time_login_view(request, token):
     login(request, link.user, backend='accounts.backends.MultiFieldAuthBackend')
     messages.success(request, f"مرحباً بك {link.user.get_full_name() or link.user.email}، تم تسجيل الدخول بنجاح.")
     return redirect(link.user.get_dashboard_url())
+
+
+# ==========================================================
+# 11. شات الدعم الفني المباشر للمستخدمين على الويب
+# ==========================================================
+@login_required
+def support_chat_page(request, thread_id=None):
+    from django.contrib import messages
+    from django.http import HttpResponseForbidden, JsonResponse
+    from core.models import SupportMessage, SupportThread
+    from api_v1.views_support import (
+        _is_support_admin_user,
+        append_support_message,
+        serialize_support_message,
+    )
+
+    is_admin = _is_support_admin_user(request.user)
+    if thread_id is not None:
+        thread = get_object_or_404(SupportThread.objects.select_related('user'), pk=thread_id)
+        if thread.user_id != request.user.id and not is_admin:
+            return HttpResponseForbidden('ليس لديك صلاحية للوصول لهذه المحادثة.')
+    else:
+        thread = (
+            SupportThread.objects.select_related('user')
+            .filter(user=request.user)
+            .order_by('-last_message_at', '-id')
+            .first()
+        )
+        if thread is None:
+            thread = SupportThread.objects.create(user=request.user)
+
+    acting_as_admin = is_admin and thread.user_id != request.user.id
+
+    if acting_as_admin:
+        if thread.unread_for_admin:
+            thread.unread_for_admin = 0
+            thread.save(update_fields=['unread_for_admin'])
+        SupportMessage.objects.filter(thread=thread, is_from_admin=False, is_read=False).update(is_read=True)
+    else:
+        if thread.unread_for_user:
+            thread.unread_for_user = 0
+            thread.save(update_fields=['unread_for_user'])
+        SupportMessage.objects.filter(thread=thread, is_from_admin=True, is_read=False).update(is_read=True)
+
+    if request.method == 'POST':
+        body = str(request.POST.get('body') or '').strip()
+        if not body:
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'error': 'يرجى كتابة نص الرسالة.'}, status=400)
+            messages.error(request, 'يرجى كتابة نص الرسالة.')
+        else:
+            msg = append_support_message(
+                thread=thread,
+                sender=request.user,
+                body=body[:4000],
+                is_from_admin=acting_as_admin,
+            )
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'message': serialize_support_message(msg)})
+            return redirect('support_chat_thread', thread_id=thread.id)
+
+    if request.GET.get('poll') == '1':
+        raw_after = str(request.GET.get('after_id') or '').strip()
+        qs = thread.messages.select_related('sender')
+        if raw_after.isdigit():
+            qs = qs.filter(id__gt=int(raw_after)).order_by('id')
+        else:
+            qs = qs.order_by('id')
+        return JsonResponse({
+            'messages': [serialize_support_message(m) for m in qs[:100]],
+            'status': thread.status,
+        })
+
+    chat_messages = list(thread.messages.select_related('sender').order_by('created_at', 'id')[:150])
+    return render(request, 'core/support_chat.html', {
+        'thread': thread,
+        'chat_messages': chat_messages,
+        'acting_as_admin': acting_as_admin,
+        'last_msg_id': chat_messages[-1].id if chat_messages else 0,
+    })

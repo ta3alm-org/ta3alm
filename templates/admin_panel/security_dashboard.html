@@ -2,278 +2,96 @@
 {% load i18n %}
 
 {% block page_title %}مركز أمان الأجهزة والحماية{% endblock %}
+{% block body_page %}security{% endblock %}
 {% block nav_security %}active{% endblock %}
 {% block breadcrumb %}<span class="sep">/</span><span class="current">مركز أمان الأجهزة والحماية</span>{% endblock %}
 
 {% block content %}
-<div class="page-header d-flex align-items-center justify-content-between flex-wrap gap-3">
+<div class="ap-page-header">
     <div>
-        <h1><i class="bi bi-shield-lock-fill me-2" style="color:var(--admin-accent);"></i>مركز أمان الأجهزة ومكافحة
-            مشاركة الحسابات</h1>
-        <p>مراقبة الأجهزة المسجّلة، البصمة متعددة الطبقات، الجلسات النشطة، محاولات التقاط الشاشة، وإدارة الحظر.</p>
+        <h1 class="ap-page-title"><i class="bi bi-shield-lock"></i> مركز أمان الأجهزة ومكافحة مشاركة الحسابات</h1>
+        <p class="ap-page-subtitle">مراقبة الأجهزة المسجّلة، البصمة متعددة الطبقات، الجلسات النشطة، والذكاء الاصطناعي الأمني</p>
     </div>
-    <form method="POST" action="{% url 'admin_panel:security_admin_action' %}">
-        {% csrf_token %}
-        <input type="hidden" name="action" value="prune_telemetry">
-        <button type="submit" class="btn btn-sm btn-outline-secondary fw-bold">
-            <i class="bi bi-trash3 me-1"></i>تنظيف السجلات المنتهية ({{ policy.event_retention_days }} يوم)
-        </button>
-    </form>
+    <div class="ap-page-actions">
+        <form method="POST" action="{% url 'admin_panel:security_admin_action' %}"
+              data-ajax-form data-security-action="1"
+              data-confirm="تنظيف سجلات القياس المنتهية (أقدم من {{ policy.event_retention_days }} يوماً)؟"
+              data-confirm-title="تنظيف السجلات"
+              data-confirm-variant="warning">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="prune_telemetry">
+            <button type="submit" class="ap-btn ap-btn-sm ap-btn-secondary">
+                <i class="bi bi-trash3"></i> تنظيف السجلات المنتهية ({{ policy.event_retention_days }} يوم)
+            </button>
+        </form>
+        <form method="POST" action="{% url 'admin_panel:security_admin_action' %}" data-ajax-form data-security-action="1">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="analyze_user_behavior">
+            <button type="submit" class="ap-btn ap-btn-sm ap-btn-primary">
+                <i class="bi bi-play-circle"></i> فحص الذكاء الاصطناعي الآن
+            </button>
+        </form>
+    </div>
 </div>
 
 <!-- KPI Cards -->
-<div class="row g-3 mb-4">
-    <div class="col-6 col-md-4 col-lg-2">
-        <div class="stat-card">
-            <div class="stat-icon" style="background:#e8f4fd; color:#0d6efd;"><i class="bi bi-phone-fill"></i></div>
-            <div class="stat-number">{{ stats.total_devices }}</div>
-            <div class="stat-label">إجمالي الأجهزة</div>
+<div class="ap-kpi-grid ap-kpi-grid-6">
+    <div class="ap-stat">
+        <div class="ap-stat-top">
+            <span class="ap-stat-label">إجمالي الأجهزة</span>
+            <span class="ap-stat-icon"><i class="bi bi-phone"></i></span>
         </div>
+        <div class="ap-stat-value" data-security-stat="total_devices">{{ stats.total_devices }}</div>
     </div>
-    <div class="col-6 col-md-4 col-lg-2">
-        <div class="stat-card">
-            <div class="stat-icon" style="background:#e8fdf4; color:#0f9b58;"><i class="bi bi-broadcast"></i></div>
-            <div class="stat-number">{{ stats.active_sessions }}</div>
-            <div class="stat-label">جلسات نشطة</div>
+    <div class="ap-stat">
+        <div class="ap-stat-top">
+            <span class="ap-stat-label">جلسات نشطة</span>
+            <span class="ap-stat-icon"><i class="bi bi-broadcast"></i></span>
         </div>
+        <div class="ap-stat-value ap-text-success" data-security-stat="active_sessions">{{ stats.active_sessions }}</div>
     </div>
-    <div class="col-6 col-md-4 col-lg-2">
-        <div class="stat-card">
-            <div class="stat-icon" style="background:#fff8e1; color:#f5a623;"><i
-                    class="bi bi-exclamation-triangle-fill"></i></div>
-            <div class="stat-number">{{ stats.suspicious_devices }}</div>
-            <div class="stat-label">أجهزة مشبوهة/مقيّدة</div>
+    <div class="ap-stat">
+        <div class="ap-stat-top">
+            <span class="ap-stat-label">أجهزة مشبوهة</span>
+            <span class="ap-stat-icon"><i class="bi bi-exclamation-triangle"></i></span>
         </div>
+        <div class="ap-stat-value ap-text-warning" data-security-stat="suspicious_devices">{{ stats.suspicious_devices }}</div>
     </div>
-    <div class="col-6 col-md-4 col-lg-2">
-        <div class="stat-card">
-            <div class="stat-icon" style="background:#fde8ea; color:#e94560;"><i class="bi bi-slash-circle-fill"></i>
-            </div>
-            <div class="stat-number">{{ stats.blocked_devices }}</div>
-            <div class="stat-label">أجهزة محظورة</div>
+    <div class="ap-stat">
+        <div class="ap-stat-top">
+            <span class="ap-stat-label">أجهزة محظورة</span>
+            <span class="ap-stat-icon"><i class="bi bi-slash-circle"></i></span>
         </div>
+        <div class="ap-stat-value ap-text-danger" data-security-stat="blocked_devices">{{ stats.blocked_devices }}</div>
     </div>
-    <div class="col-6 col-md-4 col-lg-2">
-        <div class="stat-card">
-            <div class="stat-icon" style="background:#f3e8ff; color:#7c3aed;"><i class="bi bi-shield-exclamation"></i>
-            </div>
-            <div class="stat-number">{{ stats.open_events }}</div>
-            <div class="stat-label">أحداث مفتوحة</div>
+    <div class="ap-stat">
+        <div class="ap-stat-top">
+            <span class="ap-stat-label">أحداث مفتوحة</span>
+            <span class="ap-stat-icon"><i class="bi bi-shield-exclamation"></i></span>
         </div>
+        <div class="ap-stat-value" data-security-stat="open_events">{{ stats.open_events }}</div>
     </div>
-    <div class="col-6 col-md-4 col-lg-2">
-        <div class="stat-card">
-            <div class="stat-icon" style="background:#fde8ea; color:#b91c1c;"><i class="bi bi-bug-fill"></i></div>
-            <div class="stat-number">{{ stats.critical_events }}</div>
-            <div class="stat-label">أحداث حرجة</div>
+    <div class="ap-stat">
+        <div class="ap-stat-top">
+            <span class="ap-stat-label">أحداث حرجة</span>
+            <span class="ap-stat-icon"><i class="bi bi-bug"></i></span>
         </div>
+        <div class="ap-stat-value ap-text-danger" data-security-stat="critical_events">{{ stats.critical_events }}</div>
     </div>
 </div>
 
-<!-- AI Security Analyst & Quick Trigger -->
-<div class="admin-card mb-4">
-    <div class="admin-card-header flex-wrap gap-2">
-        <span class="admin-card-title">
-            <i class="bi bi-cpu-fill me-2 text-danger"></i>مركز الذكاء الاصطناعي الأمني وتقارير الفحص الآلي
-        </span>
-        <div class="d-flex flex-wrap align-items-center gap-2">
-            {% if ai_config.enabled and ai_config.configured %}
-            <span class="badge bg-success">مفعّل ({{ ai_config.provider|upper }} / {{ ai_config.model }})</span>
-            {% elif ai_config.enabled %}
-            <span class="badge bg-warning text-dark">يعمل بالمحلل السلوكي المحلي — ضع AI API Key للتفعيل الكامل</span>
-            {% else %}
-            <span class="badge bg-secondary">معطّل</span>
-            {% endif %}
-            <a href="#ai-reports-section" class="btn btn-sm btn-outline-primary fw-bold">
-                <i class="bi bi-clipboard2-pulse me-1"></i>عرض تقارير السلوك ({{ risk_profiles|length }})
-            </a>
-            <form method="POST" action="{% url 'admin_panel:security_admin_action' %}" class="d-inline">
-                {% csrf_token %}
-                <input type="hidden" name="action" value="analyze_user_behavior">
-                <button type="submit" class="btn btn-sm btn-danger fw-bold">
-                    <i class="bi bi-play-circle-fill me-1"></i>تشغيل فحص الذكاء الاصطناعي الآن
-                </button>
-            </form>
-        </div>
-    </div>
-    <div class="p-4">
-        <div class="row g-2 mb-3 small">
-            <div class="col-md-4">
-                <div class="border rounded p-2 bg-light">
-                    <span class="text-muted d-block">آخر فحص آلي</span>
-                    <strong>{{ policy.last_ai_audit_at|date:"Y-m-d H:i"|default:"لم يتم التشغيل بعد" }}</strong>
-                </div>
+<!-- شريط التصفية الحي -->
+<div class="ap-card ap-mb-4">
+    <form method="GET" action="{% url 'admin_panel:security_dashboard' %}" id="securityFilterForm"
+          data-live-filter-form data-filter-target="#securityPanelsContainer"
+          class="ap-card-body">
+        <div class="ap-form-grid-3" style="grid-template-columns:minmax(0,2fr) repeat(3, minmax(0,1fr)) auto;">
+            <div class="ap-field">
+                <input type="text" name="q" value="{{ q }}" class="ap-input ap-input-sm"
+                       placeholder="بحث بمعرّف الجهاز DEV-XXXX، اسم المستخدم، الموديل، أو IP...">
             </div>
-            <div class="col-md-4">
-                <div class="border rounded p-2 bg-light">
-                    <span class="text-muted d-block">نتيجة آخر دورة فحص</span>
-                    <strong>
-                        فحص: {{ ai_summary.analyzed_users|default:0 }} مستخدم · عالي الخطورة: {{ ai_summary.flagged_high_risk|default:0 }} (الإجمالي: {{ stats.high_risk_users|default:0 }})
-                    </strong>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="border rounded p-2 bg-light">
-                    <span class="text-muted d-block">الحظر التلقائي / حالة المفتاح</span>
-                    <strong>
-                        حظر: {{ ai_summary.banned_users|default:0 }} حساب / {{ ai_summary.banned_devices|default:0 }} جهاز
-                        {% if ai_config.masked_key %}· Key: <code dir="ltr">{{ ai_config.masked_key }}</code>{% endif %}
-                    </strong>
-                </div>
-            </div>
-        </div>
-        <form method="POST" action="{% url 'admin_panel:security_admin_action' %}" class="row g-3 align-items-end">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="update_ai_config">
-            <div class="col-md-3">
-                <label class="form-label small fw-bold">مزود الذكاء الاصطناعي</label>
-                <select name="ai_provider" class="form-select form-select-sm">
-                    <option value="auto" {% if policy.ai_provider == 'auto' %}selected{% endif %}>كشف تلقائي (Auto)</option>
-                    <option value="gemini" {% if policy.ai_provider == 'gemini' %}selected{% endif %}>Google Gemini</option>
-                    <option value="openai" {% if policy.ai_provider == 'openai' %}selected{% endif %}>OpenAI</option>
-                    <option value="groq" {% if policy.ai_provider == 'groq' %}selected{% endif %}>Groq</option>
-                    <option value="deepseek" {% if policy.ai_provider == 'deepseek' %}selected{% endif %}>DeepSeek</option>
-                </select>
-            </div>
-            <div class="col-md-3">
-                <label class="form-label small fw-bold">اسم الموديل</label>
-                <input type="text" name="ai_model_name" dir="ltr" value="{{ policy.ai_model_name|default:'gemini-2.5-flash' }}" class="form-control form-control-sm">
-            </div>
-            <div class="col-md-4">
-                <label class="form-label small fw-bold">تجاوز مفتاح AI API (اختياري — يقرأ .env تلقائياً)</label>
-                <input type="password" name="ai_api_key_override" dir="ltr" class="form-control form-control-sm" placeholder="اتركه فارغاً لاستخدام مفتاح .env أو المحفوظ">
-            </div>
-            <div class="col-md-2">
-                {% if policy.ai_api_key_override %}
-                <div class="form-check mb-1">
-                    <input class="form-check-input" type="checkbox" id="clearAiKey" name="clear_ai_key" value="1">
-                    <label class="form-check-label small text-danger" for="clearAiKey">مسح التجاوز</label>
-                </div>
-                {% endif %}
-                <button type="submit" class="btn btn-dark btn-sm w-100 fw-bold">
-                    <i class="bi bi-save me-1"></i>حفظ إعدادات AI
-                </button>
-            </div>
-            <div class="col-md-4">
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="aiEnabledSwitch" name="ai_security_enabled"
-                        {% if policy.ai_security_enabled %}checked{% endif %}>
-                    <label class="form-check-label small fw-bold" for="aiEnabledSwitch">تفعيل محلل الذكاء الاصطناعي</label>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="aiHourlySwitch" name="ai_hourly_schedule_enabled"
-                        {% if policy.ai_hourly_schedule_enabled %}checked{% endif %}>
-                    <label class="form-check-label small fw-bold" for="aiHourlySwitch">فحص دوري تلقائي كل ساعة</label>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="aiAutoBanSwitch" name="ai_auto_enforce_bans"
-                        {% if policy.ai_auto_enforce_bans %}checked{% endif %}>
-                    <label class="form-check-label small fw-bold" for="aiAutoBanSwitch">تنفيذ الحظر التلقائي عند الخطورة الحرجة</label>
-                </div>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- Security Policy Config -->
-<div class="admin-card mb-4">
-    <div class="admin-card-header">
-        <span class="admin-card-title"><i class="bi bi-sliders me-2 text-primary"></i>إعدادات حدود الأجهزة وسياسات
-            المخاطر وحماية الشاشة</span>
-    </div>
-    <div class="p-4">
-        <form method="POST" action="{% url 'admin_panel:security_admin_action' %}" class="row g-3 align-items-end">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="update_policy">
-            <div class="col-6 col-md-2">
-                <label class="form-label small fw-bold">حد أجهزة الطالب</label>
-                <input type="number" min="1" name="student_device_limit" value="{{ policy.student_device_limit }}"
-                    class="form-control form-control-sm">
-            </div>
-            <div class="col-6 col-md-2">
-                <label class="form-label small fw-bold">حد أجهزة المعلم</label>
-                <input type="number" min="1" name="teacher_device_limit" value="{{ policy.teacher_device_limit }}"
-                    class="form-control form-control-sm">
-            </div>
-            <div class="col-6 col-md-2">
-                <label class="form-label small fw-bold">حد الجلسات المتزامنة</label>
-                <input type="number" min="1" name="max_concurrent_sessions" value="{{ policy.max_concurrent_sessions }}"
-                    class="form-control form-control-sm">
-            </div>
-            <div class="col-6 col-md-2">
-                <label class="form-label small fw-bold">حد التشغيل المتزامن</label>
-                <input type="number" min="1" name="max_concurrent_playback" value="{{ policy.max_concurrent_playback }}"
-                    class="form-control form-control-sm">
-            </div>
-            <div class="col-6 col-md-2">
-                <label class="form-label small fw-bold">عتبة الخطر العالي</label>
-                <input type="number" min="1" name="risk_threshold_high" value="{{ policy.risk_threshold_high }}"
-                    class="form-control form-control-sm">
-            </div>
-            <div class="col-6 col-md-2">
-                <label class="form-label small fw-bold">أيام الاحتفاظ بالسجل</label>
-                <input type="number" min="7" name="event_retention_days" value="{{ policy.event_retention_days }}"
-                    class="form-control form-control-sm">
-            </div>
-            <div class="col-md-3">
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="enforceLimit" name="enforce_device_limits"
-                        {% if policy.enforce_device_limits %}checked{% endif %}>
-                    <label class="form-check-label small fw-bold" for="enforceLimit">فرض حد الأجهزة</label>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="enforceScreen"
-                        name="enforce_screen_capture_policy"
-                        {% if policy.enforce_screen_capture_policy %}checked{% endif %}>
-                    <label class="form-check-label small fw-bold" for="enforceScreen">حماية الشاشة</label>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="blockVpn" name="block_vpn_connections"
-                        {% if policy.block_vpn_connections %}checked{% endif %}>
-                    <label class="form-check-label small fw-bold" for="blockVpn">منع الدخول بـ VPN</label>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="blockDev" name="block_developer_options"
-                        {% if policy.block_developer_options %}checked{% endif %}>
-                    <label class="form-check-label small fw-bold" for="blockDev">منع خيارات المطور</label>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="blockDnsPort" name="block_abnormal_dns_or_ports"
-                        {% if policy.block_abnormal_dns_or_ports %}checked{% endif %}>
-                    <label class="form-check-label small fw-bold" for="blockDnsPort">منع توجيه البورتات و DNS غير الطبيعي</label>
-                </div>
-            </div>
-            <div class="col-md-6 text-start">
-                <button type="submit" class="btn btn-primary btn-sm fw-bold px-4">
-                    <i class="bi bi-check2-circle me-1"></i>حفظ السياسة الأمنية
-                </button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- Filters -->
-<div class="admin-card mb-4">
-    <div class="p-3">
-        <form method="GET" class="row g-2 align-items-center">
-            <div class="col-md-4">
-                <input type="text" name="q" value="{{ q }}" class="form-control form-control-sm"
-                    placeholder="بحث بمعرّف الجهاز DEV-XXXX، اسم المستخدم، الموديل، أو IP...">
-            </div>
-            <div class="col-md-2">
-                <select name="trust" class="form-select form-select-sm">
+            <div class="ap-field">
+                <select name="trust" class="ap-select ap-select-sm">
                     <option value="">كل حالات الثقة</option>
                     <option value="multi_account" {% if trust_filter == 'multi_account' %}selected{% endif %}>أكثر من حساب</option>
                     <option value="maintenance_approved" {% if trust_filter == 'maintenance_approved' %}selected{% endif %}>معتمد للصيانة</option>
@@ -282,8 +100,8 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-2">
-                <select name="severity" class="form-select form-select-sm">
+            <div class="ap-field">
+                <select name="severity" class="ap-select ap-select-sm">
                     <option value="">كل مستويات الخطورة</option>
                     <option value="low" {% if severity_filter == 'low' %}selected{% endif %}>Low</option>
                     <option value="medium" {% if severity_filter == 'medium' %}selected{% endif %}>Medium</option>
@@ -291,417 +109,24 @@
                     <option value="critical" {% if severity_filter == 'critical' %}selected{% endif %}>Critical</option>
                 </select>
             </div>
-            <div class="col-md-2">
-                <select name="event_status" class="form-select form-select-sm">
+            <div class="ap-field">
+                <select name="event_status" class="ap-select ap-select-sm">
                     <option value="">كل حالات التحقيق</option>
                     <option value="open" {% if event_status_filter == 'open' %}selected{% endif %}>مفتوح</option>
                     <option value="investigating" {% if event_status_filter == 'investigating' %}selected{% endif %}>قيد التحقيق</option>
                     <option value="resolved" {% if event_status_filter == 'resolved' %}selected{% endif %}>تم الحل</option>
-                    <option value="false_positive" {% if event_status_filter == 'false_positive' %}selected{% endif %}>إنذار كاذب (False Positive)</option>
+                    <option value="false_positive" {% if event_status_filter == 'false_positive' %}selected{% endif %}>إنذار كاذب</option>
                 </select>
             </div>
-            <div class="col-md-2 d-flex gap-2">
-                <button type="submit" class="btn btn-dark btn-sm w-100 fw-bold">تصفية</button>
-                <a href="{% url 'admin_panel:security_dashboard' %}" class="btn btn-light btn-sm">إعادة</a>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- Unified Physical Devices Table (Single Row Per Physical Device) -->
-<div class="admin-card mb-4">
-    <div class="admin-card-header">
-        <span class="admin-card-title"><i class="bi bi-phone me-2 text-primary"></i>الأجهزة الموحدة (جهاز واحد لكل
-            هاتف/كمبيوتر بدون تكرار)</span>
-        <span class="badge bg-primary">{{ unified_devices|length }} جهاز فعلي</span>
-    </div>
-    <div class="table-responsive">
-        <table class="admin-table">
-            <thead>
-                <tr>
-                    <th>معرّف الجهاز</th>
-                    <th>الجهاز والمنصات</th>
-                    <th>الحسابات المرتبطة</th>
-                    <th>الحالة / الخطورة</th>
-                    <th>آخر IP</th>
-                    <th>إجراءات (تطبيق + متصفح)</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for udev in unified_devices %}
-                <tr>
-                    <td>
-                        <code class="fw-bold text-primary" dir="ltr">{{ udev.hardware_id }}</code>
-                        <div class="small text-muted">{{ udev.last_active_at|slice:":16"|default:"-" }}</div>
-                    </td>
-                    <td>
-                        <a href="{% url 'admin_panel:security_device_detail' udev.primary_device_id %}"
-                            class="fw-bold text-decoration-none">
-                            {{ udev.display_name }}
-                        </a>
-                        <div class="small text-muted">{{ udev.os_summary }}</div>
-                        <div class="mt-1 d-flex flex-wrap gap-1">
-                            {% for pl in udev.platform_labels %}
-                            <span class="badge bg-light text-dark border">{{ pl }}</span>
-                            {% endfor %}
-                        </div>
-                    </td>
-                    <td>
-                        <div class="d-flex flex-wrap gap-1">
-                            {% for acc in udev.linked_accounts %}
-                            <span
-                                class="badge {% if acc.is_banned %}bg-danger-subtle text-danger{% else %}bg-secondary-subtle text-dark{% endif %}">
-                                {{ acc.full_name }}
-                            </span>
-                            {% endfor %}
-                        </div>
-                    </td>
-                    <td>
-                        <span
-                            class="badge {% if udev.is_blocked %}bg-dark{% elif udev.trust_status == 'restricted' %}bg-danger{% elif udev.trust_status == 'suspicious' %}bg-warning text-dark{% else %}bg-success{% endif %}">
-                            {% if udev.is_blocked %}محظور (تطبيق + متصفح){% else %}{{ udev.trust_status }}{% endif %}
-                        </span>
-                        {% if udev.is_maintenance_approved %}
-                        <span class="badge bg-info text-dark mt-1">معتمد للصيانة</span>
-                        {% endif %}
-                        <div class="small mt-1 fw-bold">Risk: {{ udev.max_risk_score }}%</div>
-                    </td>
-                    <td>
-                        <div>{{ udev.last_ip|default:"-" }}</div>
-                        <small class="text-muted">{{ udev.last_country }}</small>
-                    </td>
-                    <td>
-                        <div class="d-flex flex-wrap gap-1">
-                            <a href="{% url 'admin_panel:security_device_detail' udev.primary_device_id %}"
-                                class="btn btn-sm btn-outline-primary" title="التفاصيل">
-                                <i class="bi bi-eye"></i>
-                            </a>
-                            <form method="POST" action="{% url 'admin_panel:security_admin_action' %}">
-                                {% csrf_token %}
-                                <input type="hidden" name="action" value="toggle_maintenance_device">
-                                <input type="hidden" name="device_id" value="{{ udev.primary_device_id }}">
-                                <input type="hidden" name="hardware_id" value="{{ udev.hardware_id }}">
-                                <input type="hidden" name="installation_id" value="{{ udev.primary_installation_id }}">
-                                {% if udev.is_maintenance_approved %}
-                                <input type="hidden" name="approved" value="0">
-                                <button class="btn btn-sm btn-info text-dark"
-                                    title="إلغاء اعتماد دخول الإدارة في الصيانة">
-                                    <i class="bi bi-shield-check"></i> إلغاء صيانة
-                                </button>
-                                {% else %}
-                                <input type="hidden" name="approved" value="1">
-                                <button class="btn btn-sm btn-outline-info"
-                                    title="اعتماد الجهاز لظهور زر دخول الإدارة في الصيانة">
-                                    <i class="bi bi-shield-plus"></i> اعتماد للصيانة
-                                </button>
-                                {% endif %}
-                            </form>
-                            <form method="POST" action="{% url 'admin_panel:security_admin_action' %}">
-                                {% csrf_token %}
-                                <input type="hidden" name="device_id" value="{{ udev.primary_device_id }}">
-                                <input type="hidden" name="hardware_id" value="{{ udev.hardware_id }}">
-                                <input type="hidden" name="installation_id" value="{{ udev.primary_installation_id }}">
-                                {% if udev.is_blocked %}
-                                <input type="hidden" name="action" value="unblock_device">
-                                <button class="btn btn-sm btn-success" title="فك حظر التطبيق والمتصفح"><i
-                                        class="bi bi-unlock-fill"></i> فك</button>
-                                {% else %}
-                                <input type="hidden" name="action" value="block_device">
-                                <input type="hidden" name="block_type" value="permanent">
-                                <input type="hidden" name="reason" value="حظر شامل للجهاز (تطبيق + متصفح)">
-                                <button class="btn btn-sm btn-danger" title="حظر التطبيق والمتصفح"><i
-                                        class="bi bi-slash-circle"></i> حظر</button>
-                                {% endif %}
-                            </form>
-                        </div>
-                    </td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="6" class="text-center text-muted py-4">لا توجد أجهزة مطابقة للبحث.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
-
-<div class="row g-3 mb-4">
-    <!-- Security Events -->
-    <div class="col-lg-8">
-        <div class="admin-card h-100">
-            <div class="admin-card-header">
-                <span class="admin-card-title"><i class="bi bi-shield-exclamation me-2 text-danger"></i>أحداث الأمان
-                    والتهديدات (التقاط شاشة / عبث / مشاركة حساب)</span>
-            </div>
-            <div class="table-responsive">
-                <table class="admin-table">
-                    <thead>
-                        <tr>
-                            <th>النوع</th>
-                            <th>المستخدم</th>
-                            <th>الخطورة</th>
-                            <th>IP</th>
-                            <th>الحالة</th>
-                            <th>تحقيق</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for e in events %}
-                        <tr>
-                            <td>
-                                <span class="fw-bold">{{ e.event_type }}</span>
-                                <div class="small text-muted">{{ e.action_taken }} · {{ e.created_at|date:"m-d H:i" }}
-                                </div>
-                            </td>
-                            <td>{{ e.user.username|default:"-" }}</td>
-                            <td>
-                                <span
-                                    class="badge {% if e.severity == 'critical' %}bg-danger{% elif e.severity == 'high' %}bg-warning text-dark{% elif e.severity == 'medium' %}bg-info text-dark{% else %}bg-secondary{% endif %}">
-                                    {{ e.severity|upper }} ({{ e.risk_score }})
-                                </span>
-                            </td>
-                            <td><small>{{ e.ip_address|default:"-" }} {{ e.country_code }}</small></td>
-                            <td><span class="badge bg-light text-dark border">{{ e.investigation_status }}</span></td>
-                            <td>
-                                <form method="POST" action="{% url 'admin_panel:security_admin_action' %}"
-                                    class="d-flex gap-1">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="action" value="resolve_event">
-                                    <input type="hidden" name="event_id" value="{{ e.id }}">
-                                    <button name="investigation_status" value="resolved"
-                                        class="btn btn-sm btn-outline-success" title="تم الحل"><i
-                                            class="bi bi-check-lg"></i></button>
-                                    <button name="investigation_status" value="false_positive"
-                                        class="btn btn-sm btn-outline-secondary"
-                                        title="إنذار كاذب واستعادة الثقة">FP</button>
-                                </form>
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="6" class="text-center text-muted py-4">لا توجد أحداث أمنية مسجّلة.</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+            <div class="ap-flex ap-gap-1">
+                <button type="submit" class="ap-btn ap-btn-sm ap-btn-primary">تصفية</button>
+                <button type="button" class="ap-btn ap-btn-sm ap-btn-secondary" data-filter-reset>إعادة</button>
             </div>
         </div>
-    </div>
-
-    <!-- Active Blocks & Account Sharing Alerts -->
-    <div class="col-lg-4">
-        <div class="admin-card mb-3">
-            <div class="admin-card-header">
-                <span class="admin-card-title"><i class="bi bi-slash-circle-fill me-2 text-danger"></i>قائمة الحظر
-                    النشطة</span>
-            </div>
-            <div class="p-3">
-                {% for b in active_blocks %}
-                <div class="border rounded p-2 mb-2 d-flex justify-content-between align-items-center">
-                    <div>
-                        <div class="fw-bold small">{{ b.installation_id|truncatechars:24 }}</div>
-                        <div class="small text-muted">{{ b.get_block_type_display }} — {{ b.reason }}</div>
-                    </div>
-                    <form method="POST" action="{% url 'admin_panel:security_admin_action' %}">
-                        {% csrf_token %}
-                        <input type="hidden" name="action" value="unblock_device">
-                        <input type="hidden" name="block_id" value="{{ b.id }}">
-                        <button class="btn btn-sm btn-outline-success">فك</button>
-                    </form>
-                </div>
-                {% empty %}
-                <div class="text-muted small text-center py-2">لا يوجد أجهزة محظورة حالياً.</div>
-                {% endfor %}
-            </div>
-        </div>
-
-        <div class="admin-card">
-            <div class="admin-card-header">
-                <span class="admin-card-title"><i class="bi bi-people me-2 text-warning"></i>تنبيهات مشاركة
-                    الحسابات</span>
-            </div>
-            <div class="p-3">
-                {% for s in sharing_alerts %}
-                <div class="border-bottom pb-2 mb-2">
-                    <div class="fw-bold small">
-                        {{ s.user.username|default:"-" }} — <span class="text-danger">{{ s.event_type }}</span>
-                    </div>
-                    <div class="small text-muted">
-                        {{ s.created_at|date:"Y-m-d H:i" }} · IP: {{ s.ip_address|default:"-" }}
-                    </div>
-                </div>
-                {% empty %}
-                <div class="text-muted small text-center py-2">لا توجد تنبيهات مشاركة حساب حالياً.</div>
-                {% endfor %}
-            </div>
-        </div>
-    </div>
+    </form>
 </div>
 
-<!-- Active Sessions -->
-<div class="admin-card">
-    <div class="admin-card-header">
-        <span class="admin-card-title"><i class="bi bi-broadcast me-2 text-success"></i>الجلسات النشطة الحالية</span>
-    </div>
-    <div class="table-responsive">
-        <table class="admin-table">
-            <thead>
-                <tr>
-                    <th>المستخدم</th>
-                    <th>الجهاز</th>
-                    <th>IP / الدولة / الشبكة</th>
-                    <th>VPN/Proxy</th>
-                    <th>آخر تواصل</th>
-                    <th>إجراء</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for sess in active_sessions %}
-                <tr>
-                    <td>{{ sess.user.username }}</td>
-                    <td>{{ sess.device.device_name|default:sess.installation_id|truncatechars:28 }}</td>
-                    <td>{{ sess.ip_address|default:"-" }} ({{ sess.country_code|default:"-" }})</td>
-                    <td>
-                        {% if sess.is_vpn_or_proxy %}
-                        <span class="badge bg-warning text-dark">VPN/Proxy</span>
-                        {% else %}
-                        -
-                        {% endif %}
-                    </td>
-                    <td><small>{{ sess.last_seen_at|date:"Y-m-d H:i" }}</small></td>
-                    <td>
-                        <form method="POST" action="{% url 'admin_panel:security_admin_action' %}">
-                            {% csrf_token %}
-                            <input type="hidden" name="action" value="revoke_session">
-                            <input type="hidden" name="session_id" value="{{ sess.id }}">
-                            <button class="btn btn-sm btn-outline-danger">إنهاء الجلسة</button>
-                        </form>
-                    </td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="6" class="text-center text-muted py-4">لا توجد جلسات نشطة.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
-
-<!-- AI Behavioral Reports -->
-<div class="admin-card mt-4" id="ai-reports-section">
-    <div class="admin-card-header flex-wrap gap-2">
-        <span class="admin-card-title">
-            <i class="bi bi-clipboard2-data-fill me-2 text-primary"></i>تقارير الذكاء الاصطناعي وتحليل سلوك المستخدمين
-        </span>
-        <form method="POST" action="{% url 'admin_panel:security_admin_action' %}" class="d-inline">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="analyze_user_behavior">
-            <button type="submit" class="btn btn-sm btn-outline-danger fw-bold">
-                <i class="bi bi-arrow-repeat me-1"></i>تحديث جميع التقارير الآن
-            </button>
-        </form>
-    </div>
-    <div class="table-responsive">
-        <table class="admin-table">
-            <thead>
-                <tr>
-                    <th>المستخدم</th>
-                    <th>درجة الخطورة</th>
-                    <th>مؤشرات السلوك</th>
-                    <th>تقرير وتوصية الذكاء الاصطناعي</th>
-                    <th>إجراءات الحظر والفحص</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for p in risk_profiles %}
-                <tr>
-                    <td>
-                        <div class="fw-bold">{{ p.user.get_full_name|default:p.user.email|default:p.user.username }}</div>
-                        <div class="small text-muted">{{ p.user.email }} · IP: {{ p.last_ip|default:"-" }}</div>
-                        {% if p.user.is_banned %}
-                        <span class="badge bg-dark mt-1">الحساب محظور</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        <span class="badge {% if p.behavior_risk_level == 'critical' %}bg-danger{% elif p.behavior_risk_level == 'high' %}bg-warning text-dark{% elif p.behavior_risk_level == 'medium' %}bg-info text-dark{% else %}bg-success{% endif %}">
-                            {{ p.behavior_risk_score }}% ({{ p.behavior_risk_level|upper }})
-                        </span>
-                        <div class="small text-muted mt-1">AI: {{ p.ai_risk_score }}%</div>
-                    </td>
-                    <td>
-                        <div class="small">
-                            إجراءات: <strong>{{ p.total_actions_count }}</strong><br>
-                            دخول فاشل: <strong>{{ p.total_failed_logins }}</strong> · MITM/عبث: <strong class="text-danger">{{ p.proxy_tamper_strikes }}</strong> · مشاركة: <strong class="text-warning">{{ p.sharing_strikes }}</strong>
-                        </div>
-                    </td>
-                    <td style="min-width:260px;">
-                        <div class="small fw-bold mb-1">
-                            التوصية:
-                            {% if p.ai_recommended_action == 'device_and_user' %}
-                            <span class="text-danger">حظر الجهاز والحساب معاً</span>
-                            {% elif p.ai_recommended_action == 'device_only' %}
-                            <span class="text-danger">حظر الجهاز فقط</span>
-                            {% elif p.ai_recommended_action == 'user_only' %}
-                            <span class="text-danger">حظر الحساب فقط</span>
-                            {% elif p.ai_recommended_action == 'warn' %}
-                            <span class="text-warning">مراقبة وتحذير</span>
-                            {% else %}
-                            <span class="text-success">سلوك طبيعي</span>
-                            {% endif %}
-                        </div>
-                        <div class="small text-muted">{{ p.ai_analysis_summary|default:"لم يصدر تقرير AI لهذا المستخدم بعد — اضغط فحص AI." }}</div>
-                        <div class="small text-muted mt-1">آخر تحليل: {{ p.ai_last_analyzed_at|date:"Y-m-d H:i"|default:"-" }}</div>
-                    </td>
-                    <td>
-                        <div class="d-flex flex-wrap gap-1">
-                            <form method="POST" action="{% url 'admin_panel:security_admin_action' %}">
-                                {% csrf_token %}
-                                <input type="hidden" name="action" value="analyze_user_behavior">
-                                <input type="hidden" name="user_id" value="{{ p.user.id }}">
-                                <button type="submit" class="btn btn-sm btn-outline-primary" title="فحص هذا المستخدم بالذكاء الاصطناعي">
-                                    <i class="bi bi-cpu"></i> فحص AI
-                                </button>
-                            </form>
-                            <form method="POST" action="{% url 'admin_panel:security_admin_action' %}">
-                                {% csrf_token %}
-                                <input type="hidden" name="action" value="ban_device_only">
-                                <input type="hidden" name="user_id" value="{{ p.user.id }}">
-                                <button type="submit" class="btn btn-sm btn-outline-warning text-dark">حظر جهاز</button>
-                            </form>
-                            <form method="POST" action="{% url 'admin_panel:security_admin_action' %}">
-                                {% csrf_token %}
-                                <input type="hidden" name="action" value="ban_user_only">
-                                <input type="hidden" name="user_id" value="{{ p.user.id }}">
-                                <button type="submit" class="btn btn-sm btn-outline-danger">حظر حساب</button>
-                            </form>
-                            <form method="POST" action="{% url 'admin_panel:security_admin_action' %}">
-                                {% csrf_token %}
-                                <input type="hidden" name="action" value="ban_user_and_device">
-                                <input type="hidden" name="user_id" value="{{ p.user.id }}">
-                                <button type="submit" class="btn btn-sm btn-danger">حظر الاثنين</button>
-                            </form>
-                            {% if p.user.is_banned or p.auto_ban_mode != 'none' %}
-                            <form method="POST" action="{% url 'admin_panel:security_admin_action' %}">
-                                {% csrf_token %}
-                                <input type="hidden" name="action" value="unban_user_and_devices">
-                                <input type="hidden" name="user_id" value="{{ p.user.id }}">
-                                <button type="submit" class="btn btn-sm btn-success">فك الحظر</button>
-                            </form>
-                            {% endif %}
-                        </div>
-                    </td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="5" class="text-center text-muted py-4">
-                        لا توجد تقارير سلوكية بعد — اضغط على «تشغيل فحص الذكاء الاصطناعي الآن» بالأعلى لتحليل المستخدمين وإصدار التقارير فوراً.
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+<div id="securityPanelsContainer">
+    {% include 'admin_panel/partials/_security_panels.html' %}
 </div>
 {% endblock %}

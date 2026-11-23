@@ -1,0 +1,33 @@
+{% for t in threads %}
+<a href="{% url 'admin_panel:support_chat_thread' t.id %}"
+   data-chat-thread-link="{{ t.id }}"
+   class="ap-chat-item {% if active_thread and active_thread.id == t.id %}is-active{% endif %}">
+    <span class="ap-avatar">
+        {{ t.user.first_name|slice:":1"|upper|default:"U" }}
+    </span>
+    <div class="ap-chat-item-meta">
+        <div class="ap-flex ap-items-center ap-justify-between ap-gap-2">
+            <span class="ap-strong ap-sm ap-truncate">
+                {{ t.user.get_full_name|default:t.user.email }}
+            </span>
+            {% if t.unread_for_admin > 0 %}
+            <span class="ap-badge ap-badge-danger" data-thread-unread>{{ t.unread_for_admin }}</span>
+            {% elif t.status == 'closed' %}
+            <span class="ap-badge ap-badge-neutral">مغلقة</span>
+            {% endif %}
+        </div>
+        <div class="ap-xs ap-muted ap-truncate">
+            {{ t.user.get_role_display }}{% if t.user.custom_id %} · {{ t.user.custom_id }}{% endif %}
+        </div>
+        <div class="ap-xs ap-subtle-text ap-truncate ap-mt-1" data-thread-preview="{{ t.id }}">
+            {{ t.last_message_preview|default:"(محادثة جديدة)" }}
+        </div>
+    </div>
+</a>
+{% empty %}
+<div class="ap-empty">
+    <i class="bi bi-chat-square-text"></i>
+    <p class="ap-empty-title">لا توجد محادثات</p>
+    <p class="ap-empty-sub">ستظهر رسائل المستخدمين هنا فور إرسالها.</p>
+</div>
+{% endfor %}

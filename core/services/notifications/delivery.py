@@ -42,6 +42,9 @@ def notify_user(user, title: str, message: str, link: str | None = None) -> Noti
     if getattr(user, 'is_active', True) is False:
         return None
     try:
+        User = get_user_model()
+        if not User.objects.filter(pk=user.pk).exists():
+            return None
         return Notification.objects.create(
             recipient=user,
             title=_clean_title(title),
@@ -87,6 +90,11 @@ def notify_users_bulk(
     if not objs:
         return 0
     try:
+        User = get_user_model()
+        existing_ids = set(User.objects.filter(pk__in=seen_ids).values_list('pk', flat=True))
+        objs = [obj for obj in objs if obj.recipient_id in existing_ids]
+        if not objs:
+            return 0
         created_objs = Notification.objects.bulk_create(objs, batch_size=500)
         created_ids = [getattr(obj, 'pk', None) for obj in created_objs if getattr(obj, 'pk', None)]
         if created_ids:

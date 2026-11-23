@@ -1,0 +1,97 @@
+{% extends 'admin_panel/base_admin.html' %}
+{% load i18n %}
+
+{% block page_title %}الأخطاء التقنية{% endblock %}
+{% block body_page %}error-reports{% endblock %}
+{% block nav_error_reports %}active{% endblock %}
+{% block breadcrumb %}<span class="sep">/</span><span class="current">الأخطاء التقنية</span>{% endblock %}
+
+{% block content %}
+<div class="ap-page-header">
+    <div>
+        <h1 class="ap-page-title"><i class="bi bi-bug"></i> تقارير الأخطاء التقنية التلقائية</h1>
+        <p class="ap-page-subtitle">جميع الأخطاء التقنية يتم إخفاؤها عن المستخدمين وإرسال تفاصيلها الكاملة هنا تلقائياً</p>
+    </div>
+    <div class="ap-page-actions">
+        <div id="errorResolveAllWrap" class="{% if unresolved_count <= 0 %}ap-hidden{% endif %}">
+            <form method="POST" action="{% url 'admin_panel:error_reports' %}"
+                  data-ajax-form data-error-action="1"
+                  data-confirm="هل تريد تحديد جميع الأخطاء الحالية كـ (تم الحل)؟"
+                  data-confirm-title="إغلاق جميع التقارير"
+                  data-confirm-variant="primary">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="resolve_all">
+                <button type="submit" class="ap-btn ap-btn-sm ap-btn-success">
+                    <i class="bi bi-check2-all"></i> إغلاق الكل (<span data-error-stat="unresolved">{{ unresolved_count }}</span>)
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- KPI Cards -->
+<div class="ap-kpi-grid ap-kpi-grid-3">
+    <div class="ap-stat">
+        <div class="ap-stat-top">
+            <span class="ap-stat-label">أخطاء غير محلولة</span>
+            <span class="ap-stat-icon" style="color:var(--danger);"><i class="bi bi-exclamation-octagon"></i></span>
+        </div>
+        <div class="ap-stat-value" data-error-stat="unresolved">{{ unresolved_count }}</div>
+        <div class="ap-stat-sub">تحتاج مراجعة</div>
+    </div>
+    <div class="ap-stat">
+        <div class="ap-stat-top">
+            <span class="ap-stat-label">أخطاء تم حلها</span>
+            <span class="ap-stat-icon" style="color:var(--success);"><i class="bi bi-check-circle"></i></span>
+        </div>
+        <div class="ap-stat-value" data-error-stat="resolved">{{ resolved_count }}</div>
+        <div class="ap-stat-sub">من أصل <span data-error-stat="total">{{ total_count }}</span> تقرير</div>
+    </div>
+    <div class="ap-stat">
+        <div class="ap-stat-top">
+            <span class="ap-stat-label">إجمالي مرات التكرار</span>
+            <span class="ap-stat-icon"><i class="bi bi-arrow-repeat"></i></span>
+        </div>
+        <div class="ap-stat-value" data-error-stat="occurrences">{{ total_occurrences }}</div>
+        <div class="ap-stat-sub">تُجمع الأخطاء المتطابقة تلقائياً</div>
+    </div>
+</div>
+
+<!-- Filter & Search -->
+<div class="ap-card ap-mb-4">
+    <div class="ap-card-body ap-flex ap-items-center ap-justify-between ap-wrap ap-gap-3">
+        <div class="ap-flex ap-gap-2 ap-wrap">
+            <button type="button" data-error-status-tab="unresolved"
+                    class="ap-btn ap-btn-sm {% if status_filter == 'unresolved' %}ap-btn-primary{% else %}ap-btn-secondary{% endif %}">
+                غير المحلولة (<span data-error-stat="unresolved">{{ unresolved_count }}</span>)
+            </button>
+            <button type="button" data-error-status-tab="resolved"
+                    class="ap-btn ap-btn-sm {% if status_filter == 'resolved' %}ap-btn-primary{% else %}ap-btn-secondary{% endif %}">
+                تم حلها (<span data-error-stat="resolved">{{ resolved_count }}</span>)
+            </button>
+            <button type="button" data-error-status-tab="all"
+                    class="ap-btn ap-btn-sm {% if status_filter == 'all' %}ap-btn-primary{% else %}ap-btn-secondary{% endif %}">
+                الكل (<span data-error-stat="total">{{ total_count }}</span>)
+            </button>
+        </div>
+
+        <form method="GET" action="{% url 'admin_panel:error_reports' %}" id="errorReportsFilterForm"
+              data-live-filter-form data-filter-target="#errorReportsPartialContainer"
+              class="ap-flex ap-items-center ap-gap-2">
+            <input type="hidden" name="status" id="errorReportsStatusInput" value="{{ status_filter }}">
+            <div class="ap-search-box">
+                <i class="bi bi-search"></i>
+                <input type="text" name="q" value="{{ search_query|default:'' }}" class="ap-search-input"
+                       placeholder="ابحث بنوع الخطأ أو الشاشة أو البريد...">
+                <button type="button" class="ap-search-clear{% if not search_query %} ap-hidden{% endif %}"
+                        data-filter-reset title="مسح البحث"><i class="bi bi-x"></i></button>
+            </div>
+            <button type="submit" class="ap-btn ap-btn-sm ap-btn-secondary">بحث</button>
+        </form>
+    </div>
+</div>
+
+<div id="errorReportsPartialContainer">
+    {% include 'admin_panel/partials/_error_reports_list.html' %}
+</div>
+{% endblock %}

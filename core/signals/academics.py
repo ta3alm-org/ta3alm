@@ -4,6 +4,8 @@ Extracted from core/signals.py.
 from __future__ import annotations
 
 import logging
+from django.contrib.auth import get_user_model
+from django.core.exceptions import ObjectDoesNotExist
 from django.db.models.signals import (
     m2m_changed,
     post_delete,
@@ -88,10 +90,20 @@ def _notify_enrollment_events(sender, instance, created, **kwargs):
 @receiver(post_delete, sender='students.Enrollment')
 def _notify_enrollment_deleted(sender, instance, **kwargs):
     try:
+        User = get_user_model()
+        origin = kwargs.get('origin')
+        if isinstance(origin, User) or getattr(origin, 'model', None) is User:
+            return
         if not instance.student_id or not instance.group_id:
             return
-        group = instance.group
-        student_user = instance.student.user
+        try:
+            group = instance.group
+            student = instance.student
+            student_user = student.user
+        except ObjectDoesNotExist:
+            return
+        if not student_user or not User.objects.filter(pk=student_user.pk).exists():
+            return
         if instance.is_active:
             notify_user(
                 student_user,

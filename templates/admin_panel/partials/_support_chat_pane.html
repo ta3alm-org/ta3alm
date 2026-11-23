@@ -1,0 +1,91 @@
+{% if active_thread %}
+<div class="ap-chat-head">
+    <div class="ap-flex ap-items-center ap-gap-3">
+        <span class="ap-avatar ap-avatar-lg">
+            {{ active_thread.user.first_name|slice:":1"|upper|default:"U" }}
+        </span>
+        <div>
+            <div class="ap-strong">
+                {{ active_thread.user.get_full_name|default:active_thread.user.email }}
+                <span class="ap-badge {% if active_thread.status == 'closed' %}ap-badge-neutral{% else %}ap-badge-success{% endif %}" id="chatThreadStatusBadge">
+                    {% if active_thread.status == 'closed' %}مغلقة{% else %}مفتوحة{% endif %}
+                </span>
+            </div>
+            <div class="ap-xs ap-muted">
+                {{ active_thread.user.email }}{% if active_thread.user.phone %} · {{ active_thread.user.phone }}{% endif %}{% if active_thread.user.custom_id %} · {{ active_thread.user.custom_id }}{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="ap-flex ap-items-center ap-gap-2">
+        {% if can_manage_users %}
+        <a href="{% url 'admin_panel:edit_user' active_thread.user.id %}" class="ap-btn ap-btn-sm ap-btn-secondary">
+            <i class="bi bi-person"></i> ملف المستخدم
+        </a>
+        {% endif %}
+        <form id="apChatStatusForm" method="POST"
+              action="{% url 'admin_panel:support_chat_thread' active_thread.id %}"
+              class="ap-inline-flex"
+              data-ajax-form data-chat-status-form="1"
+              {% if active_thread.status != 'closed' %}
+              data-confirm="هل تريد إغلاق هذه المحادثة؟ سيتمكن المستخدم من إعادة فتحها إذا أرسل رسالة جديدة."
+              data-confirm-title="إغلاق المحادثة"
+              data-confirm-variant="warning"
+              {% endif %}>
+            {% csrf_token %}
+            {% if active_thread.status == 'closed' %}
+            <input type="hidden" name="action" value="reopen">
+            <button type="submit" class="ap-btn ap-btn-sm ap-btn-success">
+                <i class="bi bi-unlock"></i> إعادة فتح
+            </button>
+            {% else %}
+            <input type="hidden" name="action" value="close">
+            <button type="submit" class="ap-btn ap-btn-sm ap-btn-secondary">
+                <i class="bi bi-lock"></i> إغلاق المحادثة
+            </button>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+<div class="ap-chat-stream" id="apAdminChatStream"
+     data-thread-id="{{ active_thread.id }}"
+     data-last-msg-id="{{ last_msg_id|default:0 }}"
+     data-poll-url="{% url 'admin_panel:support_chat_thread' active_thread.id %}">
+    {% for m in chat_messages %}
+    <div class="ap-chat-bubble-row {% if m.is_from_admin %}is-me{% else %}is-peer{% endif %}" data-msg-id="{{ m.id }}">
+        <div class="ap-chat-bubble">
+            <div class="ap-chat-bubble-sender">
+                <span>{% if m.is_from_admin %}الإدارة ({{ m.sender.get_full_name|default:m.sender.email }}){% else %}{{ m.sender.get_full_name|default:m.sender.email }}{% endif %}</span>
+                {% if m.via_notification_reply %}
+                <span class="ap-badge ap-badge-warning">رد من الإشعارات</span>
+                {% endif %}
+            </div>
+            <div>{{ m.body }}</div>
+            <div class="ap-chat-bubble-time">{{ m.created_at|date:"Y-m-d H:i" }}</div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="ap-empty" id="apAdminChatEmpty">
+        <i class="bi bi-chat-dots"></i>
+        <p class="ap-empty-title">لا توجد رسائل في هذه المحادثة بعد</p>
+    </div>
+    {% endfor %}
+</div>
+
+<form id="apAdminChatForm" method="POST" action="{% url 'admin_panel:support_chat_thread' active_thread.id %}" class="ap-chat-composer">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="reply">
+    <input type="text" name="body" id="apAdminChatInput" class="ap-input"
+           placeholder="اكتب ردك للمستخدم هنا (يصل كإشعار قابل للرد المباشر على أندرويد)..." maxlength="4000" required autocomplete="off">
+    <button type="submit" class="ap-btn ap-btn-primary">
+        <i class="bi bi-send-fill"></i> إرسال
+    </button>
+</form>
+{% else %}
+<div class="ap-empty" style="margin:auto;">
+    <i class="bi bi-chat-square-heart"></i>
+    <p class="ap-empty-title">اختر محادثة من القائمة الجانبية</p>
+    <p class="ap-empty-sub">عند بدء أي طالب أو معلم محادثة دعم، ستظهر هنا مع تنبيه فوري.</p>
+</div>
+{% endif %}

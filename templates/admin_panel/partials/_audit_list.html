@@ -1,0 +1,38 @@
+{% for log in logs %}
+{% with action=log.action %}
+<div class="ap-timeline-item">
+    <div class="ap-timeline-dot
+        {% if action == 'ban_user' or action == 'delete_user' or action == 'block_device' or action == 'remove_admin' %}is-danger
+        {% elif action == 'unban_user' or action == 'renew_subscription' or action == 'pay_withdraw' or action == 'unblock_device' %}is-success
+        {% elif action == 'toggle_maintenance' or action == 'reject_withdraw' %}is-warning
+        {% else %}is-info{% endif %}">
+    </div>
+    <div style="flex:1; min-width:0;">
+        <div class="ap-flex ap-items-center ap-gap-2 ap-wrap">
+            <span class="ap-strong ap-sm">{{ log.get_action_display }}</span>
+            {% if log.target_label %}
+            <span class="ap-muted ap-sm">— {{ log.target_label }}</span>
+            {% endif %}
+        </div>
+        <div class="ap-flex ap-gap-3 ap-mt-1 ap-wrap ap-xs ap-subtle-text">
+            <span><i class="bi bi-person"></i> {{ log.admin.get_full_name|default:log.admin.email|default:"محذوف" }}</span>
+            <span><i class="bi bi-calendar3"></i> {{ log.created_at|date:"j M Y H:i" }}</span>
+            {% if log.ip_address %}<span class="ap-ltr"><i class="bi bi-router"></i> {{ log.ip_address }}</span>{% endif %}
+        </div>
+        {% if log.details %}
+        <div class="ap-flex ap-wrap ap-gap-1 ap-mt-2">
+            {% for k, v in log.details.items %}
+            <code>{{ k }}: {{ v }}</code>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    <div class="ap-xs ap-subtle-text">{{ log.created_at|date:"H:i" }}</div>
+</div>
+{% endwith %}
+{% empty %}
+<div class="ap-empty">
+    <i class="bi bi-journal-x"></i>
+    <p class="ap-empty-title">لا توجد أحداث مسجّلة</p>
+</div>
+{% endfor %}

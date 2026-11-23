@@ -1,55 +1,95 @@
 {% extends 'admin_panel/base_admin.html' %}
 {% load i18n %}
+
 {% block page_title %}مبيعات الحزم{% endblock %}
+{% block body_page %}finance{% endblock %}
 {% block nav_sp %}active{% endblock %}
 {% block breadcrumb %}<span class="sep">/</span><span class="current">مبيعات الحزم</span>{% endblock %}
 
 {% block content %}
-<div class="page-header d-flex align-items-center justify-content-between flex-wrap gap-3">
+<div class="ap-page-header">
     <div>
-        <h1><i class="bi bi-cart-check-fill me-2" style="color:var(--admin-accent);"></i>مبيعات الحزم التعليمية</h1>
-        <p class="text-muted mb-0">نسبة عمولة المنصة الحالية: <strong>{{ commission_percentage }}%</strong></p>
-    </div>
-    <div class="d-flex gap-2 flex-wrap">
-        <div class="stat-card text-center" style="min-width:150px;">
-            <div class="stat-icon mx-auto" style="background:#e8f4fd; color:#0d6efd;"><i class="bi bi-bag-fill"></i></div>
-            <div class="stat-number">{{ total_revenue }}</div>
-            <div class="stat-label">إجمالي المبيعات (EGP)</div>
-        </div>
-        <div class="stat-card text-center" style="min-width:150px;">
-            <div class="stat-icon mx-auto" style="background:#fff4e5; color:#d97706;"><i class="bi bi-percent"></i></div>
-            <div class="stat-number">{{ platform_commission_revenue }}</div>
-            <div class="stat-label">عمولة المنصة (EGP)</div>
-        </div>
-        <div class="stat-card text-center" style="min-width:150px;">
-            <div class="stat-icon mx-auto" style="background:#e8fdf4; color:#0f9b58;"><i class="bi bi-wallet2"></i></div>
-            <div class="stat-number">{{ teachers_net_revenue }}</div>
-            <div class="stat-label">صافي المدرسين (EGP)</div>
-        </div>
+        <h1 class="ap-page-title"><i class="bi bi-bag-check"></i> مبيعات الحزم التعليمية</h1>
+        <p class="ap-page-subtitle">نسبة عمولة المنصة الحالية: <strong>{{ commission_percentage }}%</strong></p>
     </div>
 </div>
 
-<div class="admin-card">
-    <div class="table-responsive">
-        <table class="admin-table">
+<div class="ap-kpi-grid ap-kpi-grid-3">
+    <div class="ap-stat">
+        <div class="ap-stat-top">
+            <span class="ap-stat-label">إجمالي المبيعات (EGP)</span>
+            <span class="ap-stat-icon"><i class="bi bi-bag"></i></span>
+        </div>
+        <div class="ap-stat-value">{{ total_revenue }}</div>
+        <div class="ap-stat-sub">كافة الحزم المدفوعة</div>
+    </div>
+    <div class="ap-stat">
+        <div class="ap-stat-top">
+            <span class="ap-stat-label">عمولة المنصة ({{ commission_percentage }}%)</span>
+            <span class="ap-stat-icon"><i class="bi bi-percent"></i></span>
+        </div>
+        <div class="ap-stat-value ap-text-warning">{{ platform_commission_revenue }}</div>
+        <div class="ap-stat-sub">حصة المنصة المحسوبة</div>
+    </div>
+    <div class="ap-stat">
+        <div class="ap-stat-top">
+            <span class="ap-stat-label">صافي المدرسين (EGP)</span>
+            <span class="ap-stat-icon"><i class="bi bi-wallet2"></i></span>
+        </div>
+        <div class="ap-stat-value ap-text-success">{{ teachers_net_revenue }}</div>
+        <div class="ap-stat-sub">بعد خصم العمولة</div>
+    </div>
+</div>
+
+<div class="ap-card" data-table-scope="student-payments">
+    <div class="ap-toolbar">
+        <span class="ap-strong ap-sm">سجل الاشتراكات المدفوعة ({{ payments|length }})</span>
+        <div class="ap-search-box">
+            <i class="bi bi-search"></i>
+            <input type="text" class="ap-search-input" data-table-search placeholder="بحث بالطالب، الحزمة، أو المعلم...">
+        </div>
+    </div>
+    <div class="ap-table-wrap">
+        <table class="ap-table">
             <thead>
-                <tr><th>الطالب</th><th>الحزمة</th><th>المعلم</th><th>السعر</th><th>تاريخ الشراء</th></tr>
+                <tr>
+                    <th data-sort-col="0">الطالب</th>
+                    <th data-sort-col="1">الحزمة</th>
+                    <th data-sort-col="2">المعلم</th>
+                    <th data-sort-col="3">السعر</th>
+                    <th data-sort-col="4">تاريخ الشراء</th>
+                </tr>
             </thead>
             <tbody>
                 {% for p in payments %}
-                <tr>
+                <tr data-row>
                     <td>
-                        <div class="fw-bold" style="font-size:0.875rem;">{{ p.student.user.get_full_name }}</div>
-                        <div class="text-muted" style="font-size:0.75rem;">{{ p.student.user.phone }}</div>
+                        <div class="ap-strong ap-sm">{{ p.student.user.get_full_name|default:p.student.user.username }}</div>
+                        <div class="ap-xs ap-subtle-text ap-ltr">{{ p.student.user.phone }}</div>
                     </td>
-                    <td class="fw-bold" style="font-size:0.875rem;">{{ p.package.title }}</td>
-                    <td class="text-muted" style="font-size:0.875rem;">{{ p.package.teacher.user.get_full_name }}</td>
-                    <td class="fw-bold" style="color:var(--admin-success);">{{ p.package.price }} EGP</td>
-                    <td class="text-muted" style="font-size:0.85rem;">{{ p.joined_at|date:"j M Y · H:i" }}</td>
+                    <td class="ap-strong ap-sm">{{ p.package.title }}</td>
+                    <td class="ap-muted ap-sm">{{ p.package.teacher.user.get_full_name }}</td>
+                    <td class="ap-strong ap-text-success" data-sort-val="{{ p.package.price }}">{{ p.package.price }} EGP</td>
+                    <td class="ap-muted ap-sm" data-sort-val="{{ p.joined_at|date:'Y-m-d H:i' }}">{{ p.joined_at|date:"j M Y · H:i" }}</td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="5"><div class="empty-state"><i class="bi bi-bag-x"></i>لا توجد مبيعات</div></td></tr>
+                <tr>
+                    <td colspan="5">
+                        <div class="ap-empty">
+                            <i class="bi bi-bag-x"></i>
+                            <p class="ap-empty-title">لا توجد مبيعات مسجّلة</p>
+                        </div>
+                    </td>
+                </tr>
                 {% endfor %}
+                <tr data-client-empty class="ap-hidden">
+                    <td colspan="5">
+                        <div class="ap-empty">
+                            <i class="bi bi-search"></i>
+                            <p class="ap-empty-title">لا توجد نتائج مطابقة</p>
+                        </div>
+                    </td>
+                </tr>
             </tbody>
         </table>
     </div>

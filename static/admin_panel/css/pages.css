@@ -1,0 +1,486 @@
+/* ============================================================
+   Ta3alm Admin Design System — Page-Specific Polish
+   ============================================================ */
+
+/* ── Quick Action List (Dashboard) ── */
+.ap-quick-links {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.ap-quick-link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-default);
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    font-size: 0.84rem;
+    font-weight: 700;
+    transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+}
+
+.ap-quick-link:hover {
+    background: var(--bg-subtle);
+    border-color: var(--border-strong);
+    color: var(--text-primary);
+}
+
+.ap-quick-link-start {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+
+.ap-quick-link-start i {
+    color: var(--accent);
+}
+
+/* ── Plan Cards Grid ── */
+.ap-plan-card {
+    position: relative;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    height: 100%;
+    box-shadow: var(--shadow-xs);
+}
+
+.ap-plan-card.is-default {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+}
+
+.ap-plan-price {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--text-primary);
+}
+
+.ap-plan-price small {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.ap-plan-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.ap-plan-meta-item {
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-hover);
+    border: 1px solid var(--border-subtle);
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* ── Notifications Targeting & Preview ── */
+.ap-mode-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+@media (max-width: 768px) {
+    .ap-mode-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+.ap-mode-card {
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    padding: 14px;
+    cursor: pointer;
+    background: var(--bg-surface);
+    transition: border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.ap-mode-card:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent);
+}
+
+.ap-mode-card.active {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    box-shadow: 0 0 0 1px var(--accent);
+}
+
+.ap-mode-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-subtle);
+    color: var(--accent);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+}
+
+.ap-user-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    border: 1px solid var(--accent-border);
+    border-radius: var(--radius-pill);
+    padding: 4px 10px;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.ap-user-chip button {
+    border: none;
+    background: transparent;
+    color: var(--accent);
+    font-weight: 800;
+    padding: 0 2px;
+    line-height: 1;
+}
+
+.ap-user-picker-results {
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    background: var(--bg-surface);
+    max-height: 240px;
+    overflow-y: auto;
+}
+
+.ap-picker-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.ap-picker-row:last-child {
+    border-bottom: 0;
+}
+
+.ap-phone-mockup {
+    background: #1f2223;
+    color: #fff;
+    border-radius: var(--radius-lg);
+    padding: 16px;
+    border: 1px solid #303436;
+}
+
+.ap-phone-notif {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+}
+
+/* ── Code Preview (App Release) ── */
+.ap-code-block {
+    background: var(--bg-code);
+    color: #e6eae8;
+    border-radius: var(--radius-md);
+    padding: 14px;
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    line-height: 1.55;
+    max-height: 300px;
+    overflow: auto;
+    margin: 0;
+    direction: ltr;
+    text-align: left;
+}
+
+/* ── Support Email View ── */
+.ap-email-iframe {
+    width: 100%;
+    min-height: 320px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    background: #fff;
+}
+
+/* ── Key-Value Spec Table (Device Detail & Info Cards) ── */
+.ap-kv-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.ap-kv-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: 0.84rem;
+}
+
+.ap-kv-row:last-child {
+    border-bottom: 0;
+}
+
+.ap-kv-key {
+    color: var(--text-secondary);
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.ap-kv-val {
+    color: var(--text-primary);
+    font-weight: 700;
+    text-align: end;
+    word-break: break-word;
+}
+
+/* ── Inline Callout Box inside Forms ── */
+.ap-subpanel {
+    background: var(--bg-hover);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    padding: 14px;
+}
+
+/* Details accordion */
+details.ap-details {
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+    background: var(--bg-hover);
+}
+
+details.ap-details > summary {
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 0.84rem;
+    color: var(--text-secondary);
+}
+
+/* ── Sidebar Count Pill ── */
+.ap-nav-count {
+    margin-right: auto;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--danger);
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 800;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+@media (min-width: 1025px) {
+    html.ap-sidebar-collapsed .ap-nav-count {
+        display: none;
+    }
+}
+
+/* ── Support Live Chat Workspace ── */
+.ap-chat-shell {
+    display: grid;
+    grid-template-columns: 330px minmax(0, 1fr);
+    min-height: 620px;
+    height: calc(100vh - 185px);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-xs);
+    overflow: hidden;
+}
+
+.ap-chat-list {
+    border-left: 1px solid var(--border-default);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: var(--bg-hover);
+}
+
+.ap-chat-list-head {
+    padding: 14px;
+    border-bottom: 1px solid var(--border-default);
+    background: var(--bg-surface);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ap-chat-list-items {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.ap-chat-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid transparent;
+    color: var(--text-primary);
+    transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+}
+
+.ap-chat-item:hover {
+    background: var(--bg-surface);
+    border-color: var(--border-default);
+}
+
+.ap-chat-item.is-active {
+    background: var(--accent-soft);
+    border-color: var(--accent-border);
+}
+
+.ap-chat-item-meta {
+    min-width: 0;
+    flex: 1;
+}
+
+.ap-chat-main {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: var(--bg-surface);
+}
+
+.ap-chat-head {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border-default);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.ap-chat-stream {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    background: var(--bg-main);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ap-chat-bubble-row {
+    display: flex;
+}
+
+.ap-chat-bubble-row.is-me {
+    justify-content: flex-start;
+}
+
+.ap-chat-bubble-row.is-peer {
+    justify-content: flex-end;
+}
+
+.ap-chat-bubble {
+    max-width: 74%;
+    padding: 10px 14px;
+    border-radius: var(--radius-md);
+    font-size: 0.88rem;
+    line-height: 1.55;
+    box-shadow: var(--shadow-xs);
+    word-break: break-word;
+    white-space: pre-wrap;
+}
+
+.ap-chat-bubble-row.is-me .ap-chat-bubble {
+    background: var(--accent);
+    color: var(--text-on-accent);
+    border-bottom-right-radius: 4px;
+}
+
+.ap-chat-bubble-row.is-peer .ap-chat-bubble {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    border: 1px solid var(--border-default);
+    border-bottom-left-radius: 4px;
+}
+
+.ap-chat-bubble-sender {
+    font-size: 0.72rem;
+    font-weight: 800;
+    margin-bottom: 4px;
+    opacity: 0.85;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ap-chat-bubble-time {
+    margin-top: 4px;
+    font-size: 0.7rem;
+    opacity: 0.72;
+    text-align: end;
+}
+
+.ap-chat-composer {
+    padding: 12px 16px;
+    border-top: 1px solid var(--border-default);
+    background: var(--bg-surface);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+@media (max-width: 960px) {
+    .ap-chat-shell {
+        grid-template-columns: minmax(0, 1fr);
+        height: auto;
+        min-height: 0;
+    }
+
+    .ap-chat-list {
+        border-left: 0;
+        border-bottom: 1px solid var(--border-default);
+        max-height: 290px;
+    }
+
+    .ap-chat-stream {
+        min-height: 360px;
+        max-height: 520px;
+    }
+
+    .ap-chat-bubble {
+        max-width: 88%;
+    }
+}
+
+/* ── Error Report Cards ── */
+.ap-error-card {
+    border-right: 4px solid var(--danger);
+}
+
+.ap-error-card.is-resolved {
+    border-right-color: var(--success);
+}
