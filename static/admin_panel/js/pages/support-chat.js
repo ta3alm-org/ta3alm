@@ -129,6 +129,7 @@ export function initSupportChatPage() {
         }
 
         const bodyDiv = document.createElement('div');
+        bodyDiv.className = 'ap-chat-bubble-body';
         bodyDiv.textContent = m.body || '';
 
         const timeDiv = document.createElement('div');
@@ -262,33 +263,34 @@ export function initSupportChatPage() {
         setButtonLoading(submitBtn, true);
 
         try {
-            const payload = await api.request(form.action, {
-                method: 'POST',
-                body: fd,
-                form,
-            });
-            if (payload?.data?.message) {
-                appendMessage(payload.data.message);
-            }
-            if (payload?.data?.status) {
-                syncStatusUi(payload.data.status);
-            }
+                const actionUrl = form.getAttribute('action') || pollUrl || window.location.pathname;
+                const payload = await api.request(actionUrl, {
+                    method: 'POST',
+                    body: fd,
+                    form,
+                });
+                if(payload?.data?.message) {
+                    appendMessage(payload.data.message);
+                }
+            if(payload?.data?.status) {
+                    syncStatusUi(payload.data.status);
+                }
             const previewEl = document.querySelector(`[data-thread-preview="${activeThreadId}"]`);
-            if (previewEl) {
-                previewEl.textContent = payload?.data?.preview || text;
+                if(previewEl) {
+                    previewEl.textContent = payload?.data?.preview || text;
+                }
+            } catch (err) {
+                if (input) input.value = text;
+                toast.error(err.message || 'تعذر إرسال الرد.');
+            } finally {
+                delete form.dataset.apSending;
+                if (input) {
+                    input.disabled = false;
+                    input.focus();
+                }
+                setButtonLoading(submitBtn, false);
             }
-        } catch (err) {
-            if (input) input.value = text;
-            toast.error(err.message || 'تعذر إرسال الرد.');
-        } finally {
-            delete form.dataset.apSending;
-            if (input) {
-                input.disabled = false;
-                input.focus();
-            }
-            setButtonLoading(submitBtn, false);
-        }
-    });
+        });
 
     // مزامنة إغلاق / إعادة فتح المحادثة بدون ريفريش
     on('ap:form:success', ({ form, payload }) => {
@@ -343,6 +345,6 @@ export function initSupportChatPage() {
                 threadsListEl.innerHTML = data.threads_html;
                 threadsListEl.scrollTop = prevScroll;
             }
-        } catch (_) {}
+        } catch (_) { }
     }, 4500);
 }

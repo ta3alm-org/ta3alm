@@ -411,6 +411,9 @@ details.ap-details > summary {
     line-height: 1.55;
     box-shadow: var(--shadow-xs);
     word-break: break-word;
+}
+
+.ap-chat-bubble-body {
     white-space: pre-wrap;
 }
 
