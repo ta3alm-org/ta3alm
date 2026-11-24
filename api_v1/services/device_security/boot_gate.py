@@ -77,6 +77,33 @@ def is_maintenance_admin_approved_device(
     return False
 
 
+def _resolve_gate_user(request, user):
+    if user is not None and getattr(user, 'is_authenticated', False):
+        return user
+    if request is None:
+        return None
+    meta = getattr(request, 'META', {}) or {}
+    auth_header = str(meta.get('HTTP_AUTHORIZATION') or '').strip()
+    if not auth_header:
+        return None
+    parts = auth_header.split()
+    if len(parts) != 2:
+        return None
+    scheme, raw_token = parts[0].lower(), parts[1].strip()
+    try:
+        from django.contrib.auth import get_user_model
+        from rest_framework.authtoken.models import Token
+        UserModel = get_user_model()
+        if scheme == 'bearer' and '.' in raw_token:
+            from api_v1.authentication import decode_jwt_token
+            payload = decode_jwt_token(raw_token, expected_type='access')
+            return UserModel.objects.filter(id=payload.get('user_id')).first()
+        tok = Token.objects.select_related('user').filter(key=raw_token).first()
+        return tok.user if tok else None
+    except Exception:
+        return None
+
+
 def evaluate_boot_security_gate(
     request,
     *,
@@ -169,6 +196,50 @@ def evaluate_boot_security_gate(
             'is_maintenance_mode': bool(site_settings.is_maintenance_mode),
             'can_admin_login': False,
         }
+
+    # 1b) فحص حظر الحساب (حتى قبل عبور شاشة التحميل)
+    resolved_user = _resolve_gate_user(request, user)
+    if (
+        resolved_user is not None
+        and getattr(resolved_user, 'is_banned', False)
+        and not getattr(resolved_user, 'is_superuser', False)
+    ):
+        sec_prof = getattr(resolved_user, 'security_profile', None)
+        ban_reason = (getattr(sec_prof, 'ban_reason', '') or '').strip() or 'تم إيقاف هذا الحساب لمخالفة سياسات المنصة.'
+        return {
+            'boot_allowed': False,
+            'code': 'ACCOUNT_BANNED',
+            'title': 'هذا الحساب محظور من استخدام المنصة',
+            'message': f'تم حظر حسابك ولا يمكنك الدخول للمنصة: {ban_reason}',
+            'hardware_id': hw_id,
+            'is_maintenance_mode': bool(site_settings.is_maintenance_mode),
+            'can_admin_login': False,
+        }
+
+    if inst_id:
+        bound_dev = (
+            RegisteredDevice.objects.select_related('user', 'user__security_profile')
+            .filter(installation_id=inst_id)
+            .first()
+        )
+        if (
+            bound_dev is not None
+            and bound_dev.user_id
+            and getattr(bound_dev.user, 'is_banned', False)
+            and not getattr(bound_dev.user, 'is_superuser', False)
+        ):
+            sec_prof = getattr(bound_dev.user, 'security_profile', None)
+            if getattr(sec_prof, 'auto_ban_mode', '') == 'device_and_user':
+                ban_reason = (getattr(sec_prof, 'ban_reason', '') or '').strip() or 'جهاز مرتبط بحساب محظور.'
+                return {
+                    'boot_allowed': False,
+                    'code': 'DEVICE_BLOCKED',
+                    'title': 'هذا الجهاز محظور من استخدام المنصة',
+                    'message': f'تم إيقاف هذا الجهاز عن استخدام المنصة: {ban_reason}',
+                    'hardware_id': hw_id,
+                    'is_maintenance_mode': bool(site_settings.is_maintenance_mode),
+                    'can_admin_login': False,
+                }
 
     # 2) فحص VPN / Proxy IP
     if policy.block_vpn_connections and (merged_sig['vpn_interface_active'] or net_ctx.get('is_vpn_or_proxy')):

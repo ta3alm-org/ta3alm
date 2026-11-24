@@ -1,6 +1,5 @@
-/**
- * نظام الإشعارات الفورية (Toast Notifications) وتحويل رسائل Django.
- */
+
+
 const ICON_BY_VARIANT = {
     success: 'bi-check-circle-fill',
     warning: 'bi-exclamation-triangle-fill',

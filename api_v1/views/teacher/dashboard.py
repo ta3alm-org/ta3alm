@@ -20,6 +20,7 @@ from teachers.views import get_group_permission
 from api_v1.permissions import (
     IsTeacherRole,
     IsTeacherOrAssistantRole,
+    IsTeacherOrAssistantOrAdminRole,
 )
 from api_v1.serializers import (
     GroupSerializer,
@@ -92,7 +93,7 @@ class TeacherDashboardAPIView(APIView):
 
 class TeacherGroupDetailAPIView(APIView):
     """عرض أو تعديل أو حذف مجموعة."""
-    permission_classes = [IsAuthenticated, IsTeacherOrAssistantRole]
+    permission_classes = [IsAuthenticated, IsTeacherOrAssistantOrAdminRole]
 
     def get(self, request, group_id):
         group, is_owner = get_group_permission(request, group_id)

@@ -65,7 +65,21 @@
                         <label class="form-label fw-bold">{% trans "رقم الهاتف" %}</label>
                         <input type="text" name="phone" class="form-control" required>
                     </div>
-                    
+
+                    <div class="mb-3 text-end">
+                        <label class="form-label fw-bold d-block">{% trans "النوع" %}</label>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <input type="radio" class="btn-check" name="gender" id="signupGenderMale" value="male" required autocomplete="off">
+                                <label class="btn btn-outline-primary w-100 py-2 fw-bold" for="signupGenderMale">{% trans "ذكر" %}</label>
+                            </div>
+                            <div class="col-6">
+                                <input type="radio" class="btn-check" name="gender" id="signupGenderFemale" value="female" required autocomplete="off">
+                                <label class="btn btn-outline-primary w-100 py-2 fw-bold" for="signupGenderFemale">{% trans "أنثى" %}</label>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="mb-3 text-end">
                         <label class="form-label fw-bold">{% trans "كلمة المرور" %}</label>
                         <input type="password" name="password" class="form-control" required>

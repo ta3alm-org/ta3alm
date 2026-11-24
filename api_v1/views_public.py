@@ -3,8 +3,9 @@ api_v1/views_public.py
 نقاط النهاية العامة (الصفحة الرئيسية، الباقات، الدليل، المناهج، الإشعارات، الدفع اليدوي).
 """
 import os
+import re
 from django.db.models import Q
-from django.http import FileResponse, HttpResponseRedirect, JsonResponse
+from django.http import FileResponse, HttpResponse, HttpResponseRedirect, JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404
 from django.views import View
 from rest_framework import status
@@ -88,6 +89,12 @@ class PublicHomeAPIView(APIView):
 class PublicMetadataAPIView(APIView):
     """قوائم الصفوف الدراسية والمواد والأدوار والترمات وطرق التحويل."""
     permission_classes = [AllowAny]
+
+    def perform_authentication(self, request):
+        try:
+            super().perform_authentication(request)
+        except Exception:
+            pass
 
     def get(self, request):
         subjects = Subject.objects.all()
@@ -176,27 +183,100 @@ class AppUpdateCheckAPIView(APIView):
 
 
 class AppUpdateDownloadAPIView(APIView):
-    """تنزيل ملف التحديث APK مباشرة من الخادم أو تحويل العميل لرابط التحميل المباشر."""
+    """تنزيل ملف التحديث APK مباشرة من الخادم مع دعم استئناف التحميل والطلبات متعددة الأجزاء HTTP Range."""
     permission_classes = [AllowAny]
+
+    def head(self, request):
+        return self.get(request)
 
     def get(self, request):
         site_settings = SiteSetting.load()
-        external_url = (site_settings.android_apk_url or '').strip()
+        external_url = SiteSetting.normalize_apk_download_url(site_settings.android_apk_url or '')
         if external_url:
             return HttpResponseRedirect(external_url)
 
         if site_settings.android_apk_file:
             file_field = site_settings.android_apk_file
             try:
+                storage_url = file_field.url
+                if storage_url and storage_url.startswith(('http://', 'https://')):
+                    return HttpResponseRedirect(storage_url)
+            except Exception:
+                pass
+
+            try:
                 file_handle = file_field.open('rb')
+                try:
+                    file_size = int(file_field.size)
+                except Exception:
+                    file_size = os.fstat(file_handle.fileno()).st_size
+
                 version_tag = site_settings.android_latest_version_code or 1
                 filename = f"ta3alm-v{version_tag}.apk"
+
+                if request.method == 'HEAD':
+                    file_handle.close()
+                    resp = HttpResponse(status=200, content_type='application/vnd.android.package-archive')
+                    resp['Content-Length'] = str(file_size)
+                    resp['Accept-Ranges'] = 'bytes'
+                    resp['Content-Disposition'] = f'attachment; filename="{filename}"'
+                    resp['Cache-Control'] = 'public, max-age=3600'
+                    return resp
+
+                range_header = str(request.META.get('HTTP_RANGE') or '').strip()
+                range_match = re.match(r'^bytes=(\d*)-(\d*)$', range_header)
+                if range_match and file_size > 0:
+                    start_s, end_s = range_match.groups()
+                    if start_s == '' and end_s != '':
+                        suffix_len = int(end_s)
+                        start = max(0, file_size - suffix_len)
+                        end = file_size - 1
+                    else:
+                        start = int(start_s) if start_s else 0
+                        end = int(end_s) if end_s else file_size - 1
+                    end = min(end, file_size - 1)
+                    if start > end or start >= file_size:
+                        file_handle.close()
+                        err_resp = HttpResponse(status=416)
+                        err_resp['Content-Range'] = f'bytes */{file_size}'
+                        return err_resp
+
+                    length = (end - start) + 1
+                    file_handle.seek(start)
+
+                    def _iter_range(fh, remaining, chunk_size=262144):
+                        try:
+                            while remaining > 0:
+                                data = fh.read(min(chunk_size, remaining))
+                                if not data:
+                                    break
+                                remaining -= len(data)
+                                yield data
+                        finally:
+                            fh.close()
+
+                    resp = StreamingHttpResponse(
+                        _iter_range(file_handle, length),
+                        status=206,
+                        content_type='application/vnd.android.package-archive',
+                    )
+                    resp['Content-Length'] = str(length)
+                    resp['Content-Range'] = f'bytes {start}-{end}/{file_size}'
+                    resp['Accept-Ranges'] = 'bytes'
+                    resp['Content-Disposition'] = f'attachment; filename="{filename}"'
+                    resp['Cache-Control'] = 'public, max-age=3600'
+                    return resp
+
                 response = FileResponse(
                     file_handle,
                     as_attachment=True,
                     filename=filename,
                     content_type='application/vnd.android.package-archive',
                 )
+                if file_size > 0:
+                    response['Content-Length'] = str(file_size)
+                response['Accept-Ranges'] = 'bytes'
+                response['Cache-Control'] = 'public, max-age=3600'
                 return response
             except Exception:
                 try:

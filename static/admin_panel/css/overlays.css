@@ -1,8 +1,6 @@
-/* ============================================================
-   Ta3alm Admin Design System — Modals, Drawers, Confirm & Toasts
-   ============================================================ */
+ 
 
-/* ── Centered Modals ── */
+ 
 .ap-modal {
     position: fixed;
     inset: 0;
@@ -91,7 +89,7 @@
     gap: 8px;
 }
 
-/* ── Slide-Over Drawers (RTL opens from left side) ── */
+ 
 .ap-drawer {
     position: fixed;
     inset: 0;
@@ -151,7 +149,7 @@
     gap: 8px;
 }
 
-/* ── Toast Stack ── */
+ 
 .ap-toast-stack {
     position: fixed;
     bottom: 20px;
@@ -220,7 +218,7 @@
     to { opacity: 1; transform: translateY(0); }
 }
 
-/* ── Command Palette (Quick Jump) ── */
+ 
 .ap-cmd-list {
     max-height: 340px;
     overflow-y: auto;
@@ -247,7 +245,7 @@
     color: var(--accent);
 }
 
-/* ── Receipt Lightbox Image ── */
+ 
 .ap-lightbox-img {
     max-width: 100%;
     max-height: 70vh;

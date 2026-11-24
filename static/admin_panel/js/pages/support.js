@@ -1,6 +1,5 @@
-/**
- * وحدة تحكم صفحات الدعم الفني (صندوق الوارد، عرض والرد على الرسالة، إعدادات Zoho).
- */
+
+
 import { loadPartialFromForm } from '../components/search.js';
 import { on } from '../core/events.js';
 
@@ -9,7 +8,7 @@ export function initSupportPage() {
     const refreshBtn = document.getElementById('supportRefreshBtn');
     const countBadge = document.getElementById('supportInboxCount');
 
-    // قوالب ردود سريعة في نافذة الإنشاء والرد
+
     document.addEventListener('click', (e) => {
         const snippetBtn = e.target.closest('[data-email-snippet]');
         if (!snippetBtn) return;
@@ -34,7 +33,7 @@ export function initSupportPage() {
         }
     });
 
-    // تحديث حالة اتصال Zoho Mail في صفحة الإعدادات بعد الحفظ أو قطع الاتصال
+
     on('ap:form:success', ({ form, payload }) => {
         if (form.dataset.supportSettingsForm !== '1') return;
         const data = payload?.data || {};

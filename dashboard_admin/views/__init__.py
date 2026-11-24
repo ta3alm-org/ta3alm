@@ -113,3 +113,8 @@ from dashboard_admin.views.support_chat_and_errors import (
     admin_error_reports,
     admin_support_chat,
 )
+from dashboard_admin.views.content_hub import (
+    admin_group_workspace,
+    admin_package_workspace,
+    manage_content_hub,
+)

@@ -26,7 +26,7 @@
     {% csrf_token %}
 
     <div class="ap-split-8-4">
-        <!-- العمود الرئيسي: الاستهداف والمحتوى -->
+        
         <div class="ap-flex ap-gap-4" style="flex-direction:column;">
             <div class="ap-card">
                 <div class="ap-card-header">
@@ -54,7 +54,7 @@
                         </label>
                     </div>
 
-                    <!-- إعدادات الفئة -->
+                    
                     <div id="segmentOptionsBox" class="ap-subpanel ap-mb-4 {% if target_mode != 'segment' %}ap-hidden{% endif %}">
                         <div class="ap-form-grid">
                             <div class="ap-field">
@@ -118,7 +118,7 @@
                         </div>
                     </div>
 
-                    <!-- اختيار مستخدمين معيّنين -->
+                    
                     <div id="specificUsersBox" class="ap-subpanel ap-mb-4 {% if target_mode != 'users' %}ap-hidden{% endif %}">
                         <div class="ap-label ap-mb-2">المستخدمون المختارون (<span id="selectedUsersCount">0</span>)</div>
                         <div id="selectedUsersContainer" class="ap-flex ap-wrap ap-gap-2 ap-mb-3"></div>
@@ -192,7 +192,7 @@
             </div>
         </div>
 
-        <!-- العمود الجانبي: المعاينة الحية وسجل الإرسالات -->
+        
         <div class="ap-flex ap-gap-4" style="flex-direction:column;">
             <div class="ap-card">
                 <div class="ap-card-header">

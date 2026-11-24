@@ -1,7 +1,7 @@
 {% load i18n %}
 <div class="bg-white shadow-sm border-bottom mb-4">
     <div class="container">
-        <!-- العنوان وزر الخروج -->
+        
         <div class="d-flex align-items-center justify-content-between py-3 border-bottom">
             <div class="d-flex align-items-center">
                 <div class="bg-primary text-white rounded-circle p-2 me-2 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
@@ -17,10 +17,10 @@
             </a>
         </div>
 
-        <!-- التبويبات الكاملة -->
+        
         <ul class="nav nav-tabs border-bottom-0 mt-3">
             
-            <!-- 1. المحاضرات -->
+            
             <li class="nav-item">
                 <a class="nav-link {% if active_tab == 'lectures' %}active fw-bold border-bottom-0{% endif %} px-4 py-3" 
                    href="{% url 'group_detail' group.id %}"
@@ -29,7 +29,7 @@
                 </a>
             </li>
             
-            <!-- 2. الامتحانات -->
+            
             <li class="nav-item">
                 <a class="nav-link {% if active_tab == 'exams' %}active fw-bold border-bottom-0{% endif %} px-4 py-3" 
                    href="{% url 'group_exams' group.id %}"
@@ -38,7 +38,7 @@
                 </a>
             </li>
             
-            <!-- 3. الملفات (جديد) -->
+            
             <li class="nav-item">
                 <a class="nav-link {% if active_tab == 'files' %}active fw-bold border-bottom-0{% endif %} px-4 py-3" 
                    href="{% url 'group_files_teacher' group.id %}"
@@ -47,7 +47,7 @@
                 </a>
             </li>
 
-            <!-- 4. الطلاب -->
+            
             <li class="nav-item">
                 <a class="nav-link {% if active_tab == 'students' %}active fw-bold border-bottom-0{% endif %} px-4 py-3" 
                    href="{% url 'group_students' group.id %}"
@@ -56,7 +56,7 @@
                 </a>
             </li>
 
-            <!-- 5. الترتيب -->
+            
             <li class="nav-item">
                 <a class="nav-link {% if active_tab == 'ranking' %}active fw-bold border-bottom-0{% endif %} px-4 py-3" 
                    href="{% url 'group_ranking' group.id %}"
@@ -65,7 +65,7 @@
                 </a>
             </li>
 
-            <!-- 6. الطلبات -->
+            
             <li class="nav-item">
                 <a class="nav-link {% if active_tab == 'requests' %}active fw-bold border-bottom-0{% endif %} px-4 py-3 position-relative" 
                    href="{% url 'group_requests' group.id %}"

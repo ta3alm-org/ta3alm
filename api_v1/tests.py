@@ -147,6 +147,7 @@ class Ta3almAPIV1TestSuite(TestCase):
             'full_name': 'يوسف إبراهيم',
             'email': 'newstudent@ta3alm.online',
             'phone': '01055555555',
+            'gender': 'male',
             'password': 'NewPassword123!',
             'role': 'student',
         }, format='json')
@@ -171,6 +172,7 @@ class Ta3almAPIV1TestSuite(TestCase):
             'phone': '01055555555',
             'parent_phone': '01066666666',
             'national_id': '30601010101234',
+            'gender': 'male',
         }, format='json', **headers)
         self.assertEqual(res_complete.status_code, status.HTTP_200_OK)
         self.assertTrue(res_complete.data['user']['is_profile_complete'])

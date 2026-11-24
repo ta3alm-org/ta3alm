@@ -1,6 +1,5 @@
-/**
- * وحدة تحكم صفحة إرسال الإشعارات المخصصة (المعاينة الحية، اختيار المستخدمين، الإرسال بـ AJAX).
- */
+
+
 import { api } from '../core/api.js';
 import { setButtonLoading } from '../core/loading.js';
 import { confirmDialog } from '../core/modal.js';

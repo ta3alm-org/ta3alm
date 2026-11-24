@@ -1,6 +1,5 @@
-/**
- * نظام التبويبات الموحد [data-tabs].
- */
+
+
 import { emit } from '../core/events.js';
 
 export function activateTab(tabGroup, tabId, { syncUrl = false } = {}) {
@@ -43,7 +42,7 @@ export function initTabs() {
         activateTab(group, btn.dataset.tabTarget, { syncUrl });
     });
 
-    // تفعيل التبويب المحدد في URL ?tab=...
+
     const urlTab = new URLSearchParams(window.location.search).get('tab');
     if (urlTab) {
         document.querySelectorAll('[data-tabs][data-tabs-sync-url="1"]').forEach((group) => {

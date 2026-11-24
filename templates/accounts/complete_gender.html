@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "تحديد النوع" %}{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-6 col-md-8">
+            <div class="card border-0 shadow-lg rounded-4 overflow-hidden">
+                <div class="card-body p-4 p-md-5 text-center">
+                    <div class="mb-3 d-inline-flex align-items-center justify-content-center rounded-circle bg-primary bg-opacity-10 text-primary" style="width:72px;height:72px;">
+                        <i class="bi bi-person-check fs-1"></i>
+                    </div>
+                    <h3 class="fw-bold mb-2">{% trans "خطوة سريعة قبل المتابعة" %}</h3>
+                    <p class="text-muted mb-4">
+                        {% trans "يرجى تحديد النوع (ذكر أم أنثى) لاستكمال استخدام حسابك على المنصة." %}
+                    </p>
+
+                    <form method="POST" novalidate>
+                        {% csrf_token %}
+                        <div class="row g-3 mb-4 text-center">
+                            <div class="col-6">
+                                <input type="radio" class="btn-check" name="gender" id="genderMale" value="male" required autocomplete="off" {% if request.POST.gender == 'male' or user.gender == 'male' %}checked{% endif %}>
+                                <label class="btn btn-outline-primary w-100 py-4 rounded-4 d-flex flex-column align-items-center gap-2" for="genderMale">
+                                    <i class="bi bi-gender-male fs-2"></i>
+                                    <span class="fw-bold fs-5">{% trans "ذكر" %}</span>
+                                </label>
+                            </div>
+                            <div class="col-6">
+                                <input type="radio" class="btn-check" name="gender" id="genderFemale" value="female" required autocomplete="off" {% if request.POST.gender == 'female' or user.gender == 'female' %}checked{% endif %}>
+                                <label class="btn btn-outline-primary w-100 py-4 rounded-4 d-flex flex-column align-items-center gap-2" for="genderFemale">
+                                    <i class="bi bi-gender-female fs-2"></i>
+                                    <span class="fw-bold fs-5">{% trans "أنثى" %}</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-lg w-100 fw-bold rounded-3">
+                            {% trans "حفظ والمتابعة" %}
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

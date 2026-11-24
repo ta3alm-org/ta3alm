@@ -134,6 +134,7 @@ class LoginAPIView(APIView):
             return Response(
                 {
                     'error': 'حسابك محظور من قِبل إدارة المنصة.',
+                    'code': 'ACCOUNT_BANNED',
                     'is_banned': True,
                 },
                 status=status.HTTP_403_FORBIDDEN,
@@ -183,7 +184,10 @@ class TokenRefreshAPIView(APIView):
             return Response({'error': 'المستخدم غير موجود.'}, status=status.HTTP_401_UNAUTHORIZED)
 
         if user.is_banned:
-            return Response({'error': 'الحساب محظور.'}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {'error': 'الحساب محظور.', 'code': 'ACCOUNT_BANNED', 'is_banned': True},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         inst_id = _extract_installation_id(request)
         refresh_jti = str(payload.get('jti') or '')

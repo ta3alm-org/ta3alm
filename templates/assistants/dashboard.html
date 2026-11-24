@@ -5,7 +5,7 @@
 {% block content %}
 <div class="container py-5">
     
-    <!-- رأس الصفحة -->
+    
     <div class="d-flex justify-content-between align-items-center mb-5">
         <div>
             <h2 class="fw-bold mb-1">
@@ -18,7 +18,7 @@
         </a>
     </div>
 
-    <!-- 1. المعلمون الحاليون -->
+    
     <div class="mb-5">
         <h5 class="fw-bold text-success border-start border-4 border-success ps-3 mb-4">
             <i class="bi bi-briefcase-fill me-2"></i> {% trans "المعلمون الحاليون" %}
@@ -39,7 +39,7 @@
                             </div>
                         </div>
                         
-                        <!-- رقم الهاتف -->
+                        
                         <div class="mb-3">
                             <a href="tel:{{ job.teacher.user.phone }}" class="text-decoration-none text-secondary d-flex align-items-center small">
                                 <i class="bi bi-phone me-2"></i> {{ job.teacher.user.phone }}
@@ -53,12 +53,12 @@
                         <hr class="my-3 opacity-25">
                         
                         <div class="d-grid gap-2">
-                            <!-- زر المجموعات -->
+                            
                             <a href="{% url 'view_teacher_groups' job.teacher.id %}" class="btn btn-outline-success fw-bold">
                                 <i class="bi bi-grid-fill me-2"></i> {% trans "عرض المجموعات" %}
                             </a>
                             
-                            <!-- زر الحزم (يظهر فقط لو عنده صلاحية) -->
+                            
                             {% if job.can_manage_packages %}
                             <a href="{% url 'assistant_view_packages' job.teacher.id %}" class="btn btn-outline-primary fw-bold">
                                 <i class="bi bi-box-seam-fill me-2"></i> {% trans "عرض الحزم" %}
@@ -82,7 +82,7 @@
         </div>
     </div>
 
-    <!-- 2. الطلبات المعلقة -->
+    
     {% if pending_jobs %}
     <div class="mb-4">
         <h5 class="fw-bold text-warning border-start border-4 border-warning ps-3 mb-4">

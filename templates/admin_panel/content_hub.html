@@ -1,0 +1,316 @@
+{% extends 'admin_panel/base_admin.html' %}
+{% load i18n %}
+
+{% block page_title %}مركز المجموعات والحزم{% endblock %}
+{% block body_page %}content-hub{% endblock %}
+{% block nav_content_hub %}active{% endblock %}
+{% block breadcrumb %}<span class="sep">/</span><span class="current">مركز المجموعات والحزم</span>{% endblock %}
+
+{% block content %}
+<div class="ap-page-header">
+    <div>
+        <h1 class="ap-page-title"><i class="bi bi-collection-play"></i> مركز المجموعات والحزم والمحتوى</h1>
+        <p class="ap-page-subtitle">تحكم شامل ومنظم في مجموعات وحزم ومحاضرات وامتحانات جميع المعلمين</p>
+    </div>
+    <div class="ap-page-actions">
+        <button type="button" class="ap-btn ap-btn-primary ap-btn-sm" data-modal-open="apCreateGroupModal">
+            <i class="bi bi-plus-lg"></i> مجموعة جديدة
+        </button>
+        <button type="button" class="ap-btn ap-btn-secondary ap-btn-sm" data-modal-open="apCreatePackageModal">
+            <i class="bi bi-box-seam"></i> حزمة جديدة
+        </button>
+    </div>
+</div>
+
+<div class="ap-kpi-grid ap-mb-4">
+    <div class="ap-stat">
+        <div class="ap-stat-top">
+            <span class="ap-stat-label">المعلمون</span>
+            <span class="ap-stat-icon"><i class="bi bi-person-video3"></i></span>
+        </div>
+        <div class="ap-stat-value">{{ hub_stats.teachers_count }}</div>
+        <div class="ap-stat-sub">إجمالي حسابات المعلمين</div>
+    </div>
+    <div class="ap-stat">
+        <div class="ap-stat-top">
+            <span class="ap-stat-label">المجموعات</span>
+            <span class="ap-stat-icon"><i class="bi bi-diagram-3"></i></span>
+        </div>
+        <div class="ap-stat-value">{{ hub_stats.groups_count }}</div>
+        <div class="ap-stat-sub">{{ hub_stats.locked_chats_count }} شات مغلق</div>
+    </div>
+    <div class="ap-stat">
+        <div class="ap-stat-top">
+            <span class="ap-stat-label">الحزم الأونلاين</span>
+            <span class="ap-stat-icon"><i class="bi bi-box-seam"></i></span>
+        </div>
+        <div class="ap-stat-value">{{ hub_stats.packages_count }}</div>
+        <div class="ap-stat-sub">باقات الكورسات المسجلة</div>
+    </div>
+    <div class="ap-stat">
+        <div class="ap-stat-top">
+            <span class="ap-stat-label">المحتوى التعليمي</span>
+            <span class="ap-stat-icon"><i class="bi bi-play-btn"></i></span>
+        </div>
+        <div class="ap-stat-value">{{ hub_stats.lectures_count }}</div>
+        <div class="ap-stat-sub">{{ hub_stats.exams_count }} امتحان مسجل</div>
+    </div>
+</div>
+
+<div class="ap-card ap-mb-4">
+    <div class="ap-card-body">
+        <form method="GET" action="{% url 'admin_panel:content_hub' %}" id="contentHubFilterForm"
+              data-live-filter-form data-filter-target="#contentHubPartialContainer"
+              class="ap-flex ap-items-center ap-gap-3" style="flex-wrap:wrap;">
+            <input type="hidden" name="tab" value="{{ active_tab|default:'groups' }}">
+            <div style="min-width:210px; flex:1;">
+                <select name="teacher" class="ap-select">
+                    <option value="">كل المعلمين ({{ teachers|length }})</option>
+                    {% for t in teachers %}
+                    <option value="{{ t.id }}" {% if selected_teacher == t.id|stringformat:'s' %}selected{% endif %}>
+                        {{ t.user.get_full_name|default:t.user.username }} — {{ t.groups_count }} مجموعة / {{ t.packages_count }} حزمة
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div style="min-width:170px;">
+                <select name="grade" class="ap-select">
+                    <option value="">كل الصفوف</option>
+                    {% for code, label in grades %}
+                    <option value="{{ code }}" {% if selected_grade == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="ap-search-box" style="min-width:230px; flex:1;">
+                <i class="bi bi-search"></i>
+                <input type="text" name="q" class="ap-search-input"
+                       placeholder="ابحث باسم المجموعة أو الحزمة أو المعلم..." value="{{ query|default:'' }}">
+                {% if query %}
+                <button type="button" class="ap-search-clear" data-filter-reset title="مسح البحث">
+                    <i class="bi bi-x"></i>
+                </button>
+                {% endif %}
+            </div>
+            <button type="submit" class="ap-btn ap-btn-secondary ap-btn-sm">تصفية</button>
+        </form>
+    </div>
+</div>
+
+<div id="contentHubPartialContainer">
+    {% include 'admin_panel/partials/_content_hub_body.html' %}
+</div>
+
+<div class="ap-modal" id="apCreateGroupModal" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="ap-overlay-backdrop" data-modal-close></div>
+    <div class="ap-modal-dialog is-sm">
+        <div class="ap-modal-header">
+            <h3 class="ap-modal-title"><i class="bi bi-plus-circle"></i> إنشاء مجموعة جديدة</h3>
+            <button type="button" class="ap-icon-btn" data-modal-close aria-label="إغلاق"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <form method="POST" action="{% url 'admin_panel:content_hub' %}" data-ajax-form data-close-overlay="1" data-hub-action="1">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="create_group">
+            <div class="ap-modal-body">
+                <div class="ap-field">
+                    <label class="ap-label">المعلم</label>
+                    <select name="teacher_id" class="ap-select" required>
+                        {% for t in teachers %}
+                        <option value="{{ t.id }}">{{ t.user.get_full_name|default:t.user.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="ap-field">
+                    <label class="ap-label">اسم المجموعة</label>
+                    <input type="text" name="name" class="ap-input" required placeholder="مثال: مجموعة أوائل الصف الثالث">
+                </div>
+                <div class="ap-field">
+                    <label class="ap-label">الصف الدراسي</label>
+                    <select name="grade" class="ap-select" required>
+                        {% for code, label in grades %}
+                        <option value="{{ code }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="ap-modal-footer">
+                <button type="button" class="ap-btn ap-btn-secondary" data-modal-close>إلغاء</button>
+                <button type="submit" class="ap-btn ap-btn-primary">إنشاء المجموعة</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="ap-modal" id="apEditGroupModal" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="ap-overlay-backdrop" data-modal-close></div>
+    <div class="ap-modal-dialog is-sm">
+        <div class="ap-modal-header">
+            <h3 class="ap-modal-title"><i class="bi bi-pencil-square"></i> تعديل المجموعة</h3>
+            <button type="button" class="ap-icon-btn" data-modal-close aria-label="إغلاق"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <form method="POST" action="{% url 'admin_panel:content_hub' %}" data-ajax-form data-close-overlay="1" data-hub-action="1">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="update_group">
+            <input type="hidden" name="group_id" id="hubEditGroupId">
+            <div class="ap-modal-body">
+                <div class="ap-field">
+                    <label class="ap-label">المعلم المسؤول</label>
+                    <select name="teacher_id" id="hubEditGroupTeacher" class="ap-select" required>
+                        {% for t in teachers %}
+                        <option value="{{ t.id }}">{{ t.user.get_full_name|default:t.user.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="ap-field">
+                    <label class="ap-label">اسم المجموعة</label>
+                    <input type="text" name="name" id="hubEditGroupName" class="ap-input" required>
+                </div>
+                <div class="ap-field">
+                    <label class="ap-label">الصف الدراسي</label>
+                    <select name="grade" id="hubEditGroupGrade" class="ap-select" required>
+                        {% for code, label in grades %}
+                        <option value="{{ code }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="ap-modal-footer">
+                <button type="button" class="ap-btn ap-btn-secondary" data-modal-close>إلغاء</button>
+                <button type="submit" class="ap-btn ap-btn-primary">حفظ التعديلات</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="ap-modal" id="apCreatePackageModal" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="ap-overlay-backdrop" data-modal-close></div>
+    <div class="ap-modal-dialog is-sm">
+        <div class="ap-modal-header">
+            <h3 class="ap-modal-title"><i class="bi bi-box-seam"></i> إنشاء حزمة أونلاين جديدة</h3>
+            <button type="button" class="ap-icon-btn" data-modal-close aria-label="إغلاق"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <form method="POST" action="{% url 'admin_panel:content_hub' %}" data-ajax-form data-close-overlay="1" data-hub-action="1">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="create_package">
+            <div class="ap-modal-body">
+                <div class="ap-field">
+                    <label class="ap-label">المعلم</label>
+                    <select name="teacher_id" class="ap-select" required>
+                        {% for t in teachers %}
+                        <option value="{{ t.id }}">{{ t.user.get_full_name|default:t.user.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="ap-field">
+                    <label class="ap-label">عنوان الحزمة</label>
+                    <input type="text" name="title" class="ap-input" required placeholder="مثال: المراجعة النهائية - الوحدة الأولى">
+                </div>
+                <div class="ap-form-grid">
+                    <div class="ap-field">
+                        <label class="ap-label">الصف الدراسي</label>
+                        <select name="grade" class="ap-select" required>
+                            {% for code, label in grades %}
+                            <option value="{{ code }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="ap-field">
+                        <label class="ap-label">السعر (EGP)</label>
+                        <input type="number" step="0.01" min="0" name="price" class="ap-input" value="0">
+                    </div>
+                </div>
+                <div class="ap-field">
+                    <label class="ap-label">الوصف</label>
+                    <textarea name="description" class="ap-textarea" rows="3"></textarea>
+                </div>
+                <label class="ap-flex ap-items-center ap-gap-2 ap-sm">
+                    <input type="checkbox" name="is_active" value="1" checked> الحزمة مفعّلة وتظهر للطلاب
+                </label>
+            </div>
+            <div class="ap-modal-footer">
+                <button type="button" class="ap-btn ap-btn-secondary" data-modal-close>إلغاء</button>
+                <button type="submit" class="ap-btn ap-btn-primary">إنشاء الحزمة</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="ap-modal" id="apEditPackageModal" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="ap-overlay-backdrop" data-modal-close></div>
+    <div class="ap-modal-dialog is-sm">
+        <div class="ap-modal-header">
+            <h3 class="ap-modal-title"><i class="bi bi-pencil-square"></i> تعديل الحزمة</h3>
+            <button type="button" class="ap-icon-btn" data-modal-close aria-label="إغلاق"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <form method="POST" action="{% url 'admin_panel:content_hub' %}" data-ajax-form data-close-overlay="1" data-hub-action="1">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="update_package">
+            <input type="hidden" name="package_id" id="hubEditPkgId">
+            <div class="ap-modal-body">
+                <div class="ap-field">
+                    <label class="ap-label">المعلم المسؤول</label>
+                    <select name="teacher_id" id="hubEditPkgTeacher" class="ap-select" required>
+                        {% for t in teachers %}
+                        <option value="{{ t.id }}">{{ t.user.get_full_name|default:t.user.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="ap-field">
+                    <label class="ap-label">عنوان الحزمة</label>
+                    <input type="text" name="title" id="hubEditPkgTitle" class="ap-input" required>
+                </div>
+                <div class="ap-form-grid">
+                    <div class="ap-field">
+                        <label class="ap-label">الصف الدراسي</label>
+                        <select name="grade" id="hubEditPkgGrade" class="ap-select" required>
+                            {% for code, label in grades %}
+                            <option value="{{ code }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="ap-field">
+                        <label class="ap-label">السعر (EGP)</label>
+                        <input type="number" step="0.01" min="0" name="price" id="hubEditPkgPrice" class="ap-input">
+                    </div>
+                </div>
+                <div class="ap-field">
+                    <label class="ap-label">الوصف</label>
+                    <textarea name="description" id="hubEditPkgDesc" class="ap-textarea" rows="3"></textarea>
+                </div>
+                <label class="ap-flex ap-items-center ap-gap-2 ap-sm">
+                    <input type="checkbox" name="is_active" id="hubEditPkgActive" value="1"> الحزمة مفعّلة
+                </label>
+            </div>
+            <div class="ap-modal-footer">
+                <button type="button" class="ap-btn ap-btn-secondary" data-modal-close>إلغاء</button>
+                <button type="submit" class="ap-btn ap-btn-primary">حفظ التعديلات</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="ap-modal" id="apHubEnrollModal" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="ap-overlay-backdrop" data-modal-close></div>
+    <div class="ap-modal-dialog is-sm">
+        <div class="ap-modal-header">
+            <h3 class="ap-modal-title"><i class="bi bi-person-plus"></i> تفعيل اشتراك طالب — <span id="hubEnrollTargetName"></span></h3>
+            <button type="button" class="ap-icon-btn" data-modal-close aria-label="إغلاق"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <form method="POST" action="{% url 'admin_panel:content_hub' %}" data-ajax-form data-close-overlay="1" data-hub-action="1">
+            {% csrf_token %}
+            <input type="hidden" name="action" id="hubEnrollAction" value="enroll_student_group">
+            <input type="hidden" name="group_id" id="hubEnrollGroupId">
+            <input type="hidden" name="package_id" id="hubEnrollPackageId">
+            <div class="ap-modal-body">
+                <div class="ap-field">
+                    <label class="ap-label">بريد الطالب أو رقم الهاتف أو الكود (#)</label>
+                    <input type="text" name="identifier" class="ap-input" required placeholder="S123456 أو 010... أو email@...">
+                </div>
+            </div>
+            <div class="ap-modal-footer">
+                <button type="button" class="ap-btn ap-btn-secondary" data-modal-close>إلغاء</button>
+                <button type="submit" class="ap-btn ap-btn-primary">تفعيل الطالب</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -10,14 +10,14 @@
         <a href="{% url 'my_package_content' package.id %}" class="btn btn-sm btn-outline-secondary mt-2">{% trans "عودة للمحتوى" %}</a>
     </div>
 
-    <!-- كارت ترتيبي -->
+    
     {% if my_rank %}
     <div class="card bg-dark text-white mb-4 border-0 shadow text-center p-4">
         <h3>{% trans "ترتيبك:" %} <span class="text-warning fw-bold">#{{ my_rank }}</span></h3>
     </div>
     {% endif %}
 
-    <!-- الجدول -->
+    
     <div class="card shadow border-0">
         <table class="table table-hover align-middle mb-0 text-center">
             <thead class="table-light">

@@ -27,6 +27,7 @@ from ta3alm_project.middleware.routing import SubdomainAdminMiddleware
 from ta3alm_project.middleware.auth import (
     BanMiddleware,
     EmailVerificationMiddleware,
+    GenderCompletionMiddleware,
     TokenAuthMiddleware,
 )
 from ta3alm_project.middleware.platform import (
@@ -34,4 +35,7 @@ from ta3alm_project.middleware.platform import (
     MaintenanceMiddleware,
 )
 from ta3alm_project.middleware.api_audit import ApiSecurityAndActivityAuditMiddleware
-from ta3alm_project.middleware.web_device import WebDeviceSecurityMiddleware
+from ta3alm_project.middleware.web_device import (
+    FrontendHardeningMiddleware,
+    WebDeviceSecurityMiddleware,
+)

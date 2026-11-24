@@ -13,7 +13,14 @@ class IsNotBanned(BasePermission):
         if not request.user or not request.user.is_authenticated:
             return False
         if getattr(request.user, 'is_banned', False):
-            return False
+            raise PermissionDenied(
+                detail={
+                    'error': 'حسابك محظور. يرجى التواصل مع الدعم الفني.',
+                    'detail': 'حسابك محظور. يرجى التواصل مع الدعم الفني.',
+                    'code': 'ACCOUNT_BANNED',
+                    'is_banned': True,
+                }
+            )
         if (
             hasattr(request.user, 'requires_email_verification')
             and request.user.requires_email_verification()
@@ -67,6 +74,23 @@ class IsTeacherOrAssistantRole(IsNotBanned):
 
     def has_permission(self, request, view):
         return super().has_permission(request, view) and request.user.role in ('teacher', 'assistant')
+
+
+class IsTeacherOrAssistantOrAdminRole(IsNotBanned):
+    message = 'هذه الخدمة مخصصة للمعلم أو المساعد أو إدارة المنصة.'
+
+    def has_permission(self, request, view):
+        if not super().has_permission(request, view):
+            return False
+        user = request.user
+        if user.role in ('teacher', 'assistant'):
+            return True
+        if user.is_superuser:
+            return True
+        profile = getattr(user, 'admin_profile', None)
+        if profile is not None:
+            return bool(profile.is_active_admin)
+        return user.role == 'admin'
 
 
 class IsPlatformAdmin(IsNotBanned):

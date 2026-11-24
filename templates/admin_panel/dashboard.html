@@ -39,7 +39,7 @@
     {% endif %}
 </div>
 
-<!-- KPI Stat Cards -->
+
 <div class="ap-kpi-grid">
     <div class="ap-stat">
         <div class="ap-stat-top">
@@ -80,7 +80,7 @@
     </div>
 </div>
 
-<!-- Quick Actions & Recent Activity -->
+
 <div class="ap-split-4-8 ap-mb-6">
     <div class="ap-card">
         <div class="ap-card-header">
@@ -135,6 +135,12 @@
                 {% if can_manage_plans %}
                 <a href="{% url 'admin_panel:manage_plans' %}" class="ap-quick-link">
                     <span class="ap-quick-link-start"><i class="bi bi-tags"></i> إدارة الباقات</span>
+                    <i class="bi bi-chevron-left ap-muted ap-xs"></i>
+                </a>
+                {% endif %}
+                {% if can_manage_content %}
+                <a href="{% url 'admin_panel:content_hub' %}" class="ap-quick-link">
+                    <span class="ap-quick-link-start"><i class="bi bi-collection-play"></i> مركز المجموعات والحزم</span>
                     <i class="bi bi-chevron-left ap-muted ap-xs"></i>
                 </a>
                 {% endif %}

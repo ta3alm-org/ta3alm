@@ -7,27 +7,27 @@
 
     <div class="container py-3">
         
-        <!-- الأزرار العلوية -->
+        
         <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
             <h4 class="fw-bold text-dark border-start border-4 border-primary ps-3 mb-0">{% trans "محتوى الحزمة" %}</h4>
             
             <div class="d-flex gap-2">
-                <!-- زر الاستيراد -->
+                
                 <button class="btn btn-outline-dark shadow-sm" data-bs-toggle="modal" data-bs-target="#importContentModal">
                     <i class="bi bi-arrow-repeat me-1"></i> {% trans "استيراد" %}
                 </button>
                 
-                <!-- زر محاضرة -->
+                
                 <button class="btn btn-danger shadow-sm" data-bs-toggle="modal" data-bs-target="#addLectureModal">
                     <i class="bi bi-youtube me-1"></i> {% trans "محاضرة" %}
                 </button>
 
-                <!-- زر امتحان -->
+                
                 <button class="btn btn-warning shadow-sm" data-bs-toggle="modal" data-bs-target="#addExamModal">
                     <i class="bi bi-pencil-square me-1"></i> {% trans "امتحان" %}
                 </button>
 
-                <!-- زر PDF (جديد) -->
+                
                 <button class="btn btn-dark shadow-sm" data-bs-toggle="modal" data-bs-target="#addPackPDFModal">
                     <i class="bi bi-file-earmark-plus me-1"></i> {% trans "ملف" %}
                 </button>
@@ -35,7 +35,7 @@
         </div>
 
         <div class="row g-4">
-            <!-- 1. المحاضرات -->
+            
             <div class="col-md-5">
                 <div class="card shadow-sm border-0 h-100">
                     <div class="card-header bg-dark text-white fw-bold py-3 d-flex justify-content-between">
@@ -63,7 +63,7 @@
                 </div>
             </div>
 
-            <!-- 2. الامتحانات -->
+            
             <div class="col-md-4">
                 <div class="card shadow-sm border-0 h-100">
                     <div class="card-header bg-warning text-dark fw-bold py-3 d-flex justify-content-between">
@@ -94,7 +94,7 @@
                 </div>
             </div>
 
-            <!-- 3. الملفات (جديد) -->
+            
             <div class="col-md-3">
                 <div class="card shadow-sm border-0 h-100">
                     <div class="card-header bg-secondary text-white fw-bold py-3 d-flex justify-content-between">
@@ -110,7 +110,7 @@
                             
                             <form method="POST" action="{% url 'remove_package_content' package.id %}">
                                 {% csrf_token %}
-                                <input type="hidden" name="type" value="pdf"> <!-- نوع جديد -->
+                                <input type="hidden" name="type" value="pdf"> 
                                 <input type="hidden" name="id" value="{{ pdf.id }}">
                                 <button class="btn btn-sm text-danger"><i class="bi bi-x-lg"></i></button>
                             </form>
@@ -124,9 +124,9 @@
         </div>
     </div>
 
-    <!-- Modals -->
     
-    <!-- 1. Modal إضافة PDF -->
+    
+    
     <div class="modal fade" id="addPackPDFModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -154,7 +154,7 @@
         </div>
     </div>
 
-    <!-- 2. Modal الاستيراد (المحدث مع الصف) -->
+    
     <div class="modal fade" id="importContentModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
@@ -177,7 +177,7 @@
                             </select>
                         </div>
 
-                        <!-- منطقة المحتوى (تظهر بالـ JS) -->
+                        
                         <div id="contentArea" style="display: none;">
                             <div class="row">
                                 <div class="col-md-6 border-end">
@@ -225,10 +225,10 @@
         </div>
     </div>
 
-    <!-- باقي المودالز (محاضرة وامتحان) كما هي -->
+    
     {% include 'teachers/includes/modals_content.html' %}
 
-    <!-- JavaScript للتحكم -->
+    
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const groupSelect = document.getElementById('sourceGroupSelect');

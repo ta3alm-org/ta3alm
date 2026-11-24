@@ -1,6 +1,5 @@
-/**
- * قوائم منسدلة موحدة بموضع Fixed لتفادي القص داخل حاويات الجداول.
- */
+
+
 let activeDropdown = null;
 
 function positionMenu(trigger, menu) {

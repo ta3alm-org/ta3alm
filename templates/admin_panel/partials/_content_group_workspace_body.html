@@ -1,0 +1,282 @@
+<div data-tabs="group-ws" data-tabs-sync-url="1" data-tabs-container="#groupWsPanels" class="ap-tabs">
+    <button type="button" class="ap-tab-btn {% if active_tab|default:'lectures' == 'lectures' %}active{% endif %}" data-tab-target="tab-ws-lectures">
+        <i class="bi bi-play-btn"></i> <span>المحاضرات</span> <span class="ap-tab-count">{{ lectures|length }}</span>
+    </button>
+    <button type="button" class="ap-tab-btn {% if active_tab == 'exams' %}active{% endif %}" data-tab-target="tab-ws-exams">
+        <i class="bi bi-file-earmark-check"></i> <span>الامتحانات</span> <span class="ap-tab-count">{{ exams|length }}</span>
+    </button>
+    <button type="button" class="ap-tab-btn {% if active_tab == 'pdfs' %}active{% endif %}" data-tab-target="tab-ws-pdfs">
+        <i class="bi bi-file-pdf"></i> <span>المذكرات</span> <span class="ap-tab-count">{{ pdfs|length }}</span>
+    </button>
+    <button type="button" class="ap-tab-btn {% if active_tab == 'students' %}active{% endif %}" data-tab-target="tab-ws-students">
+        <i class="bi bi-people"></i> <span>الطلاب</span> <span class="ap-tab-count">{{ active_enrollments|length }}</span>
+    </button>
+    <button type="button" class="ap-tab-btn {% if active_tab == 'chat' %}active{% endif %}" data-tab-target="tab-ws-chat">
+        <i class="bi bi-chat-dots"></i> <span>الشات الجماعي</span> <span class="ap-tab-count">{{ chat_messages|length }}</span>
+    </button>
+</div>
+
+<div id="groupWsPanels">
+    <div class="ap-tab-panel {% if active_tab|default:'lectures' == 'lectures' %}active{% endif %}" id="tab-ws-lectures" data-tab-group="group-ws">
+        <div class="ap-split-7-5">
+            <div class="ap-card">
+                <div class="ap-card-header"><h2 class="ap-card-title">محاضرات المجموعة</h2></div>
+                <div class="ap-table-wrap">
+                    <table class="ap-table">
+                        <thead><tr><th>العنوان</th><th>الحالة</th><th class="ap-cell-actions">إجراءات</th></tr></thead>
+                        <tbody>
+                            {% for l in lectures %}
+                            <tr>
+                                <td><div class="ap-strong">{{ l.title }}</div><div class="ap-xs ap-muted">{{ l.video_link|truncatechars:45 }}</div></td>
+                                <td>{% if l.is_active %}<span class="ap-badge ap-badge-success">نشطة</span>{% else %}<span class="ap-badge ap-badge-danger">معطلة</span>{% endif %}</td>
+                                <td class="ap-cell-actions">
+                                    <div class="ap-inline-flex ap-gap-1">
+                                        <a href="{% url 'manage_video_codes' l.id %}" target="_blank" rel="noopener" class="ap-btn ap-btn-sm ap-btn-secondary">الأكواد</a>
+                                        <form method="POST" action="{% url 'admin_panel:content_group_workspace' group.id %}" data-ajax-form data-ws-action="1" class="ap-inline-flex">
+                                            {% csrf_token %}<input type="hidden" name="action" value="toggle_lecture"><input type="hidden" name="lecture_id" value="{{ l.id }}">
+                                            <button type="submit" class="ap-btn ap-btn-sm ap-btn-secondary"><i class="bi bi-power"></i></button>
+                                        </form>
+                                        <form method="POST" action="{% url 'admin_panel:content_group_workspace' group.id %}" data-ajax-form data-ws-action="1" data-confirm="حذف هذه المحاضرة؟" data-confirm-variant="danger" class="ap-inline-flex">
+                                            {% csrf_token %}<input type="hidden" name="action" value="delete_lecture"><input type="hidden" name="lecture_id" value="{{ l.id }}">
+                                            <button type="submit" class="ap-btn ap-btn-sm ap-btn-danger"><i class="bi bi-trash"></i></button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="3" class="ap-muted" style="text-align:center; padding:24px;">لا توجد محاضرات بعد.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="ap-card">
+                <div class="ap-card-header"><h2 class="ap-card-title">إضافة محاضرة جديدة</h2></div>
+                <div class="ap-card-body">
+                    <form method="POST" action="{% url 'admin_panel:content_group_workspace' group.id %}" data-ajax-form data-ws-action="1">
+                        {% csrf_token %}<input type="hidden" name="action" value="add_lecture">
+                        <div class="ap-field"><label class="ap-label">عنوان المحاضرة</label><input type="text" name="title" class="ap-input" required></div>
+                        <div class="ap-field"><label class="ap-label">رابط الفيديو أو كود iframe</label><input type="text" name="video_link" class="ap-input" required></div>
+                        <div class="ap-field"><label class="ap-label">الوصف</label><textarea name="description" class="ap-textarea" rows="3"></textarea></div>
+                        <button type="submit" class="ap-btn ap-btn-primary ap-btn-block">إضافة المحاضرة</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="ap-tab-panel {% if active_tab == 'exams' %}active{% endif %}" id="tab-ws-exams" data-tab-group="group-ws">
+        <div class="ap-split-7-5">
+            <div class="ap-card">
+                <div class="ap-card-header"><h2 class="ap-card-title">امتحانات المجموعة</h2></div>
+                <div class="ap-table-wrap">
+                    <table class="ap-table">
+                        <thead><tr><th>الامتحان</th><th>الأسئلة</th><th>الحالة</th><th class="ap-cell-actions">إجراءات</th></tr></thead>
+                        <tbody>
+                            {% for e in exams %}
+                            <tr>
+                                <td><div class="ap-strong">{{ e.title }}</div><div class="ap-xs ap-muted">{{ e.duration_minutes }} دقيقة</div></td>
+                                <td><span class="ap-badge ap-badge-neutral">{{ e.q_count }} سؤال</span></td>
+                                <td>{% if e.is_active %}<span class="ap-badge ap-badge-success">منشور</span>{% else %}<span class="ap-badge ap-badge-warning">مسودة</span>{% endif %}</td>
+                                <td class="ap-cell-actions">
+                                    <div class="ap-inline-flex ap-gap-1">
+                                        <a href="{% url 'exam_manage' e.id %}" target="_blank" rel="noopener" class="ap-btn ap-btn-sm ap-btn-primary">الأسئلة والدرجات</a>
+                                        <form method="POST" action="{% url 'admin_panel:content_group_workspace' group.id %}" data-ajax-form data-ws-action="1" class="ap-inline-flex">
+                                            {% csrf_token %}<input type="hidden" name="action" value="toggle_exam"><input type="hidden" name="exam_id" value="{{ e.id }}">
+                                            <button type="submit" class="ap-btn ap-btn-sm ap-btn-secondary"><i class="bi bi-power"></i></button>
+                                        </form>
+                                        <form method="POST" action="{% url 'admin_panel:content_group_workspace' group.id %}" data-ajax-form data-ws-action="1" data-confirm="حذف الامتحان؟" data-confirm-variant="danger" class="ap-inline-flex">
+                                            {% csrf_token %}<input type="hidden" name="action" value="delete_exam"><input type="hidden" name="exam_id" value="{{ e.id }}">
+                                            <button type="submit" class="ap-btn ap-btn-sm ap-btn-danger"><i class="bi bi-trash"></i></button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="4" class="ap-muted" style="text-align:center; padding:24px;">لا توجد امتحانات بعد.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="ap-card">
+                <div class="ap-card-header"><h2 class="ap-card-title">إنشاء امتحان جديد</h2></div>
+                <div class="ap-card-body">
+                    <form method="POST" action="{% url 'admin_panel:content_group_workspace' group.id %}" data-ajax-form data-ws-action="1">
+                        {% csrf_token %}<input type="hidden" name="action" value="add_exam">
+                        <div class="ap-field"><label class="ap-label">عنوان الامتحان</label><input type="text" name="title" class="ap-input" required></div>
+                        <div class="ap-field"><label class="ap-label">المدة (بالدقائق)</label><input type="number" name="duration_minutes" class="ap-input" value="30" min="1"></div>
+                        <button type="submit" class="ap-btn ap-btn-primary ap-btn-block">إنشاء الامتحان</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="ap-tab-panel {% if active_tab == 'pdfs' %}active{% endif %}" id="tab-ws-pdfs" data-tab-group="group-ws">
+        <div class="ap-split-7-5">
+            <div class="ap-card">
+                <div class="ap-card-header"><h2 class="ap-card-title">المذكرات والملفات</h2></div>
+                <div class="ap-table-wrap">
+                    <table class="ap-table">
+                        <thead><tr><th>العنوان</th><th>الرابط/الملف</th><th class="ap-cell-actions">حذف</th></tr></thead>
+                        <tbody>
+                            {% for p in pdfs %}
+                            <tr>
+                                <td class="ap-strong">{{ p.title }}</td>
+                                <td class="ap-xs ap-muted">{% if p.file %}{{ p.file.name|truncatechars:35 }}{% else %}{{ p.link|truncatechars:40 }}{% endif %}</td>
+                                <td class="ap-cell-actions">
+                                    <form method="POST" action="{% url 'admin_panel:content_group_workspace' group.id %}" data-ajax-form data-ws-action="1" data-confirm="حذف المذكرة؟" data-confirm-variant="danger" class="ap-inline-flex">
+                                        {% csrf_token %}<input type="hidden" name="action" value="delete_pdf"><input type="hidden" name="pdf_id" value="{{ p.id }}">
+                                        <button type="submit" class="ap-btn ap-btn-sm ap-btn-danger"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="3" class="ap-muted" style="text-align:center; padding:24px;">لا توجد مذكرات مرفوعة.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="ap-card">
+                <div class="ap-card-header"><h2 class="ap-card-title">إضافة مذكرة PDF</h2></div>
+                <div class="ap-card-body">
+                    <form method="POST" enctype="multipart/form-data" action="{% url 'admin_panel:content_group_workspace' group.id %}" data-ajax-form data-ws-action="1">
+                        {% csrf_token %}<input type="hidden" name="action" value="add_pdf">
+                        <div class="ap-field"><label class="ap-label">عنوان المذكرة</label><input type="text" name="title" class="ap-input" required></div>
+                        <div class="ap-field"><label class="ap-label">رابط خارجي (اختياري عند رفع ملف)</label><input type="url" name="link" class="ap-input"></div>
+                        <div class="ap-field"><label class="ap-label">أو رفع ملف PDF</label><input type="file" name="file" accept=".pdf" class="ap-input"></div>
+                        <button type="submit" class="ap-btn ap-btn-primary ap-btn-block">رفع المذكرة</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="ap-tab-panel {% if active_tab == 'students' %}active{% endif %}" id="tab-ws-students" data-tab-group="group-ws">
+        <div class="ap-split-7-5">
+            <div>
+                {% if pending_enrollments %}
+                <div class="ap-card ap-mb-4">
+                    <div class="ap-card-header"><h2 class="ap-card-title">طلبات انضمام معلقة ({{ pending_enrollments|length }})</h2></div>
+                    <div class="ap-table-wrap">
+                        <table class="ap-table">
+                            <tbody>
+                                {% for en in pending_enrollments %}
+                                <tr>
+                                    <td class="ap-strong">{{ en.student.user.get_full_name|default:en.student.user.username }}</td>
+                                    <td class="ap-muted ap-xs">{{ en.student.user.custom_id }} · {{ en.student.user.phone }}</td>
+                                    <td class="ap-cell-actions">
+                                        <div class="ap-inline-flex ap-gap-1">
+                                            <form method="POST" action="{% url 'admin_panel:content_group_workspace' group.id %}" data-ajax-form data-ws-action="1" class="ap-inline-flex">
+                                                {% csrf_token %}<input type="hidden" name="action" value="approve_enrollment"><input type="hidden" name="enrollment_id" value="{{ en.id }}">
+                                                <button type="submit" class="ap-btn ap-btn-sm ap-btn-primary">قبول</button>
+                                            </form>
+                                            <form method="POST" action="{% url 'admin_panel:content_group_workspace' group.id %}" data-ajax-form data-ws-action="1" class="ap-inline-flex">
+                                                {% csrf_token %}<input type="hidden" name="action" value="reject_enrollment"><input type="hidden" name="enrollment_id" value="{{ en.id }}">
+                                                <button type="submit" class="ap-btn ap-btn-sm ap-btn-danger">رفض</button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endif %}
+                <div class="ap-card">
+                    <div class="ap-card-header"><h2 class="ap-card-title">الطلاب المفعلون ({{ active_enrollments|length }})</h2></div>
+                    <div class="ap-table-wrap">
+                        <table class="ap-table">
+                            <thead><tr><th>الطالب</th><th>الكود / الهاتف</th><th class="ap-cell-actions">إزالة</th></tr></thead>
+                            <tbody>
+                                {% for en in active_enrollments %}
+                                <tr>
+                                    <td class="ap-strong">{{ en.student.user.get_full_name|default:en.student.user.username }}</td>
+                                    <td class="ap-xs ap-muted">{{ en.student.user.custom_id }} · {{ en.student.user.phone }}</td>
+                                    <td class="ap-cell-actions">
+                                        <form method="POST" action="{% url 'admin_panel:content_group_workspace' group.id %}" data-ajax-form data-ws-action="1" data-confirm="إزالة الطالب من المجموعة؟" data-confirm-variant="danger" class="ap-inline-flex">
+                                            {% csrf_token %}<input type="hidden" name="action" value="reject_enrollment"><input type="hidden" name="enrollment_id" value="{{ en.id }}">
+                                            <button type="submit" class="ap-btn ap-btn-sm ap-btn-danger"><i class="bi bi-person-dash"></i></button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr><td colspan="3" class="ap-muted" style="text-align:center; padding:24px;">لا يوجد طلاب بعد.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="ap-card">
+                <div class="ap-card-header"><h2 class="ap-card-title">ضم طالب للمجموعة</h2></div>
+                <div class="ap-card-body">
+                    <form method="POST" action="{% url 'admin_panel:content_group_workspace' group.id %}" data-ajax-form data-ws-action="1">
+                        {% csrf_token %}<input type="hidden" name="action" value="enroll_student">
+                        <div class="ap-field"><label class="ap-label">البريد أو الهاتف أو الكود (#)</label><input type="text" name="identifier" class="ap-input" required placeholder="S123456"></div>
+                        <button type="submit" class="ap-btn ap-btn-primary ap-btn-block">ضم وتفعيل الطالب</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="ap-tab-panel {% if active_tab == 'chat' %}active{% endif %}" id="tab-ws-chat" data-tab-group="group-ws">
+        <div class="ap-card">
+            <div class="ap-card-header">
+                <h2 class="ap-card-title"><i class="bi bi-chat-dots"></i> إدارة الشات الجماعي للمجموعة</h2>
+                <div class="ap-inline-flex ap-gap-2">
+                    <form method="POST" action="{% url 'admin_panel:content_group_workspace' group.id %}" data-ajax-form data-ws-action="1" class="ap-inline-flex">
+                        {% csrf_token %}<input type="hidden" name="action" value="toggle_chat_lock">
+                        <button type="submit" class="ap-btn ap-btn-sm {% if group.is_chat_locked %}ap-btn-primary{% else %}ap-btn-secondary{% endif %}">
+                            <i class="bi bi-{% if group.is_chat_locked %}unlock{% else %}lock{% endif %}"></i>
+                            {% if group.is_chat_locked %}فتح الشات للطلاب{% else %}قفل الشات للطلاب{% endif %}
+                        </button>
+                    </form>
+                    <form method="POST" action="{% url 'admin_panel:content_group_workspace' group.id %}" data-ajax-form data-ws-action="1" data-confirm="مسح جميع رسائل الشات نهائياً؟" data-confirm-variant="danger" class="ap-inline-flex">
+                        {% csrf_token %}<input type="hidden" name="action" value="clear_chat_messages">
+                        <button type="submit" class="ap-btn ap-btn-sm ap-btn-danger"><i class="bi bi-trash"></i> مسح الشات</button>
+                    </form>
+                </div>
+            </div>
+            <div class="ap-card-body">
+                <form method="POST" action="{% url 'admin_panel:content_group_workspace' group.id %}" data-ajax-form data-ws-action="1" class="ap-flex ap-gap-2 ap-mb-4">
+                    {% csrf_token %}<input type="hidden" name="action" value="send_chat_message">
+                    <input type="text" name="body" class="ap-input" placeholder="اكتب رسالة إدارية أو تنبيه للمجموعة..." required style="flex:1;">
+                    <button type="submit" class="ap-btn ap-btn-primary">إرسال</button>
+                </form>
+
+                <div style="max-height:420px; overflow-y:auto; display:flex; flex-direction:column; gap:10px;">
+                    {% for m in chat_messages %}
+                    <div style="border:1px solid var(--border-default); border-radius:var(--radius-sm); padding:10px 14px; background:{% if m.is_pinned %}rgba(245,158,11,0.08){% else %}var(--bg-subtle){% endif %};">
+                        <div class="ap-flex ap-items-center" style="justify-content:space-between; gap:8px;">
+                            <div class="ap-sm ap-strong">
+                                {{ m.sender.get_full_name|default:m.sender.username }}
+                                <span class="ap-badge ap-badge-neutral">{{ m.sender.get_role_display }}</span>
+                                {% if m.is_pinned %}<span class="ap-badge ap-badge-warning">مثبتة</span>{% endif %}
+                            </div>
+                            <div class="ap-inline-flex ap-gap-1">
+                                <span class="ap-xs ap-muted">{{ m.created_at|date:"Y-m-d H:i" }}</span>
+                                <form method="POST" action="{% url 'admin_panel:content_group_workspace' group.id %}" data-ajax-form data-ws-action="1" class="ap-inline-flex">
+                                    {% csrf_token %}<input type="hidden" name="action" value="toggle_pin_message"><input type="hidden" name="message_id" value="{{ m.id }}">
+                                    <button type="submit" class="ap-btn ap-btn-sm ap-btn-secondary" title="تثبيت/إلغاء"><i class="bi bi-pin-angle"></i></button>
+                                </form>
+                                <form method="POST" action="{% url 'admin_panel:content_group_workspace' group.id %}" data-ajax-form data-ws-action="1" class="ap-inline-flex">
+                                    {% csrf_token %}<input type="hidden" name="action" value="delete_chat_message"><input type="hidden" name="message_id" value="{{ m.id }}">
+                                    <button type="submit" class="ap-btn ap-btn-sm ap-btn-danger" title="حذف"><i class="bi bi-trash"></i></button>
+                                </form>
+                            </div>
+                        </div>
+                        <div class="ap-sm ap-mt-1">{{ m.body }}</div>
+                    </div>
+                    {% empty %}
+                    <div class="ap-muted ap-sm" style="text-align:center; padding:24px;">لا توجد رسائل في شات هذه المجموعة بعد.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

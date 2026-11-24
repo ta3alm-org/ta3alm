@@ -5,7 +5,7 @@
 {% block content %}
 <div class="container py-5">
     
-    <!-- مربع البحث والفلترة -->
+    
     <div class="row justify-content-center mb-5">
         <div class="col-lg-10">
             <div class="text-center mb-4">
@@ -16,7 +16,7 @@
             <div class="card shadow-sm border-0 p-4 bg-white rounded-4">
                 <form method="GET" class="row g-3 align-items-end">
                     
-                    <!-- بحث بالاسم -->
+                    
                     <div class="col-md-4">
                         <label class="form-label fw-bold small text-muted">{% trans "بحث بالاسم" %}</label>
                         <div class="input-group">
@@ -25,7 +25,7 @@
                         </div>
                     </div>
 
-                    <!-- فلتر الصف -->
+                    
                     <div class="col-md-3">
                         <label class="form-label fw-bold small text-muted">{% trans "الصف الدراسي" %}</label>
                         <select name="grade" class="form-select">
@@ -39,19 +39,19 @@
                         </select>
                     </div>
 
-                    <!-- فلتر المادة (جديد) -->
-                    <!-- لاحظ: نحتاج لتمرير subjects في الفيو -->
+                    
+                    
                     <div class="col-md-3">
                         <label class="form-label fw-bold small text-muted">{% trans "المادة" %}</label>
                         <select name="subject" class="form-select">
                             <option value="">{% trans "كل المواد" %}</option>
-                            {% for sub in subjects %} <!-- تأكد من تمرير subjects -->
+                            {% for sub in subjects %} 
                                 <option value="{{ sub.id }}" {% if request.GET.subject|add:"0" == sub.id %}selected{% endif %}>{{ sub.name }}</option>
                             {% endfor %}
                         </select>
                     </div>
 
-                    <!-- زر البحث -->
+                    
                     <div class="col-md-2">
                         <button type="submit" class="btn btn-primary w-100 fw-bold">{% trans "تصفية" %}</button>
                     </div>
@@ -60,14 +60,14 @@
         </div>
     </div>
 
-    <!-- نتائج البحث -->
+    
     <div class="row g-4">
         {% for group in groups %}
         <div class="col-md-6 col-lg-4">
             <div class="card h-100 border-0 shadow-sm hover-up overflow-hidden">
                 <div class="card-body p-4">
                     <div class="d-flex align-items-center mb-3">
-                        <!-- صورة المدرس -->
+                        
                         <div class="me-3 position-relative">
                             {% if group.teacher.image %}
                                 <img src="{{ group.teacher.image.url }}" class="rounded-circle shadow-sm object-fit-cover" style="width: 60px; height: 60px;">

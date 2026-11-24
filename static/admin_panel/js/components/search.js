@@ -1,6 +1,5 @@
-/**
- * البحث الحي بالخادم (Partial HTML Fetch + Debounce) وموجّه الانتقال السريع (Ctrl+K).
- */
+
+
 import { api } from '../core/api.js';
 import { emit } from '../core/events.js';
 import { setContainerLoading } from '../core/loading.js';

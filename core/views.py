@@ -95,7 +95,19 @@ def custom_login_redirect(request):
 # 4. صفحة الحظر
 # ==========================================================
 def banned_page(request):
-    return render(request, 'core/banned.html')
+    user = getattr(request, 'user', None)
+    sec_prof = getattr(user, 'security_profile', None) if (user and user.is_authenticated) else None
+    reason = (getattr(sec_prof, 'ban_reason', '') or '').strip() or 'تم إيقاف هذا الحساب لمخالفة سياسات المنصة.'
+    gate = {
+        'boot_allowed': False,
+        'code': 'ACCOUNT_BANNED',
+        'title': 'هذا الحساب محظور من استخدام المنصة',
+        'message': f'تم حظر حسابك نهائياً ولا يمكنك استخدام المنصة: {reason}',
+        'hardware_id': '',
+        'is_maintenance_mode': False,
+        'can_admin_login': False,
+    }
+    return render(request, 'core/security_boot_gate.html', {'gate': gate, 'installation_id': ''}, status=403)
 
 
 # ==========================================================
@@ -311,15 +323,48 @@ def support_chat_page(request, thread_id=None):
                 return JsonResponse({'error': 'يرجى كتابة نص الرسالة.'}, status=400)
             messages.error(request, 'يرجى كتابة نص الرسالة.')
         else:
-            msg = append_support_message(
-                thread=thread,
-                sender=request.user,
-                body=body[:4000],
-                is_from_admin=acting_as_admin,
+            from core.profanity_filter import handle_chat_profanity_violation
+            from django.contrib.auth import logout as auth_logout
+            violated, violation_payload = handle_chat_profanity_violation(
+                request,
+                request.user,
+                body[:4000],
+                source_label='شات الدعم الفني بالويب',
             )
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                return JsonResponse({'message': serialize_support_message(msg)})
-            return redirect('support_chat_thread', thread_id=thread.id)
+            if violated:
+                if violation_payload and violation_payload.get('banned'):
+                    auth_logout(request)
+                    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                        return JsonResponse(violation_payload, status=403)
+                    return render(
+                        request,
+                        'core/security_boot_gate.html',
+                        {
+                            'gate': {
+                                'boot_allowed': False,
+                                'code': 'DEVICE_BLOCKED',
+                                'title': 'تم حظر الحساب والجهاز',
+                                'message': violation_payload.get('error', ''),
+                                'hardware_id': '',
+                            },
+                            'installation_id': '',
+                        },
+                        status=403,
+                    )
+                err_msg = (violation_payload or {}).get('error') or 'غير مسموح بإرسال ألفاظ مسيئة.'
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return JsonResponse({'error': err_msg}, status=400)
+                messages.error(request, err_msg)
+            else:
+                msg = append_support_message(
+                    thread=thread,
+                    sender=request.user,
+                    body=body[:4000],
+                    is_from_admin=acting_as_admin,
+                )
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return JsonResponse({'message': serialize_support_message(msg)})
+                return redirect('support_chat_thread', thread_id=thread.id)
 
     if request.GET.get('poll') == '1':
         raw_after = str(request.GET.get('after_id') or '').strip()

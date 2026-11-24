@@ -9,10 +9,10 @@
         <a href="{% url 'my_package_content' package.id %}" class="btn btn-outline-secondary">{% trans "عودة للحزمة" %}</a>
     </div>
 
-    <!-- مشغل الفيديو -->
+    
     {% include 'includes/custom_video_player.html' %}
 
-    <!-- عداد المشاهدات -->
+    
     <div class="alert alert-info d-flex justify-content-between align-items-center">
         <span><i class="bi bi-eye-fill"></i> {% trans "المشاهدات المستهلكة:" %}</span>
         <span class="fw-bold fs-5">{{ tracker.views_count }} / {{ package.view_limit }}</span>

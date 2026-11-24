@@ -43,7 +43,7 @@ from teachers.models import (
 )
 from assistants.models import AssistantProfile
 
-from accounts.views.profile import complete_profile
+from accounts.views.profile import complete_gender, complete_profile
 from accounts.views.signup import (
     RESEND_COOLDOWN_SECONDS,
     _remaining_resend_seconds,

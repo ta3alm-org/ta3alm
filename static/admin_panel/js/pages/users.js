@@ -1,6 +1,5 @@
-/**
- * وحدة تحكم صفحات إدارة المستخدمين وتعديل بيانات المستخدم.
- */
+
+
 import { loadPartialFromForm } from '../components/search.js';
 import { openDrawer } from '../core/drawer.js';
 import { on } from '../core/events.js';
@@ -26,7 +25,7 @@ export function initUsersPage() {
         openDrawer(renewDrawer);
     });
 
-    // مزامنة تبويب users في نموذج البحث الحي مع التبويب النشط
+
     on('ap:tab:changed', ({ group, tabId }) => {
         if (group === 'users-role' && filterForm) {
             const tabInput = filterForm.querySelector('input[name="tab"]');
@@ -56,7 +55,7 @@ export function initUsersPage() {
             return;
         }
 
-        // صفحة edit_user.html
+
         if (form.id === 'generateLoginLinkForm' && payload?.data?.magic_link) {
             const box = document.getElementById('magicLinkResultBox');
             const input = document.getElementById('magicLoginLink');

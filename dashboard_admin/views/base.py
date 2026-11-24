@@ -48,6 +48,7 @@ def _base_context(request):
         'can_delete_users':   user.is_superuser or (profile and profile.can_delete_users),
         'can_view_finance':   user.is_superuser or (profile and profile.can_view_finance),
         'can_manage_plans':   user.is_superuser or (profile and profile.can_manage_plans),
+        'can_manage_content': user.is_superuser or (profile and profile.is_active_admin),
         'can_view_audit':     user.is_superuser or (profile and profile.can_view_audit_log),
         'can_manage_support': user.is_superuser or (profile and (profile.is_owner or profile.can_manage_users or profile.admin_role == AdminRole.SUPPORT)),
         'unread_count':       unread_count,

@@ -3,11 +3,11 @@
 {% block title %}{% trans "الملفات" %}{% endblock %}
 
 {% block content %}
-    <!-- استدعاء الناف بار (حسب السياق: مجموعة أو حزمة) -->
+    
     {% if group %}
         {% include 'students/includes/student_group_navbar.html' %}
     {% else %}
-        <!-- هنا يمكنك وضع ناف بار الحزمة أو زر عودة بسيط -->
+        
         <div class="container py-3">
             <a href="{% url 'my_package_content' package.id %}" class="btn btn-outline-secondary">{% trans "عودة للحزمة" %}</a>
         </div>

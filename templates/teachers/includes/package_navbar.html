@@ -1,7 +1,7 @@
 {% load i18n %}
 <div class="bg-white shadow-sm border-bottom mb-4">
     <div class="container">
-        <!-- العنوان -->
+        
         <div class="d-flex align-items-center justify-content-between py-3 border-bottom">
             <div class="d-flex align-items-center gap-3">
                 <h4 class="mb-0 fw-bold text-primary">{{ package.title }}</h4>
@@ -12,10 +12,10 @@
             </a>
         </div>
         
-        <!-- التبويبات -->
+        
         <ul class="nav nav-tabs border-bottom-0 mt-3">
             
-            <!-- 1. المحتوى -->
+            
             <li class="nav-item">
                 <a class="nav-link {% if active_tab == 'content' %}active fw-bold border-bottom-0{% endif %} px-4 py-3" 
                    href="{% url 'teacher_package_detail' package.id %}"
@@ -24,7 +24,7 @@
                 </a>
             </li>
 
-            <!-- 2. الملفات (جديد) -->
+            
             <li class="nav-item">
                 <a class="nav-link {% if active_tab == 'files' %}active fw-bold border-bottom-0{% endif %} px-4 py-3" 
                    href="{% url 'package_files_teacher' package.id %}"
@@ -33,7 +33,7 @@
                 </a>
             </li>
 
-            <!-- 3. المشتركين -->
+            
             <li class="nav-item">
                 <a class="nav-link {% if active_tab == 'students' %}active fw-bold border-bottom-0{% endif %} px-4 py-3" 
                    href="{% url 'teacher_package_students' package.id %}"
@@ -42,7 +42,7 @@
                 </a>
             </li>
 
-            <!-- 4. لوحة الشرف -->
+            
             <li class="nav-item">
                 <a class="nav-link {% if active_tab == 'ranking' %}active fw-bold border-bottom-0{% endif %} px-4 py-3" 
                    href="{% url 'teacher_package_ranking' package.id %}"

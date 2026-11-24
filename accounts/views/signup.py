@@ -47,6 +47,7 @@ def manual_signup(request):
         full_name = request.POST.get('full_name', '').strip()
         email = request.POST.get('email', '').strip().lower()
         phone = request.POST.get('phone', '').strip()
+        gender = request.POST.get('gender', '').strip().lower()
         password = request.POST.get('password', '')
         confirm_password = request.POST.get('confirm_password', '')
         role = request.POST.get('role', request.session.get('selected_role', 'student'))
@@ -55,6 +56,10 @@ def manual_signup(request):
 
         if not email:
             messages.error(request, _("يرجى إدخال البريد الإلكتروني."))
+            return redirect('signup_redirect', role=role)
+
+        if gender not in ('male', 'female'):
+            messages.error(request, _("يرجى اختيار النوع (ذكر أو أنثى)."))
             return redirect('signup_redirect', role=role)
 
         if password != confirm_password:
@@ -87,6 +92,7 @@ def manual_signup(request):
             password=password,
             phone=phone,
             role=role,
+            gender=gender,
         )
         if full_name:
             parts = full_name.split(' ', 1)

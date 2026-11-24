@@ -27,7 +27,7 @@
                         </div>
                     </a>
                     
-                    <!-- زر إزالة من الحزمة (وليس حذف نهائي) -->
+                    
                     <form method="POST" action="{% url 'remove_package_content' package.id %}">
                         {% csrf_token %}
                         <input type="hidden" name="type" value="pdf">
@@ -44,7 +44,7 @@
         </div>
     </div>
 
-    <!-- Modal إضافة PDF للحزمة -->
+    
     <div class="modal fade" id="addPackPDFModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">

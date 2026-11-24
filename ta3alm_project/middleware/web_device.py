@@ -243,3 +243,40 @@ class WebDeviceSecurityMiddleware:
 
         response = self.get_response(request)
         return self._apply_security_headers(request, response)
+
+
+import re as _re
+
+
+class FrontendHardeningMiddleware:
+    """
+    ينظف تعليقات HTML الديناميكية من استجابات الويب ويضيف ترويسات الحماية الأمنية.
+    """
+    _HTML_COMMENT_RE = _re.compile(r'<!--(?!\[if).*?-->', _re.DOTALL)
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+        if not getattr(response, 'streaming', False):
+            ctype = (response.get('Content-Type') or '').lower()
+            if 'text/html' in ctype and hasattr(response, 'content') and response.content:
+                try:
+                    charset = getattr(response, 'charset', None) or 'utf-8'
+                    text = response.content.decode(charset, errors='ignore')
+                    cleaned = self._HTML_COMMENT_RE.sub('', text)
+                    if cleaned != text:
+                        response.content = cleaned.encode(charset)
+                        if response.has_header('Content-Length'):
+                            response['Content-Length'] = str(len(response.content))
+                except Exception:
+                    pass
+
+        response.setdefault('X-Content-Type-Options', 'nosniff')
+        response.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+        response.setdefault('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+        for h in ('Server', 'X-Powered-By'):
+            if h in response:
+                del response[h]
+        return response

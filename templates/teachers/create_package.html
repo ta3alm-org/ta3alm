@@ -9,7 +9,7 @@
     <form method="POST" enctype="multipart/form-data" id="pkgForm">
         {% csrf_token %}
         
-        <!-- البيانات الأساسية (كما هي) -->
+        
         <div class="row g-3 mb-4">
             <div class="col-md-8">
                 <label class="form-label fw-bold">{% trans "الاسم" %}</label>
@@ -40,10 +40,10 @@
 
         <hr>
 
-        <!-- واجهة اختيار المحتوى الذكية -->
+        
         <h4 class="fw-bold text-primary mb-3">{% trans "محتوى الحزمة" %}</h4>
         
-        <!-- 1. فلتر المجموعات -->
+        
         <div class="mb-3">
             <label class="form-label fw-bold">{% trans "تصفية حسب المجموعة:" %}</label>
             <select id="groupFilter" class="form-select">
@@ -55,7 +55,7 @@
         </div>
 
         <div class="row">
-            <!-- المحاضرات -->
+            
             <div class="col-md-6">
                 <div class="card h-100">
                     <div class="card-header bg-dark text-white fw-bold">📹 {% trans "المحاضرات" %}</div>
@@ -78,7 +78,7 @@
                 </div>
             </div>
 
-            <!-- الامتحانات -->
+            
             <div class="col-md-6">
                 <div class="card h-100">
                     <div class="card-header bg-warning text-dark fw-bold">📝 {% trans "الامتحانات" %}</div>
@@ -108,7 +108,7 @@
     </form>
 </div>
 
-<!-- سكريبت الفلترة -->
+
 <script>
     document.getElementById('groupFilter').addEventListener('change', function() {
         const selectedGroup = this.value;

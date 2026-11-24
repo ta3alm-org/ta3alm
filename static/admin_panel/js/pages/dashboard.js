@@ -1,6 +1,5 @@
-/**
- * وحدة تحكم صفحة لوحة القيادة الرئيسية.
- */
+
+
 import { emit, on } from '../core/events.js';
 
 export function initDashboardPage() {

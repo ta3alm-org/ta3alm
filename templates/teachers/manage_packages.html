@@ -5,7 +5,7 @@
 {% block content %}
 <div class="container py-5">
     
-    <!-- الهيدر -->
+    
     <div class="d-flex flex-wrap justify-content-between align-items-center mb-5 gap-3">
         <div>
             <h2 class="fw-bold text-primary mb-1">
@@ -24,13 +24,13 @@
         </div>
     </div>
 
-    <!-- شبكة الحزم -->
+    
     <div class="row g-4">
         {% for pkg in packages %}
         <div class="col-md-6 col-lg-4">
             <div class="card h-100 shadow-sm border-0 hover-up overflow-hidden">
                 
-                <!-- صورة الغلاف -->
+                
                 <div class="position-relative">
                     {% if pkg.image %}
                         <img src="{{ pkg.image.url }}" class="card-img-top" style="height: 180px; object-fit: cover;">
@@ -40,12 +40,12 @@
                         </div>
                     {% endif %}
                     
-                    <!-- السعر -->
+                    
                     <span class="position-absolute top-0 end-0 m-3 badge bg-success fs-6 shadow">
                         {{ pkg.price }} EGP
                     </span>
 
-                    <!-- الصف -->
+                    
                     <span class="position-absolute bottom-0 start-0 m-3 badge bg-dark bg-opacity-75 backdrop-blur border border-white">
                         {{ pkg.get_grade_display }}
                     </span>
@@ -66,25 +66,19 @@
 
                     <div class="mt-auto d-grid gap-2">
                         
-                        <!-- زر الإدارة (الجديد) -->
+                        
                         <a href="{% url 'teacher_package_detail' pkg.id %}" class="btn btn-primary fw-bold shadow-sm">
                             <i class="bi bi-gear-fill me-2"></i> {% trans "إدارة الحزمة" %}
                         </a>
                         
                         <div class="d-flex gap-2">
-                            <!-- زر التعديل -->
+                            
                             <a href="{% url 'edit_package' pkg.id %}" class="btn btn-outline-secondary w-50 btn-sm">
                                 <i class="bi bi-pencil me-1"></i> {% trans "تعديل" %}
                             </a>
                             
-                            <!-- زر الحذف -->
-                            {% comment %} <form method="POST" class="w-50">
-                                {% csrf_token %}
-                                <input type="hidden" name="pkg_id" value="{{ pkg.id }}">
-                                <button type="submit" class="btn btn-outline-danger w-100 btn-sm" onclick="return confirm('{% trans "حذف الحزمة؟ سيختفي المحتوى من عند الطلاب المشتركين." %}')">
-                                    <i class="bi bi-trash me-1"></i> {% trans "حذف" %}
-                                </button>
-                            </form> {% endcomment %}
+                            
+                            
                         </div>
 
                     </div>

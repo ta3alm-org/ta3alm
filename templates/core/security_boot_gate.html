@@ -85,38 +85,12 @@
         .loader-fill {
             width: 100%;
             height: 100%;
-
-            background: {
-                % if gate.code=='MAINTENANCE_MODE' %
-            }
-
-            var(--warning) {
-                % else %
-            }
-
-            var(--danger) {
-                % endif %
-            }
-
-            ;
+            background: {% if gate.code == 'MAINTENANCE_MODE' %}var(--warning){% else %}var(--danger){% endif %};
         }
 
         .gate-card {
             background: var(--surface);
-
-            border: 1.5px solid {
-                % if gate.code=='MAINTENANCE_MODE' %
-            }
-
-            rgba(217, 119, 6, 0.35) {
-                % else %
-            }
-
-            rgba(198, 40, 40, 0.30) {
-                % endif %
-            }
-
-            ;
+            border: 1.5px solid {% if gate.code == 'MAINTENANCE_MODE' %}rgba(217, 119, 6, 0.35){% else %}rgba(198, 40, 40, 0.30){% endif %};
             border-radius: 20px;
             padding: 24px 20px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.04);
@@ -131,44 +105,20 @@
             align-items: center;
             justify-content: center;
             font-size: 30px;
-
-                {
-                % if gate.code=='MAINTENANCE_MODE' %
-            }
-
+            {% if gate.code == 'MAINTENANCE_MODE' %}
             background: rgba(217, 119, 6, 0.12);
             color: var(--warning);
-
-                {
-                % else %
-            }
-
+            {% else %}
             background: rgba(198, 40, 40, 0.12);
             color: var(--danger);
-
-                {
-                % endif %
-            }
+            {% endif %}
         }
 
         .gate-title {
             font-size: 19px;
             font-weight: 900;
             margin-bottom: 10px;
-
-            color: {
-                % if gate.code=='MAINTENANCE_MODE' %
-            }
-
-            #92400E {
-                % else %
-            }
-
-            var(--danger) {
-                % endif %
-            }
-
-            ;
+            color: {% if gate.code == 'MAINTENANCE_MODE' %}#92400E{% else %}var(--danger){% endif %};
         }
 
         .gate-msg {

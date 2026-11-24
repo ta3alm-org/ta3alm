@@ -9,7 +9,7 @@
         <a href="{% url 'my_package_content' package.id %}" class="btn btn-outline-secondary">{% trans "عودة" %}</a>
     </div>
 
-    <!-- المجموع الكلي -->
+    
     <div class="card bg-success text-white mb-4 shadow border-0">
         <div class="card-body text-center p-4">
             <h1 class="display-4 fw-bold">{{ total_score }}</h1>
@@ -18,7 +18,7 @@
     </div>
 
     <div class="row g-4">
-        <!-- 1. الامتحانات -->
+        
         <div class="col-md-6">
             <div class="card shadow-sm h-100">
                 <div class="card-header bg-warning text-dark fw-bold">{% trans "نتائج الامتحانات" %}</div>
@@ -35,7 +35,7 @@
             </div>
         </div>
 
-        <!-- 2. الفيديوهات -->
+        
         <div class="col-md-6">
             <div class="card shadow-sm h-100">
                 <div class="card-header bg-primary text-white fw-bold">{% trans "نقاط المشاهدة" %}</div>

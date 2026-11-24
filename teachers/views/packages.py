@@ -23,7 +23,10 @@ from teachers.forms import CoursePackageForm
 from teachers.models import CoursePackage
 from core.utils import get_optimized_package_leaderboard
 
-from teachers.views.permissions import get_package_permission
+from teachers.views.permissions import (
+    get_package_permission,
+    is_platform_content_admin,
+)
 
 
 @login_required
@@ -127,30 +130,32 @@ def teacher_packages(request):
 
 @login_required
 def edit_package(request, package_id):
-    # 1. تعريف المعلم بشكل آمن
-    try:
-        teacher = request.user.teacher_profile
-    except:
-        return redirect('home')
-    
-    # 2. جلب الحزمة (مع التأكد من الملكية)
-    package = get_object_or_404(CoursePackage, id=package_id, teacher=teacher)
+    is_admin = is_platform_content_admin(request.user)
+    if is_admin:
+        package = get_object_or_404(CoursePackage, id=package_id)
+        teacher = package.teacher
+    else:
+        try:
+            teacher = request.user.teacher_profile
+        except Exception:
+            return redirect('home')
+        package = get_object_or_404(CoursePackage, id=package_id, teacher=teacher)
+        if teacher.current_plan and not teacher.current_plan.allow_online_packages:
+            messages.error(request, "باقتك الحالية لا تدعم تعديل الحزم الأونلاين.")
+            return redirect('teacher_packages')
 
-    # 3. التحقق من صلاحية الباقة (لتعديل الحزم الأونلاين)
-    if teacher.current_plan and not teacher.current_plan.allow_online_packages:
-        messages.error(request, "باقتك الحالية لا تدعم تعديل الحزم الأونلاين.")
-        return redirect('teacher_packages')
-
+    form_user = teacher.user
     if request.method == 'POST':
-        # نمرر user للفورم لفلترة المحتوى
-        form = CoursePackageForm(request.user, request.POST, request.FILES, instance=package)
+        form = CoursePackageForm(form_user, request.POST, request.FILES, instance=package)
         if form.is_valid():
             form.save()
-            form.save_m2m() # هام للعلاقات المتعددة
+            form.save_m2m()
             messages.success(request, "تم تعديل الحزمة بنجاح.")
+            if is_admin:
+                return redirect('admin_panel:content_package_workspace', package_id=package.id)
             return redirect('teacher_packages')
     else:
-        form = CoursePackageForm(user=request.user, instance=package)
+        form = CoursePackageForm(user=form_user, instance=package)
 
     # بيانات للعرض في التيمبلت
     groups = teacher.groups.prefetch_related('lectures', 'exams').all()
@@ -175,7 +180,9 @@ def teacher_package_detail(request, package_id):
     # لاحظ: نستخدم دالة مخصصة أو نفحص يدوياً لأن get_group_permission للمجموعات فقط
     
     is_owner = False
-    if package.teacher.user == request.user:
+    if is_platform_content_admin(request.user):
+        is_owner = True
+    elif package.teacher.user == request.user:
         is_owner = True
     elif request.user.role == 'assistant':
         job = AssistantJob.objects.filter(assistant__user=request.user, teacher=package.teacher, is_active=True).first()
@@ -200,7 +207,9 @@ def teacher_package_students(request, package_id):
     
     # التحقق من الصلاحية (معلم أو مساعد)
     is_owner = False
-    if package.teacher.user == request.user:
+    if is_platform_content_admin(request.user):
+        is_owner = True
+    elif package.teacher.user == request.user:
         is_owner = True
     elif request.user.role == 'assistant':
         job = AssistantJob.objects.filter(assistant__user=request.user, teacher=package.teacher, is_active=True).first()
@@ -243,7 +252,9 @@ def teacher_package_ranking(request, package_id):
     
     # التحقق من الصلاحية (معلم أو مساعد)
     is_owner = False
-    if package.teacher.user == request.user:
+    if is_platform_content_admin(request.user):
+        is_owner = True
+    elif package.teacher.user == request.user:
         is_owner = True
     elif request.user.role == 'assistant':
         job = AssistantJob.objects.filter(
@@ -275,7 +286,7 @@ def import_package_content(request, package_id):
     package = get_object_or_404(CoursePackage, id=package_id)
     
     # التحقق من الصلاحيات (مالك أو مساعد)
-    if package.teacher.user != request.user:
+    if not is_platform_content_admin(request.user) and package.teacher.user != request.user:
         # تحقق إضافي للمساعد إذا لزم الأمر
         if not (request.user.role == 'assistant' and AssistantJob.objects.filter(assistant__user=request.user, teacher=package.teacher, can_manage_packages=True).exists()):
              return redirect('home')

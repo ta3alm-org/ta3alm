@@ -3,23 +3,23 @@
 {% block title %}{% trans "المحاضرات" %} | {{ group.name }}{% endblock %}
 
 {% block content %}
-    <!-- الناف بار -->
+    
     {% include 'teachers/includes/group_navbar.html' %}
 
     <div class="container py-3">
-        <!-- الأزرار والبحث -->
+        
         <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
             <h4 class="fw-bold text-dark border-start border-4 border-primary ps-3 mb-0">{% trans "مكتبة المحاضرات" %}</h4>
             
             <div class="d-flex gap-2">
-                <!-- البحث -->
+                
                 <form method="GET" class="d-flex shadow-sm rounded-pill p-1 border bg-white me-2">
                     <input type="text" name="q" class="form-control border-0 rounded-pill shadow-none px-3" 
                            placeholder="{% trans 'بحث...' %}" value="{{ query|default:'' }}">
                     <button type="submit" class="btn btn-light rounded-circle"><i class="bi bi-search"></i></button>
                 </form>
 
-                <!-- زر الاستيراد -->
+                
                 {% if other_groups %}
                 <button class="btn btn-outline-dark shadow-sm" data-bs-toggle="modal" data-bs-target="#importModal">
                     <i class="bi bi-arrow-repeat me-1"></i> {% trans "استيراد" %}
@@ -28,14 +28,14 @@
 
                 
                 
-                <!-- زر الإضافة -->
+                
                 <button class="btn btn-danger shadow-sm px-4" data-bs-toggle="modal" data-bs-target="#addVideoModal">
                     <i class="bi bi-youtube me-2"></i> {% trans "محاضرة جديدة" %}
                 </button>
             </div>
         </div>
 
-        <!-- شبكة الفيديوهات -->
+        
         <div class="row g-4">
             {% for lecture in lectures %}
             <div class="col-md-6 col-lg-4">
@@ -95,7 +95,7 @@
         </div>
     </div>
 
-    <!-- 1. Modal إضافة فيديو -->
+    
     <div class="modal fade" id="addVideoModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -123,7 +123,7 @@
         </div>
     </div>
 
-    <!-- 2. Modal الاستيراد المخصص -->
+    
     <div class="modal fade" id="importModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
@@ -203,36 +203,36 @@
         const contentArea = document.getElementById('contentArea');
         const allContentDivs = document.querySelectorAll('.group-content');
         
-        // عند تغيير المجموعة
+        
         groupSelect.addEventListener('change', function() {
             const selectedClass = this.value;
             
-            // إظهار المنطقة
+            
             contentArea.style.display = 'block';
 
-            // إخفاء الكل وإلغاء تحديد الكل (Reset)
+            
             allContentDivs.forEach(div => {
                 div.style.display = 'none';
-                // إلغاء الـ check عشان ميبعتش بيانات غلط
+                
                 div.querySelectorAll('input[type="checkbox"]').forEach(chk => {
                     chk.checked = false;
                 });
             });
 
-            // إظهار المجموعة المختارة فقط
+            
             if (selectedClass) {
                 const activeDivs = document.querySelectorAll('.' + selectedClass);
                 activeDivs.forEach(div => div.style.display = 'block');
             }
             
-            // تصفير أزرار "تحديد الكل"
+            
             document.getElementById('selectAllLecs').checked = false;
             document.getElementById('selectAllExams').checked = false;
         });
 
-        // تحديد الكل (محاضرات) - للمجموعة الظاهرة فقط
+        
         document.getElementById('selectAllLecs').addEventListener('change', function() {
-            // نختار فقط العناصر التي ليست مخفية (offsetParent !== null)
+            
             const visibleCheckboxes = document.querySelectorAll('.group-content .lec-chk');
             visibleCheckboxes.forEach(chk => {
                 if (chk.closest('.group-content').style.display === 'block') {
@@ -241,7 +241,7 @@
             });
         });
 
-        // تحديد الكل (امتحانات) - للمجموعة الظاهرة فقط
+        
         document.getElementById('selectAllExams').addEventListener('change', function() {
             const visibleCheckboxes = document.querySelectorAll('.group-content .exam-chk');
             visibleCheckboxes.forEach(chk => {

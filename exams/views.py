@@ -8,6 +8,7 @@ from .forms import QuestionForm
 from assistants.models import AssistantJob
 from students.models import PackageExamResult
 from teachers.views import get_group_permission
+from teachers.views.permissions import is_platform_content_admin
 
 
 def _get_exam_permission(request, exam):
@@ -29,7 +30,9 @@ def _get_exam_permission(request, exam):
 
     teacher = package.teacher
     is_owner = False
-    if teacher.user == request.user:
+    if is_platform_content_admin(request.user):
+        is_owner = True
+    elif teacher.user == request.user:
         is_owner = True
     elif getattr(request.user, 'role', '') == 'assistant':
         job = AssistantJob.objects.filter(

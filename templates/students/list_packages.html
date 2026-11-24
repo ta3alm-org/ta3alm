@@ -5,12 +5,12 @@
 {% block content %}
 <div class="container py-5">
     
-    <!-- هيدر وبحث -->
+    
     <div class="text-center mb-5">
         <h2 class="fw-bold text-primary mb-3">{% trans "استكشف الكورسات المتاحة" %}</h2>
         <div class="row justify-content-center">
             <div class="col-md-6">
-                <!-- فورم بحث بسيط (يمكنك تفعيله في الفيو لاحقاً) -->
+                
                 <form method="GET" class="d-flex shadow-sm rounded-pill p-1 border">
                     <input type="text" name="q" class="form-control border-0 rounded-pill shadow-none px-3" placeholder="{% trans 'ابحث عن كورس...' %}">
                     <button class="btn btn-primary rounded-pill px-4">{% trans "بحث" %}</button>
@@ -19,13 +19,13 @@
         </div>
     </div>
 
-    <!-- شبكة الحزم -->
+    
     <div class="row g-4">
         {% for pkg in packages %}
         <div class="col-md-6 col-lg-4">
             <div class="card h-100 border-0 shadow-sm hover-up overflow-hidden">
                 
-                <!-- صورة الغلاف -->
+                
                 <div class="position-relative">
                     {% if pkg.image %}
                         <img src="{{ pkg.image.url }}" class="card-img-top" style="height: 200px; object-fit: cover;">
@@ -35,12 +35,12 @@
                         </div>
                     {% endif %}
                     
-                    <!-- السعر -->
+                    
                     <span class="position-absolute top-0 end-0 m-3 badge bg-success fs-6 shadow">
                         {{ pkg.price }} EGP
                     </span>
                     
-                    <!-- الصف -->
+                    
                     <span class="position-absolute bottom-0 start-0 m-3 badge bg-dark bg-opacity-75 backdrop-blur">
                         {{ pkg.get_grade_display }}
                     </span>

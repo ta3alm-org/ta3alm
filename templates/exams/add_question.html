@@ -15,13 +15,13 @@
                     <form method="POST" enctype="multipart/form-data">
                         {% csrf_token %}
                         
-                        <!-- 1. نص السؤال -->
+                        
                         <div class="mb-4">
                             <label class="form-label fw-bold">{% trans "نص السؤال" %}</label>
                             {{ form.text }}
                         </div>
 
-                        <!-- 2. الصورة (حسب الباقة) -->
+                        
                         <div class="mb-4 bg-light p-3 rounded border {% if not allow_images %}border-warning{% endif %}">
                             <label class="form-label fw-bold text-dark"><i class="bi bi-image"></i> {% trans "صورة توضيحية" %}</label>
                             
@@ -41,7 +41,7 @@
 
                         <hr class="my-4">
 
-                        <!-- 3. الاختيارات -->
+                        
                         <h5 class="fw-bold text-secondary mb-3">{% trans "الاختيارات" %}</h5>
                         <div class="row g-3">
                             <div class="col-md-6">
@@ -64,7 +64,7 @@
 
                         <hr class="my-4">
 
-                        <!-- 4. الإجابة والدرجة -->
+                        
                         <div class="row g-3">
                             <div class="col-md-6">
                                 <label class="form-label fw-bold">{% trans "الإجابة الصحيحة" %}</label>
@@ -76,7 +76,7 @@
                             </div>
                         </div>
 
-                        <!-- 5. الأزرار -->
+                        
                         <div class="d-flex justify-content-between mt-5">
                             <a href="{% url 'exam_manage' exam.id %}" class="btn btn-outline-secondary px-4">{% trans "إلغاء وعودة" %}</a>
                             <button type="submit" class="btn btn-success btn-lg px-5 fw-bold shadow">

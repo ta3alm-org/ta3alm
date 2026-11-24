@@ -81,6 +81,7 @@ from .views_admin import (
     AdminFinanceAPIView,
     AdminPlansAndStaffAPIView,
     AdminSupportInboxAPIView,
+    AdminContentHubAPIView,
 )
 from .views_video import (
     VideoAuthorizeAPIView,
@@ -110,6 +111,10 @@ from .views_support import (
     ClientErrorReportSubmitAPIView,
     SupportChatAPIView,
     SupportChatQuickReplyAPIView,
+)
+from .views.group_chat import (
+    GroupChatAPIView,
+    GroupChatMessageActionAPIView,
 )
 
 urlpatterns = [
@@ -161,6 +166,8 @@ urlpatterns = [
     path('student/groups/<int:group_id>/marks/', StudentGroupMarksAPIView.as_view(), name='api_v1_student_group_marks'),
     path('student/groups/<int:group_id>/ranking/', StudentGroupRankingAPIView.as_view(), name='api_v1_student_group_ranking'),
     path('student/groups/<int:group_id>/contact/', StudentGroupContactAPIView.as_view(), name='api_v1_student_group_contact'),
+    path('groups/<int:group_id>/chat/', GroupChatAPIView.as_view(), name='api_v1_group_chat'),
+    path('groups/<int:group_id>/chat/<int:message_id>/', GroupChatMessageActionAPIView.as_view(), name='api_v1_group_chat_message'),
     path('student/packages/', StudentPackagesStoreAPIView.as_view(), name='api_v1_student_packages'),
     path('student/packages/<int:package_id>/', StudentPackageDetailAPIView.as_view(), name='api_v1_student_package_detail'),
     path('student/packages/<int:package_id>/content/', StudentMyPackageContentAPIView.as_view(), name='api_v1_student_package_content'),
@@ -201,6 +208,7 @@ urlpatterns = [
     path('admin/finance/', AdminFinanceAPIView.as_view(), name='api_v1_admin_finance'),
     path('admin/plans-staff/', AdminPlansAndStaffAPIView.as_view(), name='api_v1_admin_plans_staff'),
     path('admin/support/', AdminSupportInboxAPIView.as_view(), name='api_v1_admin_support'),
+    path('admin/content-hub/', AdminContentHubAPIView.as_view(), name='api_v1_admin_content_hub'),
 
     # 6. Secure Video Playback & Progress & App Integrity
     path('videos/continue-watching/', ContinueWatchingAPIView.as_view(), name='api_v1_video_continue_watching'),

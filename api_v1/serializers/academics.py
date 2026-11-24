@@ -38,7 +38,7 @@ class GroupSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'grade', 'grade_display', 'teacher',
             'students_count', 'pending_count', 'lectures_count', 'exams_count',
-            'is_allowed_by_plan', 'created_at',
+            'is_allowed_by_plan', 'is_chat_locked', 'created_at',
         ]
         read_only_fields = ['id', 'teacher', 'created_at']
 

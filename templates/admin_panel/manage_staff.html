@@ -19,7 +19,7 @@
     </div>
 </div>
 
-<!-- Role Legend -->
+
 <div class="ap-flex ap-wrap ap-gap-2 ap-mb-4">
     {% for val, lbl in admin_roles %}
     <span class="ap-badge {% if val == 'owner' %}ap-badge-accent{% elif val == 'moderator' %}ap-badge-info{% elif val == 'support' %}ap-badge-success{% else %}ap-badge-warning{% endif %}">
@@ -32,7 +32,7 @@
     {% include 'admin_panel/partials/_staff_table.html' %}
 </div>
 
-<!-- Appoint / Create Admin Modal -->
+
 <div class="ap-modal" id="appointModal" aria-hidden="true" role="dialog" aria-modal="true">
     <div class="ap-overlay-backdrop" data-modal-close></div>
     <div class="ap-modal-dialog">

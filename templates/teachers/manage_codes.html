@@ -5,7 +5,7 @@
 {% block content %}
 <div class="container py-4">
     
-    <!-- 1. هيدر الصفحة (يختفي عند الطباعة) -->
+    
     <div class="d-print-none">
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb">
@@ -20,7 +20,7 @@
                 <p class="text-muted mb-0">{{ lecture.title }}</p>
             </div>
             
-            <!-- إحصائيات -->
+            
             <div class="col-md-5 text-md-end">
                 <div class="d-inline-block bg-success bg-opacity-10 text-success px-3 py-2 rounded-3 me-2">
                     <span class="d-block small fw-bold">{% trans "متاح" %}</span>
@@ -33,7 +33,7 @@
             </div>
         </div>
 
-        <!-- أدوات التحكم -->
+        
         <div class="card bg-light border-0 mb-4">
             <div class="card-body">
                 <form method="POST" class="row g-2 align-items-center">
@@ -68,9 +68,9 @@
         </div>
     </div>
 
-    <!-- 2. جدول الأكواد -->
+    
     <div class="card shadow-sm border-0 section-to-print">
-        <!-- ترويسة للطباعة فقط -->
+        
         <div class="d-none d-print-block text-center mb-4 pt-3">
             <h3>{{ lecture.title }}</h3>
             <p>{% trans "مستر/" %} {{ group.teacher.user.first_name }} {{ group.teacher.user.last_name }}</p>

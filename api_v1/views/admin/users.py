@@ -242,11 +242,15 @@ class AdminManageUsersAPIView(APIView):
             })
 
         if action == 'edit_user':
-            for field in ('first_name', 'last_name', 'email', 'phone', 'national_id', 'custom_id', 'role'):
+            for field in ('first_name', 'last_name', 'email', 'phone', 'national_id', 'custom_id', 'gender', 'role'):
                 if field in request.data and request.data[field] is not None:
                     val = str(request.data[field]).strip()
-                    if field in ('national_id', 'custom_id') and not val:
+                    if field in ('national_id', 'custom_id', 'gender') and not val:
                         val = None
+                    if field == 'gender' and val is not None:
+                        val = val.lower()
+                        if val not in ('male', 'female'):
+                            return Response({'error': 'قيمة النوع غير صالحة (male أو female).'}, status=status.HTTP_400_BAD_REQUEST)
                     setattr(target, field, val)
             target.save()
 

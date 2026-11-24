@@ -77,7 +77,7 @@ class SiteSetting(models.Model):
 
     @staticmethod
     def normalize_apk_download_url(raw: str) -> str:
-        """تحويل روابط GitHub /blob/ إلى رابط raw المباشر لتفادي تنزيل صفحات HTML بدلاً من ملف الـ APK."""
+        """تحويل روابط GitHub / Google Drive / Dropbox إلى روابط تحميل مباشر سريع لتفادي صفحات HTML."""
         url = str(raw or '').strip()
         if not url:
             return ''
@@ -89,6 +89,20 @@ class SiteSetting(models.Model):
         if match:
             owner, repo, rest = match.groups()
             return f'https://raw.githubusercontent.com/{owner}/{repo}/{rest}'
+        gd_match = re.match(
+            r'^https?://drive\.google\.com/file/d/([^/?#]+)',
+            url,
+            flags=re.IGNORECASE,
+        )
+        if gd_match:
+            file_id = gd_match.group(1)
+            return f'https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t'
+        if 'dropbox.com/' in url.lower():
+            if 'dl=0' in url:
+                return url.replace('dl=0', 'dl=1')
+            if 'dl=1' not in url:
+                sep = '&' if '?' in url else '?'
+                return f'{url}{sep}dl=1'
         return url
 
     def get_assetlinks_fingerprints(self) -> list:

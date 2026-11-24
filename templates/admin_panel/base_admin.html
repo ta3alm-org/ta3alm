@@ -19,13 +19,13 @@
         })();
     </script>
 
-    <!-- Typography & Icons -->
+    
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 
-    <!-- Design System CSS -->
+    
     <link rel="stylesheet" href="{% static 'admin_panel/css/tokens.css' %}">
     <link rel="stylesheet" href="{% static 'admin_panel/css/base.css' %}">
     <link rel="stylesheet" href="{% static 'admin_panel/css/layout.css' %}">
@@ -38,10 +38,10 @@
 <body data-page="{% block body_page %}{% endblock %}">
 
 <div class="ap-shell">
-    <!-- Backdrop للموبايل -->
+    
     <div class="ap-sidebar-backdrop" id="apSidebarBackdrop"></div>
 
-    <!-- ════════════════════════ SIDEBAR ════════════════════════ -->
+    
     <aside class="ap-sidebar" id="adminSidebar" aria-label="القائمة الرئيسية">
         <div class="ap-sidebar-head">
             <a href="{% url 'admin_panel:dashboard' %}" class="ap-brand">
@@ -162,9 +162,17 @@
             </div>
             {% endif %}
 
-            {% if can_manage_plans or is_owner %}
+            {% if can_manage_plans or is_owner or can_manage_content %}
             <div class="ap-nav-group">
-                <div class="ap-nav-group-label">الباقات والمناهج</div>
+                <div class="ap-nav-group-label">المحتوى والباقات والمناهج</div>
+                {% if can_manage_content %}
+                <a href="{% url 'admin_panel:content_hub' %}"
+                   class="ap-nav-link {% block nav_content_hub %}{% endblock %}"
+                   data-tooltip="إدارة المجموعات والحزم">
+                    <i class="bi bi-collection-play"></i>
+                    <span class="ap-nav-label">المجموعات والحزم</span>
+                </a>
+                {% endif %}
                 {% if can_manage_plans %}
                 <a href="{% url 'admin_panel:manage_plans' %}"
                    class="ap-nav-link {% block nav_plans %}{% endblock %}"
@@ -239,7 +247,7 @@
         </div>
     </aside>
 
-    <!-- ════════════════════════ WORKSPACE ════════════════════════ -->
+    
     <div class="ap-workspace">
         <header class="ap-topbar">
             <div class="ap-topbar-start">
@@ -341,10 +349,10 @@
     </div>
 </div>
 
-<!-- ════════════════════════ GLOBAL OVERLAYS ════════════════════════ -->
+
 <div id="apToastStack" class="ap-toast-stack" aria-live="polite" aria-atomic="true"></div>
 
-<!-- Confirm / Prompt Dialog -->
+
 <div class="ap-modal is-confirm" id="apConfirmModal" aria-hidden="true" role="dialog" aria-modal="true">
     <div class="ap-overlay-backdrop" data-confirm-cancel></div>
     <div class="ap-modal-dialog is-sm">
@@ -368,7 +376,7 @@
     </div>
 </div>
 
-<!-- Image Lightbox Modal -->
+
 <div class="ap-modal" id="apLightboxModal" aria-hidden="true" role="dialog" aria-modal="true">
     <div class="ap-overlay-backdrop" data-modal-close></div>
     <div class="ap-modal-dialog is-lg">
@@ -390,7 +398,7 @@
     </div>
 </div>
 
-<!-- Quick Jump Palette -->
+
 <div class="ap-modal" id="apQuickJumpModal" aria-hidden="true" role="dialog" aria-modal="true">
     <div class="ap-overlay-backdrop" data-modal-close></div>
     <div class="ap-modal-dialog is-sm">
@@ -407,6 +415,7 @@
     </div>
 </div>
 
+<script src="{% static 'js/web_shield.js' %}"></script>
 <script type="module" src="{% static 'admin_panel/js/app.js' %}"></script>
 {% block extra_js %}{% endblock %}
 </body>

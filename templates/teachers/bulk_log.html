@@ -107,11 +107,11 @@
 </div>
 
 <script>
-    // كود التصفير عند الغياب
+    
     document.querySelectorAll('[id^="abs_"]').forEach(chk => {
         chk.addEventListener('change', function() {
             const row = this.closest('tr');
-            // نختار أول 3 خانات فقط (واجب، حصة، تسميع) ونترك الشامل
+            
             const inputs = row.querySelectorAll('input[type="number"]:not([name^="comp_score"])');
             
             if (this.checked) {

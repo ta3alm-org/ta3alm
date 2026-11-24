@@ -81,11 +81,11 @@
                                         <i class="bi bi-bar-chart"></i>
                                     </a>
                                 </td>
-                                <!-- داخل Loop الطلاب -->
+                                
                                 <td>
-                                    <!-- ... الأزرار القديمة ... -->
                                     
-                                    <!-- زر الحذف -->
+                                    
+                                    
                                     <a href="{% url 'remove_student_from_group' group.id enroll.student.id %}" 
                                     class="btn btn-sm btn-outline-danger" 
                                     onclick="return confirm('{% trans "هل أنت متأكد من حذف الطالب من المجموعة؟ سيتم حذف سجلات حضوره أيضاً." %}')">

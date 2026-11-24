@@ -1,0 +1,206 @@
+<div data-tabs="content-hub" data-tabs-sync-url="1" data-tabs-container="#contentHubPanels" class="ap-tabs">
+    <button type="button" class="ap-tab-btn {% if active_tab|default:'groups' == 'groups' %}active{% endif %}"
+            data-tab-target="tab-hub-groups">
+        <i class="bi bi-diagram-3"></i>
+        <span>المجموعات الدراسية</span>
+        <span class="ap-tab-count" id="tabCountHubGroups">{{ groups|length }}</span>
+    </button>
+    <button type="button" class="ap-tab-btn {% if active_tab == 'packages' %}active{% endif %}"
+            data-tab-target="tab-hub-packages">
+        <i class="bi bi-box-seam"></i>
+        <span>الحزم والباقات الأونلاين</span>
+        <span class="ap-tab-count" id="tabCountHubPackages">{{ packages|length }}</span>
+    </button>
+</div>
+
+<div id="contentHubPanels">
+    <div class="ap-tab-panel {% if active_tab|default:'groups' == 'groups' %}active{% endif %}"
+         id="tab-hub-groups" data-tab-group="content-hub">
+        <div class="ap-card">
+            <div class="ap-table-wrap">
+                <table class="ap-table">
+                    <thead>
+                        <tr>
+                            <th>المجموعة</th>
+                            <th>المعلم</th>
+                            <th>الصف</th>
+                            <th>الطلاب</th>
+                            <th>المحتوى</th>
+                            <th>الشات</th>
+                            <th class="ap-cell-actions">إجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for g in groups %}
+                        <tr>
+                            <td>
+                                <div class="ap-strong">{{ g.name }}</div>
+                                <div class="ap-xs ap-muted">ID #{{ g.id }}</div>
+                            </td>
+                            <td>
+                                <div class="ap-strong">{{ g.teacher.user.get_full_name|default:g.teacher.user.username }}</div>
+                                <div class="ap-xs ap-muted">{{ g.teacher.subject.name|default:"—" }}</div>
+                            </td>
+                            <td><span class="ap-badge ap-badge-neutral">{{ g.get_grade_display }}</span></td>
+                            <td>
+                                <span class="ap-badge ap-badge-success">{{ g.active_students }} نشط</span>
+                                {% if g.pending_students %}
+                                <span class="ap-badge ap-badge-warning">{{ g.pending_students }} معلق</span>
+                                {% endif %}
+                            </td>
+                            <td class="ap-xs ap-muted">
+                                {{ g.lectures_cnt }} محاضرة · {{ g.exams_cnt }} امتحان · {{ g.pdfs_cnt }} مذكرة
+                            </td>
+                            <td>
+                                {% if g.is_chat_locked %}
+                                <span class="ap-badge ap-badge-danger"><i class="bi bi-lock"></i> مغلق ({{ g.chat_cnt }})</span>
+                                {% else %}
+                                <span class="ap-badge ap-badge-success"><i class="bi bi-chat-dots"></i> مفتوح ({{ g.chat_cnt }})</span>
+                                {% endif %}
+                            </td>
+                            <td class="ap-cell-actions">
+                                <div class="ap-inline-flex ap-items-center ap-gap-1">
+                                    <a href="{% url 'admin_panel:content_group_workspace' g.id %}" class="ap-btn ap-btn-sm ap-btn-primary">
+                                        <i class="bi bi-sliders"></i> إدارة
+                                    </a>
+                                    <button type="button" class="ap-btn ap-btn-sm ap-btn-secondary"
+                                            data-hub-edit-group
+                                            data-group-id="{{ g.id }}"
+                                            data-teacher-id="{{ g.teacher_id }}"
+                                            data-name="{{ g.name }}"
+                                            data-grade="{{ g.grade }}">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button type="button" class="ap-btn ap-btn-sm ap-btn-secondary"
+                                            data-hub-enroll="group"
+                                            data-target-id="{{ g.id }}"
+                                            data-target-name="{{ g.name }}"
+                                            title="ضم طالب">
+                                        <i class="bi bi-person-plus"></i>
+                                    </button>
+                                    <form method="POST" action="{% url 'admin_panel:content_hub' %}" data-ajax-form data-hub-action="1" class="ap-inline-flex">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="toggle_group_chat_lock">
+                                        <input type="hidden" name="group_id" value="{{ g.id }}">
+                                        <button type="submit" class="ap-btn ap-btn-sm ap-btn-secondary" title="{% if g.is_chat_locked %}فتح الشات{% else %}قفل الشات{% endif %}">
+                                            <i class="bi bi-{% if g.is_chat_locked %}unlock{% else %}lock{% endif %}"></i>
+                                        </button>
+                                    </form>
+                                    <form method="POST" action="{% url 'admin_panel:content_hub' %}" data-ajax-form data-hub-action="1"
+                                          data-confirm="هل تريد حذف المجموعة «{{ g.name }}» بالكامل؟"
+                                          data-confirm-title="حذف المجموعة" data-confirm-variant="danger" class="ap-inline-flex">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="delete_group">
+                                        <input type="hidden" name="group_id" value="{{ g.id }}">
+                                        <button type="submit" class="ap-btn ap-btn-sm ap-btn-danger" title="حذف">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="ap-muted" style="text-align:center; padding:28px;">لا توجد مجموعات مطابقة للتصفية الحالية.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="ap-tab-panel {% if active_tab == 'packages' %}active{% endif %}"
+         id="tab-hub-packages" data-tab-group="content-hub">
+        <div class="ap-card">
+            <div class="ap-table-wrap">
+                <table class="ap-table">
+                    <thead>
+                        <tr>
+                            <th>الحزمة</th>
+                            <th>المعلم</th>
+                            <th>الصف</th>
+                            <th>السعر</th>
+                            <th>المشتركون</th>
+                            <th>المحتوى</th>
+                            <th>الحالة</th>
+                            <th class="ap-cell-actions">إجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in packages %}
+                        <tr>
+                            <td>
+                                <div class="ap-strong">{{ p.title }}</div>
+                                <div class="ap-xs ap-muted">ID #{{ p.id }}</div>
+                            </td>
+                            <td>
+                                <div class="ap-strong">{{ p.teacher.user.get_full_name|default:p.teacher.user.username }}</div>
+                                <div class="ap-xs ap-muted">{{ p.teacher.subject.name|default:"—" }}</div>
+                            </td>
+                            <td><span class="ap-badge ap-badge-neutral">{{ p.get_grade_display }}</span></td>
+                            <td class="ap-strong">{{ p.price }} EGP</td>
+                            <td><span class="ap-badge ap-badge-success">{{ p.subs_cnt }} طالب</span></td>
+                            <td class="ap-xs ap-muted">{{ p.lectures_cnt }} محاضرة · {{ p.exams_cnt }} امتحان · {{ p.pdfs_cnt }} مذكرة</td>
+                            <td>
+                                {% if p.is_active %}
+                                <span class="ap-badge ap-badge-success">مفعلة</span>
+                                {% else %}
+                                <span class="ap-badge ap-badge-danger">متوقفة</span>
+                                {% endif %}
+                            </td>
+                            <td class="ap-cell-actions">
+                                <div class="ap-inline-flex ap-items-center ap-gap-1">
+                                    <a href="{% url 'admin_panel:content_package_workspace' p.id %}" class="ap-btn ap-btn-sm ap-btn-primary">
+                                        <i class="bi bi-sliders"></i> إدارة
+                                    </a>
+                                    <button type="button" class="ap-btn ap-btn-sm ap-btn-secondary"
+                                            data-hub-edit-package
+                                            data-package-id="{{ p.id }}"
+                                            data-teacher-id="{{ p.teacher_id }}"
+                                            data-title="{{ p.title }}"
+                                            data-grade="{{ p.grade }}"
+                                            data-price="{{ p.price }}"
+                                            data-description="{{ p.description }}"
+                                            data-active="{% if p.is_active %}1{% else %}0{% endif %}">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button type="button" class="ap-btn ap-btn-sm ap-btn-secondary"
+                                            data-hub-enroll="package"
+                                            data-target-id="{{ p.id }}"
+                                            data-target-name="{{ p.title }}"
+                                            title="تفعيل لطالب">
+                                        <i class="bi bi-person-plus"></i>
+                                    </button>
+                                    <form method="POST" action="{% url 'admin_panel:content_hub' %}" data-ajax-form data-hub-action="1" class="ap-inline-flex">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="toggle_package_active">
+                                        <input type="hidden" name="package_id" value="{{ p.id }}">
+                                        <button type="submit" class="ap-btn ap-btn-sm ap-btn-secondary" title="تفعيل/إيقاف">
+                                            <i class="bi bi-power"></i>
+                                        </button>
+                                    </form>
+                                    <form method="POST" action="{% url 'admin_panel:content_hub' %}" data-ajax-form data-hub-action="1"
+                                          data-confirm="هل تريد حذف الحزمة «{{ p.title }}»؟"
+                                          data-confirm-title="حذف الحزمة" data-confirm-variant="danger" class="ap-inline-flex">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="delete_package">
+                                        <input type="hidden" name="package_id" value="{{ p.id }}">
+                                        <button type="submit" class="ap-btn ap-btn-sm ap-btn-danger" title="حذف">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="ap-muted" style="text-align:center; padding:28px;">لا توجد حزم مطابقة للتصفية الحالية.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,6 +1,5 @@
-/**
- * نقطة الدخول الرئيسية لواجهة لوحة الإدارة الجديدة (Ta3alm Admin SPA-like Workspace).
- */
+
+
 import { initClientTables } from './components/data-table.js';
 import { initDropdowns } from './components/dropdown.js';
 import { initAjaxForms } from './components/form-handler.js';
@@ -13,6 +12,7 @@ import { initModalTriggers } from './core/modal.js';
 import { flushDjangoMessages, toast } from './core/notifications.js';
 
 import { initAppReleasePage } from './pages/app-release.js';
+import { initContentHubPage } from './pages/content-hub.js';
 import { initCurriculumPage } from './pages/curriculum.js';
 import { initDashboardPage } from './pages/dashboard.js';
 import { initErrorReportsPage } from './pages/error-reports.js';
@@ -78,6 +78,7 @@ const PAGE_INITIALIZERS = {
     'error-reports': initErrorReportsPage,
     notifications: initNotificationsPage,
     'app-release': initAppReleasePage,
+    'content-hub': initContentHubPage,
 };
 
 document.addEventListener('DOMContentLoaded', () => {

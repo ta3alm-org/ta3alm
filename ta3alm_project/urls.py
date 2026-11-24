@@ -64,6 +64,7 @@ urlpatterns += i18n_patterns(
     path('admin/',          admin.site.urls),
     path('accounts/',       include('allauth.urls')),
     path('complete-profile/', account_views.complete_profile, name='complete_profile'),
+    path('complete-gender/', account_views.complete_gender, name='complete_gender'),
     path('manual-signup/',  account_views.manual_signup, name='manual_signup'),
     path('verify-email/',   account_views.verify_email_page, name='verify_email_page'),
     path('verify-email/resend/', account_views.resend_verification_email, name='resend_verification_email'),

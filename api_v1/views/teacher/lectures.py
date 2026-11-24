@@ -20,7 +20,7 @@ from teachers.views import (
     get_group_permission,
     get_package_permission,
 )
-from api_v1.permissions import IsTeacherOrAssistantRole
+from api_v1.permissions import IsTeacherOrAssistantOrAdminRole as IsTeacherOrAssistantRole
 from api_v1.serializers import (
     LectureSerializer,
     VideoCodeSerializer,

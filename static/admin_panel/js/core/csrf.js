@@ -1,6 +1,5 @@
-/**
- * استخراج رمز CSRF بأمان من وسم Meta أو Cookie أو حقل النموذج.
- */
+
+
 export function getCsrfToken(form = null) {
     if (form) {
         const input = form.querySelector('input[name="csrfmiddlewaretoken"]');

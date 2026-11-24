@@ -1,6 +1,5 @@
-/**
- * وحدة تحكم صفحة إدارة الباقات (درج موحّد للإضافة والتعديل + تحديث الشبكة عبر AJAX).
- */
+
+
 import { openDrawer } from '../core/drawer.js';
 import { on } from '../core/events.js';
 

@@ -1,6 +1,5 @@
-/**
- * المعالج الموحد لنماذج AJAX ([data-ajax-form]) مع التأكيد، منع الإرسال المزدوج، وعرض أخطاء التحقق.
- */
+
+
 import { api } from '../core/api.js';
 import { emit } from '../core/events.js';
 import { setButtonLoading } from '../core/loading.js';

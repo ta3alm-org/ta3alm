@@ -1,6 +1,5 @@
-/**
- * إدارة حالات التحميل للأزرار والحاويات.
- */
+
+
 export function setButtonLoading(btn, isLoading) {
     if (!btn) return;
     if (isLoading) {

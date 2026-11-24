@@ -14,7 +14,7 @@
 {% block content %}
 <div class="container py-5">
     <div class="row align-items-center">
-        <!-- الصورة -->
+        
         <div class="col-md-5">
             {% if package.image %}
                 <img src="{{ package.image.url }}" class="img-fluid rounded-4 shadow mb-4 w-100 object-fit-cover" style="max-height: 400px;">
@@ -25,7 +25,7 @@
             {% endif %}
         </div>
         
-        <!-- التفاصيل -->
+        
         <div class="col-md-7">
             <span class="badge bg-dark mb-2">{{ package.get_grade_display }}</span>
             <h1 class="fw-bold mb-2">{{ package.title }}</h1>
@@ -45,7 +45,7 @@
                 </a>
             {% else %}
                 <div class="d-grid gap-2">
-                    <!-- زر الفيزا -->
+                    
                     <form action="{% url 'paymob_package_checkout' package.id %}" method="GET" class="d-grid">
                         <input type="hidden" name="method" value="card">
                         <button type="submit" class="btn btn-primary btn-lg shadow fw-bold">
@@ -53,7 +53,7 @@
                         </button>
                     </form>
                     
-                    <!-- زر المحفظة (يفتح مودال) -->
+                    
                     <button type="button" class="btn btn-outline-success btn-lg shadow fw-bold" data-bs-toggle="modal" data-bs-target="#pkgWalletModal">
                         <i class="bi bi-phone me-2"></i> {% trans "شراء بالمحفظة" %}
                     </button>
@@ -67,7 +67,7 @@
     </div>
 </div>
 
-<!-- Modal المحفظة للطالب -->
+
 <div class="modal fade" id="pkgWalletModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -90,7 +90,7 @@
     </div>
 </div>
 
-<!-- بيانات مهيكلة لجوجل (JSON-LD) -->
+
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",

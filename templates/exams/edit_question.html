@@ -16,17 +16,17 @@
                     <form method="POST" enctype="multipart/form-data">
                         {% csrf_token %}
                         
-                        <!-- 1. نص السؤال -->
+                        
                         <div class="mb-4">
                             <label class="form-label fw-bold">{% trans "نص السؤال" %}</label>
                             {{ form.text }}
                         </div>
 
-                        <!-- 2. الصورة (عرض القديمة + رفع جديدة) -->
+                        
                         <div class="mb-4 bg-light p-3 rounded border">
                             <label class="form-label fw-bold d-block">{% trans "صورة السؤال" %}</label>
                             
-                            <!-- عرض الصورة الحالية (إن وجدت) -->
+                            
                             {% if question.image %}
                                 <div class="mb-3 text-center">
                                     <img src="{{ question.image.url }}" class="img-fluid rounded border shadow-sm" style="max-height: 200px;">
@@ -37,7 +37,7 @@
                                 </div>
                             {% endif %}
                             
-                            <!-- رفع صورة جديدة (حسب الباقة) -->
+                            
                             {% if allow_images %}
                                 <label class="small text-primary fw-bold">{% trans "تغيير الصورة (اختياري):" %}</label>
                                 <input type="file" name="image" class="form-control mt-1" accept="image/*">
@@ -56,7 +56,7 @@
 
                         <hr class="my-4">
 
-                        <!-- 3. الاختيارات -->
+                        
                         <div class="row g-3">
                             <div class="col-md-6">
                                 <label class="small text-muted">{% trans "اختيار A" %}</label>
@@ -78,7 +78,7 @@
 
                         <hr class="my-4">
 
-                        <!-- 4. الإجابة والدرجة -->
+                        
                         <div class="row g-3">
                             <div class="col-md-6">
                                 <label class="form-label fw-bold">{% trans "الإجابة الصحيحة" %}</label>
@@ -90,7 +90,7 @@
                             </div>
                         </div>
 
-                        <!-- 5. الأزرار -->
+                        
                         <div class="d-flex justify-content-between mt-5">
                             <a href="{% url 'exam_manage' exam.id %}" class="btn btn-outline-secondary px-4">{% trans "إلغاء" %}</a>
                             <button type="submit" class="btn btn-warning px-5 fw-bold shadow">

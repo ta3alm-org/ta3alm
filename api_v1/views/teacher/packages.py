@@ -24,7 +24,10 @@ from teachers.views import (
     get_package_permission,
     calculate_package_leaderboard,
 )
-from api_v1.permissions import IsTeacherOrAssistantRole
+from api_v1.permissions import (
+    IsTeacherOrAssistantOrAdminRole,
+    IsTeacherOrAssistantRole,
+)
 from api_v1.serializers import (
     LectureSerializer,
     PDFFileSerializer,
@@ -101,7 +104,7 @@ class TeacherPackagesAPIView(APIView):
 
 class TeacherPackageDetailAPIView(APIView):
     """إدارة حزمة أونلاين (عرض المحتوى والطلاب والترتيب، إضافة/حذف محتوى، تعديل وحذف الحزمة)."""
-    permission_classes = [IsAuthenticated, IsTeacherOrAssistantRole]
+    permission_classes = [IsAuthenticated, IsTeacherOrAssistantOrAdminRole]
 
     def get(self, request, package_id):
         package, is_owner = get_package_permission(request, package_id)

@@ -1,6 +1,5 @@
-/**
- * وحدة تحكم صفحة إصدارات تطبيق الأندرويد ورابط APK.
- */
+
+
 import { on } from '../core/events.js';
 
 export function initAppReleasePage() {

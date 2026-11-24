@@ -387,6 +387,21 @@ class SupportChatAPIView(APIView):
         if len(body) > 4000:
             body = body[:4000]
 
+        from core.profanity_filter import handle_chat_profanity_violation
+        violated, violation_payload = handle_chat_profanity_violation(
+            request,
+            request.user,
+            body,
+            source_label='شات الدعم المباشر',
+        )
+        if violated:
+            if violation_payload and violation_payload.get('banned'):
+                return Response(violation_payload, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {'error': (violation_payload or {}).get('error') or 'محتوى غير لائق.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         thread = self._get_or_create_thread(request.user)
         if subject and thread.subject == 'محادثة الدعم الفني':
             thread.subject = subject
@@ -580,6 +595,21 @@ class SupportChatQuickReplyAPIView(APIView):
             )
         if len(body) > 4000:
             body = body[:4000]
+
+        from core.profanity_filter import handle_chat_profanity_violation
+        violated, violation_payload = handle_chat_profanity_violation(
+            request,
+            user,
+            body,
+            source_label='الرد السريع للدعم',
+        )
+        if violated:
+            if violation_payload and violation_payload.get('banned'):
+                return Response(violation_payload, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {'error': (violation_payload or {}).get('error') or 'محتوى غير لائق.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         is_from_admin = is_admin and thread.user_id != user.id
         msg = append_support_message(

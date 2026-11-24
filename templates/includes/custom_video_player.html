@@ -19,10 +19,10 @@
         right: 0;
         bottom: 0;
         pointer-events: none;
-        /* يمنع الضغط المباشر على فيديو يوتيوب لتجنب ظهور أيقوناتهم */
+         
     }
 
-    /* طبقة شفافة فوق الفيديو للتحكم بالضغط للإيقاف والتشغيل ولمنع نقرات يوتيوب */
+     
     .video-click-overlay {
         position: absolute;
         top: 0;
@@ -173,7 +173,7 @@
         color: white;
     }
 
-    /* شاشة التحميل (Loader) */
+     
     .player-loader {
         position: absolute;
         top: 0;
@@ -204,7 +204,7 @@
         }
     }
 
-    /* علامة مائية للمنصة لتزيد من شعور أنه لاعب خاص */
+     
     .platform-watermark {
         position: absolute;
         top: 20px;
@@ -219,7 +219,7 @@
         text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
     }
 
-    /* كبسولة كود الطالب العائمة */
+     
     .floating-watermark {
         position: absolute;
         top: 0;
@@ -271,18 +271,18 @@
 
 <div class="custom-player-wrapper paused" id="playerWrapper">
 
-    <!-- شاشة التحميل -->
+    
     <div class="player-loader" id="playerLoader">
         <div class="spinner mb-3"></div>
         <div class="fw-bold">{% trans "جاري تحميل المحاضرة..." %}</div>
     </div>
 
-    <!-- العلامة المائية للمنصة -->
+    
     <div class="platform-watermark">
         {{ request.site.name|default:"TA3ALM" }}
     </div>
 
-    <!-- كبسولة كود الطالب العائمة -->
+    
     <div class="floating-watermark" id="floatingWatermark">
         {{ watermark.display_text|default:request.user.custom_id|default:request.user.username|default:"TA3ALM-USER" }}
     </div>
@@ -343,12 +343,13 @@
     </div>
 </div>
 
-<!-- تحميل API يوتيوب -->
 <script src="https://www.youtube.com/iframe_api"></script>
 <script>
+(function () {
+    'use strict';
     let player;
     let progressInterval;
-    const videoId = '{{ lecture.get_video_id }}';
+    const _v = '{{ lecture.get_video_id|escapejs }}';
 
     const wrapper = document.getElementById('playerWrapper');
     const playPauseBtn = document.getElementById('playPauseBtn');
@@ -365,27 +366,35 @@
     const clickOverlay = document.getElementById('clickOverlay');
     const loader = document.getElementById('playerLoader');
 
-    function onYouTubeIframeAPIReady() {
+    window.onYouTubeIframeAPIReady = function () {
         player = new YT.Player('yt-player-container', {
-            videoId: videoId,
+            videoId: _v,
             width: '100%',
             height: '100%',
             playerVars: {
                 'autoplay': 0,
-                'controls': 0,        // إخفاء أزرار يوتيوب
-                'disablekb': 1,       // إيقاف اختصارات الكيبورد الخاصة بيوتيوب
-                'fs': 0,              // إخفاء زر ملء الشاشة الخاص بيوتيوب
-                'modestbranding': 1,  // إخفاء اللوجو
-                'rel': 0,             // عدم إظهار فيديوهات مقترحة غريبة
+                'controls': 0,
+                'disablekb': 1,
+                'fs': 0,
+                'modestbranding': 1,
+                'rel': 0,
                 'showinfo': 0,
-                'iv_load_policy': 3   // إخفاء التعليقات التوضيحية
+                'iv_load_policy': 3
             },
             events: {
                 'onReady': onPlayerReady,
                 'onStateChange': onPlayerStateChange
             }
         });
-    }
+    };
+
+    document.addEventListener('ta3alm:pause-player', function () {
+        try {
+            if (player && typeof player.pauseVideo === 'function') {
+                player.pauseVideo();
+            }
+        } catch (_) {}
+    });
 
     function formatTime(seconds) {
         if (!seconds) return '00:00';
@@ -396,18 +405,18 @@
     }
 
     function onPlayerReady(event) {
-        // إخفاء شاشة التحميل
+        
         loader.style.display = 'none';
         durationTimeEl.textContent = formatTime(player.getDuration());
 
-        // إعداد الصوت
+        
         player.setVolume(100);
 
-        // بدء حركة كود الطالب (DVD Bounce Effect)
+        
         requestAnimationFrame(animateWatermark);
     }
 
-    // متغيرات حركة الكبسولة
+    
     let posX = Math.random() * 100;
     let posY = Math.random() * 100;
     let dirX = 1;
@@ -468,7 +477,7 @@
     playPauseBtn.addEventListener('click', togglePlay);
     clickOverlay.addEventListener('click', togglePlay);
 
-    // شريط التقدم
+    
     progressContainer.addEventListener('click', (e) => {
         if (!player || !player.seekTo) return;
         const rect = progressContainer.getBoundingClientRect();
@@ -478,7 +487,7 @@
         updateProgress();
     });
 
-    // الصوت
+    
     muteBtn.addEventListener('click', () => {
         if (!player || !player.isMuted) return;
         if (player.isMuted()) {
@@ -506,13 +515,13 @@
         }
     });
 
-    // السرعة
+    
     speedSelect.addEventListener('change', (e) => {
         if (!player || !player.setPlaybackRate) return;
         player.setPlaybackRate(parseFloat(e.target.value));
     });
 
-    // ملء الشاشة
+    
     fullscreenBtn.addEventListener('click', () => {
         if (!document.fullscreenElement) {
             wrapper.requestFullscreen().catch(err => {
@@ -523,7 +532,6 @@
         }
     });
 
-    // تغيير أيقونة ملء الشاشة عند التغيير
     document.addEventListener('fullscreenchange', () => {
         if (document.fullscreenElement) {
             fullscreenBtn.innerHTML = '<i class="bi bi-fullscreen-exit"></i>';
@@ -532,10 +540,11 @@
         }
     });
 
+})();
 </script>
 
 {% else %}
-<!-- فيديوهات خارجية غير يوتيوب تبقى بالمشغل العادي المحمي -->
+
 <div class="ratio ratio-16x9 bg-dark shadow rounded mb-3 overflow-hidden position-relative ta3alm-web-player-fallback" id="playerFallbackWrapper">
     <iframe id="fallbackVideoIframe" src="{{ lecture.video_link }}" title="Video player" frameborder="0"
         allow="autoplay; fullscreen; picture-in-picture" allowfullscreen
@@ -578,9 +587,7 @@
                 lockedPermanently = true;
                 if (shieldBtn) shieldBtn.classList.remove('d-none');
                 try {
-                    if (typeof player !== 'undefined' && player && typeof player.pauseVideo === 'function') {
-                        player.pauseVideo();
-                    }
+                    document.dispatchEvent(new CustomEvent('ta3alm:pause-player'));
                 } catch (e) {}
                 var fallbackIframe = document.getElementById('fallbackVideoIframe');
                 if (fallbackIframe) {
@@ -619,9 +626,7 @@
         document.addEventListener('visibilitychange', function () {
             if (document.hidden) {
                 try {
-                    if (typeof player !== 'undefined' && player && typeof player.pauseVideo === 'function') {
-                        player.pauseVideo();
-                    }
+                    document.dispatchEvent(new CustomEvent('ta3alm:pause-player'));
                 } catch (e) {}
                 activateShield('', '', false);
             } else {

@@ -5,7 +5,7 @@
 {% block content %}
 <div class="container py-5">
     
-    <!-- العداد (مثبت في الأعلى) -->
+    
     <div class="sticky-top bg-white py-3 border-bottom mb-4 d-flex justify-content-between align-items-center shadow-sm px-3 rounded">
         <h4 class="mb-0 fw-bold text-primary">{{ exam.title }}</h4>
         <div class="d-flex align-items-center">
@@ -25,14 +25,14 @@
                     <span class="badge bg-light text-dark border">{{ q.marks }} {% trans "درجات" %}</span>
                 </h5>
                 
-                <!-- عرض الصورة (إذا وجدت) -->
+                
                 {% if q.image %}
                     <div class="mb-3 text-center">
                         <img src="{{ q.image.url }}" class="img-fluid rounded border" style="max-height: 300px;">
                     </div>
                 {% endif %}
                 
-                <!-- الاختيارات -->
+                
                 <div class="vstack gap-2">
                     <div class="form-check p-3 border rounded hover-bg">
                         <input class="form-check-input ms-2" type="radio" name="question_{{ q.id }}" value="A" id="q{{ q.id }}a" required>
@@ -69,7 +69,7 @@
 </style>
 
 <script>
-    // المدة بالدقائق من الباك إند
+    
     let duration = {{ exam.duration_minutes }} * 60; 
     
     function startTimer() {
@@ -88,7 +88,7 @@
             if (--timer < 0) {
                 clearInterval(interval);
                 alert("{% trans 'انتهى الوقت! سيتم تسليم إجاباتك الآن.' %}");
-                document.getElementById('examForm').submit(); // تسليم تلقائي
+                document.getElementById('examForm').submit(); 
             }
         }, 1000);
     }
@@ -96,7 +96,7 @@
     window.onload = function () {
         startTimer();
     };
-    // حماية شاشة الامتحان من النسخ والطباعة والتصوير السريع
+    
     (function () {
         document.body.classList.add('ta3alm-protected-surface');
         var style = document.createElement('style');

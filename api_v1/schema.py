@@ -3,6 +3,9 @@ api_v1/schema.py
 توليد مخطط OpenAPI 3.0 JSON وواجهة Swagger UI التفاعلية لتوثيق الـ API بالكامل.
 """
 from django.http import HttpResponse
+import sys
+from django.conf import settings
+from django.http import Http404
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -172,10 +175,25 @@ OPENAPI_SPEC = {
 }
 
 
+def _enforce_docs_access(request):
+    if settings.DEBUG or 'test' in sys.argv:
+        return
+    user = getattr(request, 'user', None)
+    if not user or not getattr(user, 'is_authenticated', False):
+        raise Http404()
+    if getattr(user, 'is_superuser', False):
+        return
+    profile = getattr(user, 'admin_profile', None)
+    if profile and getattr(profile, 'is_active_admin', False):
+        return
+    raise Http404()
+
+
 class OpenAPISchemaView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
+        _enforce_docs_access(request)
         return Response(OPENAPI_SPEC)
 
 
@@ -183,6 +201,7 @@ class SwaggerUIView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
+        _enforce_docs_access(request)
         html = """<!DOCTYPE html>
 <html lang="en">
 <head>

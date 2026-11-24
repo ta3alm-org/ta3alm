@@ -15,10 +15,7 @@
     <div class="row justify-content-center">
         <div class="col-lg-8">
             {% if is_unlocked %}
-                        {% comment %} <div class="alert alert-info">
-                            الرابط الأصلي: {{ lecture.video_link }} <br>
-                            الكود المستخرج: <strong>{{ lecture.get_video_id }}</strong>
-                        </div>                {% endcomment %}
+                        
                 <div class="card shadow-lg border-0 overflow-hidden">
                         {% include 'includes/custom_video_player.html' %}
                     <div class="card-body p-4">

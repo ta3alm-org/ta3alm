@@ -1,6 +1,5 @@
-/**
- * ناقل أحداث خفيف للتواصل بين مكونات لوحة الإدارة بدون ترابط مباشر.
- */
+
+
 const listeners = new Map();
 
 export function on(eventName, handler) {

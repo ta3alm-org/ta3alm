@@ -1,6 +1,5 @@
-/**
- * إدارة القائمة الجانبية (طي/توسيع على الديسكتوب + درج على الموبايل + حفظ الحالة).
- */
+
+
 const STORAGE_KEY = 'ta3alm_admin_sidebar_collapsed';
 
 export function initSidebar() {
@@ -29,7 +28,7 @@ export function initSidebar() {
             try {
                 localStorage.setItem(STORAGE_KEY, next ? '1' : '0');
             } catch (_) {
-                // ignore storage errors
+
             }
             updateCollapseIcon();
         });
@@ -48,7 +47,7 @@ export function initSidebar() {
         }
     });
 
-    // حساب موضع tooltip الرأسي بدقة عند التصغير
+
     document.querySelectorAll('.ap-nav-link[data-tooltip]').forEach((link) => {
         link.addEventListener('mouseenter', () => {
             if (!html.classList.contains('ap-sidebar-collapsed')) return;

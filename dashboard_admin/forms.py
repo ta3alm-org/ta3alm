@@ -18,7 +18,7 @@ User = get_user_model()
 class AdminUserEditForm(forms.ModelForm):
     class Meta:
         model = User
-        fields = ['first_name', 'last_name', 'email', 'phone', 'national_id', 'custom_id', 'role']
+        fields = ['first_name', 'last_name', 'email', 'phone', 'national_id', 'custom_id', 'gender', 'role']
         labels = {
             'first_name':  'الاسم الأول',
             'last_name':   'الاسم الأخير',
@@ -26,6 +26,7 @@ class AdminUserEditForm(forms.ModelForm):
             'phone':       'رقم الهاتف',
             'national_id': 'الرقم القومي',
             'custom_id':   'الكود التعريفي',
+            'gender':      'النوع',
             'role':        'الدور',
         }
         widgets = {
@@ -35,6 +36,7 @@ class AdminUserEditForm(forms.ModelForm):
             'phone':       forms.TextInput(attrs={'class': 'form-control'}),
             'national_id': forms.TextInput(attrs={'class': 'form-control'}),
             'custom_id':   forms.TextInput(attrs={'class': 'form-control'}),
+            'gender':      forms.Select(attrs={'class': 'form-select'}),
             'role':        forms.Select(attrs={'class': 'form-select'}),
         }
 

@@ -1,6 +1,5 @@
-/**
- * إدارة النوافذ المنبثقة (Modals) ومربعات التأكيد المخصصة ومعاينة الإيصالات.
- */
+
+
 const openModals = new Set();
 
 function syncBodyScroll() {
@@ -55,9 +54,8 @@ export function initModalTriggers() {
     });
 }
 
-/**
- * مربع حوار تأكيد مخصص بديل عن window.confirm / window.prompt.
- */
+
+
 export function confirmDialog({
     title = 'تأكيد الإجراء',
     message = 'هل تريد المتابعة؟',

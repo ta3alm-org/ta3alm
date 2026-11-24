@@ -1,6 +1,5 @@
-/**
- * وحدة تحكم صفحة فريق الإدارة.
- */
+
+
 import { on } from '../core/events.js';
 
 export function initStaffPage() {

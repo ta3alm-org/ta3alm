@@ -1,6 +1,5 @@
-/**
- * وحدة تحكم الصفحات المالية (التقارير، السحب، الدفع اليدوي، مبيعات الحزم).
- */
+
+
 import { on } from '../core/events.js';
 import { openImageLightbox } from '../core/modal.js';
 
@@ -15,7 +14,7 @@ function createStatusBadge(text, variant) {
 }
 
 export function initFinancePage() {
-    // 1. معاينة صورة إيصال الدفع اليدوي داخل Lightbox
+
     document.addEventListener('click', (e) => {
         const trigger = e.target.closest('[data-receipt-preview]');
         if (!trigger) return;
@@ -23,7 +22,7 @@ export function initFinancePage() {
         openImageLightbox(trigger.dataset.receiptPreview, trigger.dataset.receiptTitle || 'صورة الإيصال');
     });
 
-    // 2. تحديث مؤشر إجمالي الإيرادات عند البحث الحي في التقرير المالي
+
     on('ap:partial:updated', ({ data }) => {
         const revEl = document.getElementById('financeTotalRevenueValue');
         const cntEl = document.getElementById('financeTransactionsCount');
@@ -35,7 +34,7 @@ export function initFinancePage() {
         }
     });
 
-    // 3. تحديث صفوف طلبات السحب والدفع اليدوي فورياً عبر AJAX بدون إعادة تحميل
+
     on('ap:form:success', ({ form, payload }) => {
         const data = payload?.data || {};
 

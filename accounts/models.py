@@ -10,7 +10,19 @@ import random
 import string
 
 
+GENDER_MALE = 'male'
+GENDER_FEMALE = 'female'
+GENDER_CHOICES = [
+    (GENDER_MALE, 'ذكر'),
+    (GENDER_FEMALE, 'أنثى'),
+]
+
+
 class User(AbstractUser):
+    GENDER_MALE = GENDER_MALE
+    GENDER_FEMALE = GENDER_FEMALE
+    GENDER_CHOICES = GENDER_CHOICES
+
     role = models.CharField(
         max_length=20,
         choices=ROLE_CHOICES,
@@ -30,6 +42,13 @@ class User(AbstractUser):
         verbose_name=_('كود المستخدم'),
     )
     is_banned = models.BooleanField(default=False, verbose_name=_('محظور'))
+    gender = models.CharField(
+        max_length=10,
+        choices=GENDER_CHOICES,
+        null=True,
+        blank=True,
+        verbose_name=_('النوع'),
+    )
 
     class Meta(AbstractUser.Meta):
         pass
@@ -68,6 +87,14 @@ class User(AbstractUser):
     def is_platform_admin(self):
         """هل هذا المستخدم له صلاحيات إدارية على المنصة؟"""
         return self.is_superuser or self.role == 'admin'
+
+    def requires_gender_selection(self) -> bool:
+        """يُعيد True للمستخدمين غير الإداريين الذين لم يحددوا النوع (ذكر/أنثى) بعد."""
+        if not self.is_authenticated:
+            return False
+        if self.is_superuser or self.role == 'admin' or self.is_platform_admin():
+            return False
+        return self.gender not in (GENDER_MALE, GENDER_FEMALE)
 
     def requires_email_verification(self) -> bool:
         """

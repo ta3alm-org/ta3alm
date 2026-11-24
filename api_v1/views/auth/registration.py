@@ -44,12 +44,16 @@ class RegisterAPIView(APIView):
         full_name = str(request.data.get('full_name', '')).strip()
         email = str(request.data.get('email', '')).strip().lower()
         phone = str(request.data.get('phone', '')).strip()
+        gender = str(request.data.get('gender', '')).strip().lower()
         password = str(request.data.get('password', ''))
         confirm_password = str(request.data.get('confirm_password', password))
         role = str(request.data.get('role', 'student')).strip().lower()
 
         if role not in ('student', 'teacher', 'assistant'):
             return Response({'error': 'نوع الحساب غير صالح.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if gender not in ('male', 'female'):
+            return Response({'error': 'يرجى اختيار النوع (ذكر أو أنثى).'}, status=status.HTTP_400_BAD_REQUEST)
 
         if not full_name or not email or not phone or not password:
             return Response({'error': 'جميع الحقول الأساسية مطلوبة.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -79,6 +83,7 @@ class RegisterAPIView(APIView):
             password=password,
             phone=phone,
             role=role,
+            gender=gender,
             first_name=first_name,
             last_name=last_name,
         )
@@ -165,6 +170,14 @@ class CompleteProfileAPIView(APIView):
 
         user.national_id = national_id
         user.phone = phone
+
+        if 'gender' in request.data and request.data.get('gender') not in (None, ''):
+            raw_gender = str(request.data.get('gender')).strip().lower()
+            if raw_gender not in ('male', 'female'):
+                return Response({'error': 'يرجى اختيار النوع (ذكر أو أنثى).'}, status=status.HTTP_400_BAD_REQUEST)
+            user.gender = raw_gender
+        elif not user.is_superuser and user.role != 'admin' and user.gender not in ('male', 'female'):
+            return Response({'error': 'يرجى اختيار النوع (ذكر أو أنثى).'}, status=status.HTTP_400_BAD_REQUEST)
 
         if not user.custom_id:
             chars = string.ascii_uppercase + string.digits

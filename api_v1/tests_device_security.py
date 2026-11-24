@@ -761,6 +761,7 @@ class DeviceSecuritySystemTests(APITestCase):
                     'full_name': 'طالب جديد غير مؤكد',
                     'email': 'unverified_mobile@example.com',
                     'phone': '01055556666',
+                    'gender': 'male',
                     'password': 'Password123!',
                     'confirm_password': 'Password123!',
                     'role': 'student',

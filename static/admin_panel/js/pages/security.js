@@ -1,6 +1,5 @@
-/**
- * وحدة تحكم مركز الأمان والحماية وصفحة تفاصيل الجهاز.
- */
+
+
 import { loadPartialFromForm } from '../components/search.js';
 import { activateTab } from '../components/tabs.js';
 import { on } from '../core/events.js';
@@ -34,7 +33,7 @@ export function initSecurityPage() {
     on('ap:form:success', ({ form, payload }) => {
         if (form.dataset.securityAction !== '1') return;
 
-        // لو في صفحة security_dashboard: أعد جلب اللوحات والجدول تلقائياً بدون إعادة تحميل
+
         if (filterForm) {
             const activeBtn = document.querySelector('[data-tabs="security-sections"] .ap-tab-btn.active');
             if (activeBtn) savedTabId = activeBtn.dataset.tabTarget;
@@ -42,7 +41,7 @@ export function initSecurityPage() {
             return;
         }
 
-        // لو في صفحة security_device_detail: حدّث حالة الحظر محلياً في رأس الصفحة
+
         const data = payload?.data || {};
         const blockForm = document.getElementById('deviceDetailBlockForm');
         if (blockForm && typeof data.is_blocked === 'boolean') {

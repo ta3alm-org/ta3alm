@@ -1,6 +1,5 @@
-/**
- * مكونات التصفية والفرز والبحث الفوري للجداول المحلية ([data-client-table]).
- */
+
+
 export function initClientTables() {
     document.querySelectorAll('[data-table-scope]').forEach((scope) => {
         const table = scope.querySelector('table');

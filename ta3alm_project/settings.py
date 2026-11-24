@@ -111,6 +111,7 @@ else:
 # ==========================================================
 MIDDLEWARE = [
     'ta3alm_project.middleware.SubdomainAdminMiddleware',  # ← أول شيء حتى يعمل قبل كل شيء
+    'ta3alm_project.middleware.FrontendHardeningMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'corsheaders.middleware.CorsMiddleware',               # ← قبل أي Middleware آخر لضمان عمل CORS مع Flutter Web/Mobile
     'whitenoise.middleware.WhiteNoiseMiddleware',
@@ -122,6 +123,7 @@ MIDDLEWARE = [
     'ta3alm_project.middleware.TokenAuthMiddleware',
     'ta3alm_project.middleware.BanMiddleware',
     'ta3alm_project.middleware.EmailVerificationMiddleware',
+    'ta3alm_project.middleware.GenderCompletionMiddleware',
     'ta3alm_project.middleware.WebDeviceSecurityMiddleware',
     'ta3alm_project.middleware.AppVersionEnforcementMiddleware',
     'ta3alm_project.middleware.ApiSecurityAndActivityAuditMiddleware',

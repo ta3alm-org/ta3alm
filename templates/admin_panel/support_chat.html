@@ -20,7 +20,7 @@
 </div>
 
 <div class="ap-chat-shell">
-    <!-- قائمة المحادثات -->
+    
     <aside class="ap-chat-list">
         <div class="ap-chat-list-head">
             <form method="GET" action="{% url 'admin_panel:support_chat' %}" id="supportChatFilterForm"
@@ -52,7 +52,7 @@
         </div>
     </aside>
 
-    <!-- منطقة المحادثة النشطة -->
+    
     <section class="ap-chat-main" id="apSupportChatPane">
         {% include 'admin_panel/partials/_support_chat_pane.html' %}
     </section>

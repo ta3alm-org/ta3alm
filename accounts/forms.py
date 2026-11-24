@@ -49,6 +49,13 @@ class CompleteStudentProfileForm(forms.ModelForm):
         widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': '01xxxxxxxxx'})
     )
 
+    gender = forms.ChoiceField(
+        label=_('النوع'),
+        choices=[('', _('-- اختر النوع --')), ('male', _('ذكر')), ('female', _('أنثى'))],
+        required=True,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+
     # +++++ حقول الباسورد الجديدة +++++
     password = forms.CharField(
         label=_('كلمة المرور (اختياري إذا كان لديك واحدة بالفعل)'),
@@ -66,7 +73,13 @@ class CompleteStudentProfileForm(forms.ModelForm):
 
     class Meta:
         model = User
-        fields = ['national_id', 'phone']
+        fields = ['national_id', 'phone', 'gender']
+
+    def clean_gender(self):
+        val = (self.cleaned_data.get('gender') or '').strip().lower()
+        if val not in ('male', 'female'):
+            raise ValidationError(_("يرجى اختيار النوع (ذكر أو أنثى)."))
+        return val
 
     # التحقق من الرقم القومي
     def clean_national_id(self):
@@ -141,6 +154,12 @@ class CompleteTeacherProfileForm(forms.ModelForm):
         widget=forms.FileInput(attrs={'class': 'form-control', 'accept': 'image/*'})
     )
 
+    gender = forms.ChoiceField(
+        label=_('النوع'),
+        choices=[('', _('-- اختر النوع --')), ('male', _('ذكر')), ('female', _('أنثى'))],
+        required=True,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
 
     # +++++ حقول الباسورد الجديدة +++++
     password = forms.CharField(
@@ -158,7 +177,13 @@ class CompleteTeacherProfileForm(forms.ModelForm):
 
     class Meta:
         model = User
-        fields = ['national_id', 'phone']
+        fields = ['national_id', 'phone', 'gender']
+
+    def clean_gender(self):
+        val = (self.cleaned_data.get('gender') or '').strip().lower()
+        if val not in ('male', 'female'):
+            raise ValidationError(_("يرجى اختيار النوع (ذكر أو أنثى)."))
+        return val
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -226,6 +251,13 @@ class CompleteAssistantProfileForm(forms.ModelForm):
     )
     # +++++++++++++++++++++++++
 
+    gender = forms.ChoiceField(
+        label=_('النوع'),
+        choices=[('', _('-- اختر النوع --')), ('male', _('ذكر')), ('female', _('أنثى'))],
+        required=True,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+
     # +++++ حقول الباسورد الجديدة +++++
     password = forms.CharField(
         label=_('كلمة المرور (اختياري إذا كان لديك واحدة بالفعل)'),
@@ -242,7 +274,13 @@ class CompleteAssistantProfileForm(forms.ModelForm):
 
     class Meta:
         model = User
-        fields = ['national_id', 'phone']
+        fields = ['national_id', 'phone', 'gender']
+
+    def clean_gender(self):
+        val = (self.cleaned_data.get('gender') or '').strip().lower()
+        if val not in ('male', 'female'):
+            raise ValidationError(_("يرجى اختيار النوع (ذكر أو أنثى)."))
+        return val
 
 
     def clean_national_id(self):

@@ -106,7 +106,12 @@ class JWTAndTokenAuthentication(authentication.BaseAuthentication):
                     except User.DoesNotExist:
                         raise exceptions.AuthenticationFailed('المستخدم غير موجود أو غير مفعل.')
                     if user.is_banned:
-                        raise exceptions.PermissionDenied('تم حظر حسابك من قِبل إدارة المنصة.')
+                        raise exceptions.PermissionDenied({
+                            'error': 'تم حظر حسابك من قِبل إدارة المنصة.',
+                            'detail': 'تم حظر حسابك من قِبل إدارة المنصة.',
+                            'code': 'ACCOUNT_BANNED',
+                            'is_banned': True,
+                        })
                 self._enforce_device_and_session(request, user, payload)
                 return (user, payload)
             else:
@@ -177,7 +182,12 @@ class JWTAndTokenAuthentication(authentication.BaseAuthentication):
             raise exceptions.AuthenticationFailed('هذا الحساب غير مفعل.')
 
         if token.user.is_banned:
-            raise exceptions.PermissionDenied('تم حظر حسابك من قِبل إدارة المنصة.')
+            raise exceptions.PermissionDenied({
+                'error': 'تم حظر حسابك من قِبل إدارة المنصة.',
+                'detail': 'تم حظر حسابك من قِبل إدارة المنصة.',
+                'code': 'ACCOUNT_BANNED',
+                'is_banned': True,
+            })
 
         return (token.user, token)
 

@@ -9,7 +9,7 @@
             <label>{% trans "الاسم:" %}</label> <input class="form-control mb-3" value="{{ student.first_name }} {{ student.last_name }}" disabled>
             <label>{% trans "الكود:" %}</label> <input class="form-control mb-3" value="{{ student.custom_id }}" disabled>
             <label>{% trans "الهاتف:" %}</label> <input class="form-control mb-3" value="{{ student.phone }}" disabled>
-            {% comment %} <label>هاتف ولي الامر</label> <input class="form-control mb-3" value="{{ student.parent_phone }}" disabled> {% endcomment %}
+            
             <label>{% trans "الرقم القومي" %}</label> <input class="form-control mb-3" value="{{ student.national_id }}" disabled>
             <div class="alert alert-info small">{% trans "لتعديل البيانات، يرجى التواصل مع الدعم الفني." %}</div>
         </div>

@@ -1,6 +1,5 @@
-/**
- * وحدة تحكم صفحة تقارير الأخطاء التقنية التلقائية بدون إعادة تحميل الصفحة.
- */
+
+
 import { loadPartialFromForm } from '../components/search.js';
 import { on } from '../core/events.js';
 

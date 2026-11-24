@@ -14,18 +14,18 @@
             <form method="POST" enctype="multipart/form-data">
                 {% csrf_token %}
                 
-                <!-- 1. البيانات الأساسية -->
+                
                 <div class="row g-3 mb-4">
                     <div class="col-md-8">
                         <label class="form-label fw-bold">{% trans "اسم الحزمة" %}</label>
                         {{ form.title }}
                     </div>
-                                        <!-- +++++ أضف هذا الجزء +++++ -->
+                                        
                     <div class="col-md-4">
                         <label class="form-label fw-bold">{% trans "الصف الدراسي" %}</label>
                         {{ form.grade }}
                     </div>
-                    <!-- +++++++++++++++++++++++++ -->
+                    
                     <div class="col-md-4">
                         <label class="form-label fw-bold">{% trans "السعر (EGP)" %}</label>
                         {{ form.price }}
@@ -54,10 +54,10 @@
 
                 <hr class="my-4">
 
-                <!-- 2. واجهة اختيار المحتوى -->
+                
                 <h4 class="fw-bold text-primary mb-3">{% trans "تعديل المحتوى" %}</h4>
                 
-                <!-- فلتر المجموعات -->
+                
                 <div class="mb-3">
                     <label class="form-label fw-bold">{% trans "تصفية حسب المجموعة:" %}</label>
                     <select id="groupFilter" class="form-select border-primary">
@@ -69,7 +69,7 @@
                 </div>
 
                 <div class="row g-4">
-                    <!-- المحاضرات -->
+                    
                     <div class="col-md-6">
                         <div class="card h-100 border">
                             <div class="card-header bg-dark text-white fw-bold d-flex justify-content-between">
@@ -97,7 +97,7 @@
                         </div>
                     </div>
 
-                    <!-- الامتحانات -->
+                    
                     <div class="col-md-6">
                         <div class="card h-100 border">
                             <div class="card-header bg-warning text-dark fw-bold d-flex justify-content-between">
@@ -136,7 +136,7 @@
     </div>
 </div>
 
-<!-- سكريبت الفلترة -->
+
 <script>
     document.getElementById('groupFilter').addEventListener('change', function() {
         const selectedGroup = this.value;

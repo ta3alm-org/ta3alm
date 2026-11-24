@@ -14,11 +14,14 @@ class UserPublicSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
     role_display = serializers.CharField(source='get_role_display', read_only=True)
 
+    role_display = serializers.CharField(source='get_role_display', read_only=True)
+    gender_display = serializers.CharField(source='get_gender_display', read_only=True)
+
     class Meta:
         model = User
         fields = [
             'id', 'username', 'first_name', 'last_name', 'full_name',
-            'email', 'phone', 'custom_id', 'role', 'role_display',
+            'email', 'phone', 'custom_id', 'gender', 'gender_display', 'role', 'role_display',
         ]
 
     def get_full_name(self, obj):
@@ -28,6 +31,8 @@ class UserPublicSerializer(serializers.ModelSerializer):
 class UserDetailSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
     role_display = serializers.CharField(source='get_role_display', read_only=True)
+    gender_display = serializers.CharField(source='get_gender_display', read_only=True)
+    requires_gender = serializers.SerializerMethodField()
     is_profile_complete = serializers.SerializerMethodField()
     is_email_verified = serializers.SerializerMethodField()
     requires_verification = serializers.SerializerMethodField()
@@ -39,11 +44,17 @@ class UserDetailSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'username', 'first_name', 'last_name', 'full_name',
             'email', 'phone', 'national_id', 'custom_id',
+            'gender', 'gender_display', 'requires_gender',
             'role', 'role_display', 'is_banned', 'is_superuser',
             'is_email_verified', 'requires_verification',
             'is_profile_complete', 'is_teacher_approved', 'profile_data', 'date_joined',
         ]
         read_only_fields = ['id', 'username', 'custom_id', 'role', 'is_banned', 'is_superuser', 'date_joined']
+
+    def get_requires_gender(self, obj):
+        if hasattr(obj, 'requires_gender_selection'):
+            return obj.requires_gender_selection()
+        return False
 
     def get_is_teacher_approved(self, obj):
         if obj.role != 'teacher':

@@ -1,6 +1,4 @@
-/* ============================================================
-   Ta3alm Admin Design System — Shell Layout & Responsive Grids
-   ============================================================ */
+ 
 
 .ap-shell {
     min-height: 100vh;
@@ -8,7 +6,7 @@
     background: var(--bg-main);
 }
 
-/* ── Sidebar (RTL fixed on right) ── */
+ 
 .ap-sidebar {
     position: fixed;
     top: 0;
@@ -99,7 +97,7 @@
     display: none;
 }
 
-/* Scrollable nav list */
+ 
 .ap-sidebar-scroll {
     flex: 1;
     overflow-y: auto;
@@ -205,7 +203,7 @@
     background: var(--danger);
 }
 
-/* Sidebar Pinned Footer */
+ 
 .ap-sidebar-footer {
     border-top: 1px solid var(--border-default);
     padding: 10px;
@@ -246,7 +244,7 @@
     white-space: nowrap;
 }
 
-/* Desktop Collapsed Sidebar State (persisted on <html> before paint) */
+ 
 @media (min-width: 1025px) {
     html.ap-sidebar-collapsed .ap-sidebar {
         width: var(--sidebar-collapsed-w);
@@ -289,7 +287,7 @@
         display: none;
     }
 
-    /* CSS Hover Tooltip when collapsed */
+     
     html.ap-sidebar-collapsed .ap-nav-link[data-tooltip]:hover::after {
         content: attr(data-tooltip);
         position: fixed;
@@ -309,7 +307,7 @@
     }
 }
 
-/* ── Main Workspace & Topbar ── */
+ 
 .ap-workspace {
     flex: 1;
     min-width: 0;
@@ -512,7 +510,7 @@
     border-color: var(--border-strong);
 }
 
-/* Main Container */
+ 
 .ap-main {
     flex: 1;
     padding: 24px 28px 40px;
@@ -524,7 +522,7 @@
     margin: 0 auto;
 }
 
-/* Unified Page Header */
+ 
 .ap-page-header {
     display: flex;
     align-items: flex-start;
@@ -563,7 +561,7 @@
     gap: 8px;
 }
 
-/* Responsive Grids */
+ 
 .ap-kpi-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -612,7 +610,7 @@
     align-items: start;
 }
 
-/* Sidebar Mobile Drawer Backdrop */
+ 
 .ap-sidebar-backdrop {
     display: none;
     position: fixed;

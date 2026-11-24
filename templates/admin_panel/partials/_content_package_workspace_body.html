@@ -1,0 +1,164 @@
+<div data-tabs="pkg-ws" data-tabs-sync-url="1" data-tabs-container="#pkgWsPanels" class="ap-tabs">
+    <button type="button" class="ap-tab-btn {% if active_tab|default:'content' == 'content' %}active{% endif %}" data-tab-target="tab-pkg-content">
+        <i class="bi bi-collection"></i> <span>محتوى الحزمة</span>
+    </button>
+    <button type="button" class="ap-tab-btn {% if active_tab == 'subscribers' %}active{% endif %}" data-tab-target="tab-pkg-subscribers">
+        <i class="bi bi-people"></i> <span>المشتركون</span> <span class="ap-tab-count">{{ enrollments|length }}</span>
+    </button>
+</div>
+
+<div id="pkgWsPanels">
+    <div class="ap-tab-panel {% if active_tab|default:'content' == 'content' %}active{% endif %}" id="tab-pkg-content" data-tab-group="pkg-ws">
+        <div class="ap-split-7-5">
+            <div>
+                <div class="ap-card ap-mb-4">
+                    <div class="ap-card-header"><h2 class="ap-card-title">المحاضرات ({{ lectures|length }})</h2></div>
+                    <div class="ap-table-wrap">
+                        <table class="ap-table">
+                            <tbody>
+                                {% for l in lectures %}
+                                <tr>
+                                    <td><div class="ap-strong">{{ l.title }}</div><div class="ap-xs ap-muted">{{ l.video_link|truncatechars:45 }}</div></td>
+                                    <td class="ap-cell-actions">
+                                        <form method="POST" action="{% url 'admin_panel:content_package_workspace' package.id %}" data-ajax-form data-ws-action="1" class="ap-inline-flex">
+                                            {% csrf_token %}<input type="hidden" name="action" value="remove_lecture"><input type="hidden" name="lecture_id" value="{{ l.id }}">
+                                            <button type="submit" class="ap-btn ap-btn-sm ap-btn-danger"><i class="bi bi-x-lg"></i> إزالة</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr><td class="ap-muted" style="text-align:center; padding:18px;">لا توجد محاضرات في الحزمة.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="ap-card ap-mb-4">
+                    <div class="ap-card-header"><h2 class="ap-card-title">الامتحانات ({{ exams|length }})</h2></div>
+                    <div class="ap-table-wrap">
+                        <table class="ap-table">
+                            <tbody>
+                                {% for e in exams %}
+                                <tr>
+                                    <td><div class="ap-strong">{{ e.title }}</div><div class="ap-xs ap-muted">{{ e.q_count }} سؤال · {{ e.duration_minutes }} دقيقة</div></td>
+                                    <td class="ap-cell-actions">
+                                        <div class="ap-inline-flex ap-gap-1">
+                                            <a href="{% url 'exam_manage' e.id %}" target="_blank" rel="noopener" class="ap-btn ap-btn-sm ap-btn-primary">الأسئلة</a>
+                                            <form method="POST" action="{% url 'admin_panel:content_package_workspace' package.id %}" data-ajax-form data-ws-action="1" class="ap-inline-flex">
+                                                {% csrf_token %}<input type="hidden" name="action" value="remove_exam"><input type="hidden" name="exam_id" value="{{ e.id }}">
+                                                <button type="submit" class="ap-btn ap-btn-sm ap-btn-danger"><i class="bi bi-x-lg"></i></button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr><td class="ap-muted" style="text-align:center; padding:18px;">لا توجد امتحانات في الحزمة.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="ap-card">
+                    <div class="ap-card-header"><h2 class="ap-card-title">المذكرات ({{ pdfs|length }})</h2></div>
+                    <div class="ap-table-wrap">
+                        <table class="ap-table">
+                            <tbody>
+                                {% for p in pdfs %}
+                                <tr>
+                                    <td class="ap-strong">{{ p.title }}</td>
+                                    <td class="ap-cell-actions">
+                                        <form method="POST" action="{% url 'admin_panel:content_package_workspace' package.id %}" data-ajax-form data-ws-action="1" class="ap-inline-flex">
+                                            {% csrf_token %}<input type="hidden" name="action" value="remove_pdf"><input type="hidden" name="pdf_id" value="{{ p.id }}">
+                                            <button type="submit" class="ap-btn ap-btn-sm ap-btn-danger"><i class="bi bi-x-lg"></i></button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr><td class="ap-muted" style="text-align:center; padding:18px;">لا توجد مذكرات في الحزمة.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <div class="ap-card ap-mb-4">
+                    <div class="ap-card-header"><h2 class="ap-card-title">إضافة محاضرة للحزمة</h2></div>
+                    <div class="ap-card-body">
+                        <form method="POST" action="{% url 'admin_panel:content_package_workspace' package.id %}" data-ajax-form data-ws-action="1">
+                            {% csrf_token %}<input type="hidden" name="action" value="add_lecture">
+                            <div class="ap-field"><label class="ap-label">عنوان المحاضرة</label><input type="text" name="title" class="ap-input" required></div>
+                            <div class="ap-field"><label class="ap-label">رابط الفيديو</label><input type="text" name="video_link" class="ap-input" required></div>
+                            <button type="submit" class="ap-btn ap-btn-primary ap-btn-block">إضافة المحاضرة</button>
+                        </form>
+                    </div>
+                </div>
+                <div class="ap-card ap-mb-4">
+                    <div class="ap-card-header"><h2 class="ap-card-title">إضافة امتحان للحزمة</h2></div>
+                    <div class="ap-card-body">
+                        <form method="POST" action="{% url 'admin_panel:content_package_workspace' package.id %}" data-ajax-form data-ws-action="1">
+                            {% csrf_token %}<input type="hidden" name="action" value="add_exam">
+                            <div class="ap-field"><label class="ap-label">عنوان الامتحان</label><input type="text" name="title" class="ap-input" required></div>
+                            <div class="ap-field"><label class="ap-label">المدة بالدقائق</label><input type="number" name="duration_minutes" class="ap-input" value="30" min="1"></div>
+                            <button type="submit" class="ap-btn ap-btn-primary ap-btn-block">إنشاء الامتحان</button>
+                        </form>
+                    </div>
+                </div>
+                <div class="ap-card">
+                    <div class="ap-card-header"><h2 class="ap-card-title">إضافة مذكرة PDF</h2></div>
+                    <div class="ap-card-body">
+                        <form method="POST" enctype="multipart/form-data" action="{% url 'admin_panel:content_package_workspace' package.id %}" data-ajax-form data-ws-action="1">
+                            {% csrf_token %}<input type="hidden" name="action" value="add_pdf">
+                            <div class="ap-field"><label class="ap-label">العنوان</label><input type="text" name="title" class="ap-input" required></div>
+                            <div class="ap-field"><label class="ap-label">رابط (اختياري)</label><input type="url" name="link" class="ap-input"></div>
+                            <div class="ap-field"><label class="ap-label">ملف PDF</label><input type="file" name="file" accept=".pdf" class="ap-input"></div>
+                            <button type="submit" class="ap-btn ap-btn-primary ap-btn-block">إضافة المذكرة</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="ap-tab-panel {% if active_tab == 'subscribers' %}active{% endif %}" id="tab-pkg-subscribers" data-tab-group="pkg-ws">
+        <div class="ap-split-7-5">
+            <div class="ap-card">
+                <div class="ap-card-header"><h2 class="ap-card-title">الطلاب المشتركون ({{ enrollments|length }})</h2></div>
+                <div class="ap-table-wrap">
+                    <table class="ap-table">
+                        <thead><tr><th>الطالب</th><th>الكود / الهاتف</th><th class="ap-cell-actions">إلغاء</th></tr></thead>
+                        <tbody>
+                            {% for en in enrollments %}
+                            <tr>
+                                <td class="ap-strong">{{ en.student.user.get_full_name|default:en.student.user.username }}</td>
+                                <td class="ap-xs ap-muted">{{ en.student.user.custom_id }} · {{ en.student.user.phone }}</td>
+                                <td class="ap-cell-actions">
+                                    <form method="POST" action="{% url 'admin_panel:content_package_workspace' package.id %}" data-ajax-form data-ws-action="1" data-confirm="إلغاء تفعيل الحزمة لهذا الطالب؟" data-confirm-variant="danger" class="ap-inline-flex">
+                                        {% csrf_token %}<input type="hidden" name="action" value="revoke_student"><input type="hidden" name="enrollment_id" value="{{ en.id }}">
+                                        <button type="submit" class="ap-btn ap-btn-sm ap-btn-danger"><i class="bi bi-x-lg"></i></button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="3" class="ap-muted" style="text-align:center; padding:24px;">لا يوجد مشتركون بعد.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="ap-card">
+                <div class="ap-card-header"><h2 class="ap-card-title">تفعيل الحزمة لطالب</h2></div>
+                <div class="ap-card-body">
+                    <form method="POST" action="{% url 'admin_panel:content_package_workspace' package.id %}" data-ajax-form data-ws-action="1">
+                        {% csrf_token %}<input type="hidden" name="action" value="grant_student">
+                        <div class="ap-field"><label class="ap-label">البريد أو الهاتف أو الكود (#)</label><input type="text" name="identifier" class="ap-input" required placeholder="S123456"></div>
+                        <button type="submit" class="ap-btn ap-btn-primary ap-btn-block">تفعيل مجاني للطالب</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

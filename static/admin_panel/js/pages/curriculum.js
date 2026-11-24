@@ -1,10 +1,9 @@
-/**
- * وحدة تحكم صفحات المناهج الدراسية (القائمة + فورم الوحدة والدروس).
- */
+
+
 import { on } from '../core/events.js';
 
 export function initCurriculumPage() {
-    // 1. إضافة درس جديد ديناميكياً في نموذج Formset
+
     const addButton = document.getElementById('add-lesson-btn');
     const container = document.getElementById('lesson-formset-container');
     const totalFormsInput = document.querySelector('input[name$="-TOTAL_FORMS"]');
@@ -22,7 +21,7 @@ export function initCurriculumPage() {
         });
     }
 
-    // 2. حذف صف وحدة من الجدول فورياً عند الحذف عبر AJAX
+
     on('ap:form:success', ({ form, payload }) => {
         if (form.dataset.curriculumDelete === '1' && payload?.data?.deleted) {
             const row = form.closest('tr[data-row]');

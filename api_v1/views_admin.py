@@ -95,3 +95,4 @@ from api_v1.views.admin.notifications import (
     AdminNotificationsAPIView,
     _extract_admin_notif_params,
 )
+from api_v1.views.admin.content_hub import AdminContentHubAPIView

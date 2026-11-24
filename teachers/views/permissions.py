@@ -7,16 +7,33 @@ from django.shortcuts import get_object_or_404
 from teachers.models import Group
 
 
+def is_platform_content_admin(user) -> bool:
+    """هل المستخدم أدمن نشط أو مالك له صلاحية إدارة كل المجموعات والحزم والمحتوى؟"""
+    if not user or not getattr(user, 'is_authenticated', False):
+        return False
+    if getattr(user, 'is_banned', False):
+        return False
+    if user.is_superuser:
+        return True
+    admin_profile = getattr(user, 'admin_profile', None)
+    if admin_profile is not None:
+        return bool(admin_profile.is_active_admin)
+    return getattr(user, 'role', '') == 'admin'
+
+
 # ==========================================
 # دالة مساعدة للتحقق من الصلاحيات (معلم أو مساعد)
 # ==========================================
 def get_group_permission(request, group_id, permission_type=None):
     """
-    تتحقق هل المستخدم هو مالك المجموعة، أو مساعد لديه الصلاحية المطلوبة.
+    تتحقق هل المستخدم هو مالك المجموعة، أو مساعد لديه الصلاحية المطلوبة، أو أدمن منصة.
     ترجع: (Group Object, is_owner Boolean)
     """
     group = get_object_or_404(Group, id=group_id)
     user = request.user
+
+    if is_platform_content_admin(user):
+        return group, True
 
     # فحص الحد (حتى للمالك والمساعد)
     allowed_ids = group.teacher.get_allowed_group_ids()
@@ -58,6 +75,9 @@ def get_package_permission(request, package_id, permission_type=None):
     from teachers.models import CoursePackage
     package = get_object_or_404(CoursePackage, id=package_id)
     user = request.user
+
+    if is_platform_content_admin(user):
+        return package, True
 
     # 1. المالك (المعلم المعتمد)
     if package.teacher.user == user:

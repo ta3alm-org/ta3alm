@@ -109,6 +109,7 @@ class Group(models.Model):
     teacher = models.ForeignKey(TeacherProfile, on_delete=models.CASCADE, related_name='groups')
     name = models.CharField(max_length=100, verbose_name=_('╪º╪│┘à ╪º┘ä┘à╪¼┘à┘ê╪╣╪⌐'))
     grade = models.CharField(max_length=20, choices=GRADE_CHOICES, verbose_name=_('╪º┘ä╪╡┘ü ╪º┘ä╪»╪▒╪º╪│┘è'))
+    is_chat_locked = models.BooleanField(default=False, verbose_name='قفل شات المجموعة')
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -286,3 +287,25 @@ class WithdrawRequest(models.Model):
 
     def __str__(self):
         return f"{self.amount} - {self.get_method_display()} ({self.get_status_display()})"
+
+
+class GroupChatMessage(models.Model):
+    """رسائل الشات الجماعي الموحد بين طلاب ومعلم المجموعة."""
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name='chat_messages')
+    sender = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='group_chat_messages',
+    )
+    body = models.TextField(max_length=2000, verbose_name='نص الرسالة')
+    is_pinned = models.BooleanField(default=False, verbose_name='رسالة مثبتة')
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['created_at', 'id']
+        indexes = [
+            models.Index(fields=['group', 'created_at']),
+        ]
+
+    def __str__(self):
+        return f"GroupChat#{self.id} (G{self.group_id} U{self.sender_id})"

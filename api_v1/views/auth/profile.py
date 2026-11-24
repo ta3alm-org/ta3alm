@@ -40,6 +40,14 @@ class MeProfileAPIView(APIView):
             user.first_name = str(request.data['first_name']).strip()
         if 'last_name' in request.data:
             user.last_name = str(request.data['last_name']).strip()
+        if 'gender' in request.data and request.data.get('gender') is not None:
+            new_gender = str(request.data['gender']).strip().lower()
+            if new_gender not in ('male', 'female'):
+                return Response(
+                    {'error': 'يرجى اختيار النوع الصحيح (male أو female).'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            user.gender = new_gender
         if 'phone' in request.data or 'phone_number' in request.data:
             raw_phone = request.data.get('phone') if 'phone' in request.data else request.data.get('phone_number', '')
             new_phone = str(raw_phone or '').strip()

@@ -1,8 +1,6 @@
-/* ============================================================
-   Ta3alm Admin Design System — Reusable UI Components
-   ============================================================ */
+ 
 
-/* ── Buttons ── */
+ 
 .ap-btn {
     display: inline-flex;
     align-items: center;
@@ -157,7 +155,7 @@
     to { transform: rotate(360deg); }
 }
 
-/* ── Cards ── */
+ 
 .ap-card {
     background: var(--bg-surface);
     border: 1px solid var(--border-default);
@@ -209,7 +207,7 @@
     gap: 8px;
 }
 
-/* ── Stat Cards (Calm Shopify KPI Style) ── */
+ 
 .ap-stat {
     background: var(--bg-surface);
     border: 1px solid var(--border-default);
@@ -268,7 +266,7 @@
 .ap-stat-sub.is-warning { color: var(--warning); font-weight: 700; }
 .ap-stat-sub.is-danger { color: var(--danger); font-weight: 700; }
 
-/* ── Forms & Controls (includes .form-control / .form-select compatibility for Django forms) ── */
+ 
 .ap-form-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -369,7 +367,7 @@ select.form-select {
     border-color: var(--danger) !important;
 }
 
-/* Switch toggle */
+ 
 .ap-switch-row {
     display: flex;
     align-items: center;
@@ -442,7 +440,7 @@ select.form-select {
     min-width: 0;
 }
 
-/* ── Badges & Status Pills ── */
+ 
 .ap-badge {
     display: inline-flex;
     align-items: center;
@@ -500,7 +498,7 @@ select.form-select {
     flex-shrink: 0;
 }
 
-/* ── Tabs ── */
+ 
 .ap-tabs {
     display: flex;
     align-items: center;
@@ -560,7 +558,7 @@ select.form-select {
     display: block;
 }
 
-/* ── Banners & Alerts ── */
+ 
 .ap-banner {
     display: flex;
     align-items: flex-start;
@@ -597,7 +595,7 @@ select.form-select {
     color: var(--danger);
 }
 
-/* ── Avatars ── */
+ 
 .ap-avatar {
     width: 34px;
     height: 34px;
@@ -621,7 +619,7 @@ select.form-select {
     font-size: 1.05rem;
 }
 
-/* ── Dropdown Menus ── */
+ 
 .ap-dropdown {
     position: relative;
     display: inline-flex;
@@ -680,7 +678,7 @@ select.form-select {
     margin: 4px 0;
 }
 
-/* ── Audit Timeline ── */
+ 
 .ap-timeline-item {
     display: flex;
     align-items: flex-start;
@@ -712,7 +710,7 @@ select.form-select {
 .ap-timeline-dot.is-warning { background: var(--warning); }
 .ap-timeline-dot.is-info { background: var(--info); }
 
-/* ── Empty State & Skeletons ── */
+ 
 .ap-empty {
     padding: 44px 20px;
     text-align: center;

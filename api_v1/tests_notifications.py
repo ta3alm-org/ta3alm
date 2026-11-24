@@ -5,6 +5,7 @@ api_v1/tests_notifications.py
 from datetime import timedelta
 from decimal import Decimal
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -46,6 +47,7 @@ User = get_user_model()
 
 class PlatformNotificationCoverageTests(APITestCase):
     def setUp(self):
+        cache.clear()
         self.subject = Subject.objects.create(name='الرياضيات')
         self.plan = SubscriptionPlan.objects.create(
             name='الباقة الاحترافية',

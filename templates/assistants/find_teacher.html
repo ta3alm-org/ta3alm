@@ -27,7 +27,7 @@
                         <label class="form-label fw-bold small text-muted">{% trans "المادة" %}</label>
                         <select name="subject" class="form-select">
                             <option value="">{% trans "كل المواد" %}</option>
-                            {% for sub in subjects %} <!-- تأكد من تمرير subjects -->
+                            {% for sub in subjects %} 
                                 <option value="{{ sub.id }}" {% if request.GET.subject|add:"0" == sub.id %}selected{% endif %}>{{ sub.name }}</option>
                             {% endfor %}
                         </select>
@@ -41,14 +41,14 @@
         </div>
     </div>
 
-    <!-- النتائج -->
+    
     <div class="row g-4">
         {% for teacher in teachers %}
         <div class="col-md-6 col-lg-4">
             <div class="card h-100 border-0 shadow-sm hover-up text-center">
                 <div class="card-body p-4">
                     
-                    <!-- صورة المدرس -->
+                    
                     <div class="mb-3 d-inline-block position-relative">
                         {% if teacher.image %}
                             <img src="{{ teacher.image.url }}" class="rounded-circle shadow border border-3 border-white object-fit-cover" style="width: 100px; height: 100px;">

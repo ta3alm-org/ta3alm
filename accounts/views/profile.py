@@ -52,7 +52,7 @@ def complete_profile(request):
     elif user.role == 'assistant':
         is_complete = hasattr(user, 'assistant_profile') and bool(user.assistant_profile.phone)
 
-    if is_complete and user.custom_id:
+    if is_complete and user.custom_id and not user.requires_gender_selection():
         return redirect('custom_login_redirect')
 
     # 2. تحديد الفورم المناسب
@@ -158,4 +158,25 @@ def complete_profile(request):
     return render(request, 'accounts/complete_profile.html', {
         'form': form,
         'role': user.role,
+    })
+
+
+@login_required
+def complete_gender(request):
+    user = request.user
+    if not user.requires_gender_selection():
+        return redirect('custom_login_redirect')
+
+    if request.method == 'POST':
+        gender = request.POST.get('gender', '').strip().lower()
+        if gender not in ('male', 'female'):
+            messages.error(request, _("يرجى اختيار النوع (ذكر أو أنثى)."))
+        else:
+            user.gender = gender
+            user.save(update_fields=['gender'])
+            messages.success(request, _("تم حفظ النوع بنجاح."))
+            return redirect('custom_login_redirect')
+
+    return render(request, 'accounts/complete_gender.html', {
+        'user_obj': user,
     })

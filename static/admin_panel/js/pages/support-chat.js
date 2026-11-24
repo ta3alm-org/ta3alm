@@ -1,6 +1,5 @@
-/**
- * وحدة تحكم صفحة شات الدعم المباشر (تبديل المحادثات، البحث، الإرسال، تغيير الحالة، والتحديث الفوري بدون ريفريش).
- */
+
+
 import { loadPartialFromForm } from '../components/search.js';
 import { api } from '../core/api.js';
 import { on } from '../core/events.js';
@@ -197,7 +196,7 @@ export function initSupportChatPage() {
     readStreamMeta();
     scrollStreamToBottom();
 
-    // تبديل المحادثة من القائمة الجانبية بدون ريفريش
+
     if (threadsListEl) {
         threadsListEl.addEventListener('click', (e) => {
             const link = e.target.closest('[data-chat-thread-link]');
@@ -210,12 +209,12 @@ export function initSupportChatPage() {
         });
     }
 
-    // زر الرجوع/التقدم في المتصفح بدون ريفريش
+
     window.addEventListener('popstate', (e) => {
         loadThreadPane(window.location.pathname, e.state?.threadId || '', { pushState: false });
     });
 
-    // فلترة حالة المحادثات (الكل / مفتوحة / مغلقة) بدون ريفريش
+
     document.addEventListener('click', (e) => {
         const filterBtn = e.target.closest('[data-chat-status-filter]');
         if (!filterBtn || !filterForm || !statusInput) return;
@@ -243,7 +242,7 @@ export function initSupportChatPage() {
         });
     }
 
-    // إرسال الرد الفوري بتفويض الحدث لأن محتوى #apSupportChatPane يتبدل ديناميكياً
+
     document.addEventListener('submit', async (e) => {
         const form = e.target.closest('#apAdminChatForm');
         if (!form || form.dataset.apSending === '1') return;
@@ -292,7 +291,7 @@ export function initSupportChatPage() {
             }
         });
 
-    // مزامنة إغلاق / إعادة فتح المحادثة بدون ريفريش
+
     on('ap:form:success', ({ form, payload }) => {
         if (form.dataset.chatStatusForm !== '1') return;
         if (payload?.data?.status) {
@@ -307,7 +306,7 @@ export function initSupportChatPage() {
         syncClearButton();
     });
 
-    // التحديث اللحظي للرسائل الجديدة وقائمة المحادثات وعدّاد غير المقروء
+
     setInterval(async () => {
         if (document.hidden) return;
         const requestedThreadId = activeThreadId;

@@ -63,4 +63,9 @@ urlpatterns = [
     path('support-chat/',                     views.admin_support_chat,     name='support_chat'),
     path('support-chat/<int:thread_id>/',     views.admin_support_chat,     name='support_chat_thread'),
     path('errors/',                           views.admin_error_reports,    name='error_reports'),
+
+    # مركز إدارة المجموعات والباقات والمحتوى التعليمي
+    path('content-hub/',                           views.manage_content_hub,      name='content_hub'),
+    path('content-hub/groups/<int:group_id>/',     views.admin_group_workspace,   name='content_group_workspace'),
+    path('content-hub/packages/<int:package_id>/', views.admin_package_workspace, name='content_package_workspace'),
 ]

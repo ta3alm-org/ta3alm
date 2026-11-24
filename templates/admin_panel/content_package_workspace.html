@@ -1,0 +1,40 @@
+{% extends 'admin_panel/base_admin.html' %}
+{% load i18n %}
+
+{% block page_title %}إدارة الحزمة — {{ package.title }}{% endblock %}
+{% block body_page %}content-hub{% endblock %}
+{% block nav_content_hub %}active{% endblock %}
+{% block breadcrumb %}
+<span class="sep">/</span>
+<a href="{% url 'admin_panel:content_hub' %}?tab=packages">مركز المجموعات والحزم</a>
+<span class="sep">/</span>
+<span class="current">{{ package.title }}</span>
+{% endblock %}
+
+{% block content %}
+<div class="ap-page-header">
+    <div>
+        <h1 class="ap-page-title"><i class="bi bi-box-seam"></i> {{ package.title }}</h1>
+        <p class="ap-page-subtitle">
+            المعلم: {{ package.teacher.user.get_full_name|default:package.teacher.user.username }} · {{ package.get_grade_display }} · {{ package.price }} EGP
+        </p>
+    </div>
+    <div class="ap-page-actions">
+        <a href="{% url 'teacher_package_detail' package.id %}" target="_blank" rel="noopener" class="ap-btn ap-btn-secondary ap-btn-sm">
+            <i class="bi bi-box-arrow-up-left"></i> واجهة المعلم
+        </a>
+        <a href="{% url 'admin_panel:content_hub' %}?tab=packages" class="ap-btn ap-btn-secondary ap-btn-sm">
+            <i class="bi bi-arrow-right"></i> العودة للمركز
+        </a>
+    </div>
+</div>
+
+<form method="GET" action="{% url 'admin_panel:content_package_workspace' package.id %}" id="groupWorkspaceReloadForm"
+      data-live-filter-form data-filter-target="#packageWorkspaceContainer" class="ap-hidden">
+    <input type="hidden" name="tab" value="{{ active_tab|default:'content' }}">
+</form>
+
+<div id="packageWorkspaceContainer">
+    {% include 'admin_panel/partials/_content_package_workspace_body.html' %}
+</div>
+{% endblock %}

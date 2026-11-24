@@ -5,7 +5,7 @@
 {% block content %}
 <div class="container py-5">
     
-    <!-- رأس الصفحة -->
+    
     <div class="d-flex justify-content-between align-items-center mb-5">
         <div>
             <h2 class="fw-bold mb-1">{% trans "مرحباً بك،" %} <span class="text-primary">{{ user.first_name }}</span></h2>
@@ -21,7 +21,7 @@
         </div>
     </div>
 
-    <!-- 1. قسم الحزم (Online Courses) -->
+    
     <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-2">
         <h4 class="fw-bold text-dark"><i class="bi bi-box-seam-fill text-warning me-2"></i> {% trans "حزمي التعليمية (Online)" %}</h4>
         <a href="{% url 'list_packages' %}" class="btn btn-sm btn-outline-warning text-dark fw-bold">
@@ -62,7 +62,7 @@
         {% endfor %}
     </div>
 
-    <!-- 2. قسم المجموعات النشطة (Offline/Center) -->
+    
     <h4 class="fw-bold text-dark mb-4 border-bottom pb-2">
         <i class="bi bi-people-fill text-success me-2"></i> {% trans "مجموعاتي الدراسية" %}
     </h4>
@@ -97,7 +97,7 @@
         {% endfor %}
     </div>
 
-    <!-- 3. المجموعات المغلقة (بسبب الباقة) -->
+    
     {% if locked_groups %}
     <h5 class="fw-bold text-secondary mb-3 border-bottom pb-2">
         <i class="bi bi-lock-fill me-2"></i> {% trans "مجموعات متوقفة مؤقتاً" %}
@@ -119,7 +119,7 @@
     </div>
     {% endif %}
 
-    <!-- 4. الطلبات المعلقة -->
+    
     {% if pending_groups %}
     <h5 class="fw-bold text-warning mb-4 border-bottom pb-2">
         <i class="bi bi-hourglass-split me-2"></i> {% trans "طلبات قيد الانتظار" %}

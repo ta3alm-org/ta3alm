@@ -1,8 +1,6 @@
-/* ============================================================
-   Ta3alm Admin Design System — Page-Specific Polish
-   ============================================================ */
+ 
 
-/* ── Quick Action List (Dashboard) ── */
+ 
 .ap-quick-links {
     display: flex;
     flex-direction: column;
@@ -39,7 +37,7 @@
     color: var(--accent);
 }
 
-/* ── Plan Cards Grid ── */
+ 
 .ap-plan-card {
     position: relative;
     background: var(--bg-surface);
@@ -89,7 +87,7 @@
     gap: 6px;
 }
 
-/* ── Notifications Targeting & Preview ── */
+ 
 .ap-mode-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -195,7 +193,7 @@
     padding: 12px 14px;
 }
 
-/* ── Code Preview (App Release) ── */
+ 
 .ap-code-block {
     background: var(--bg-code);
     color: #e6eae8;
@@ -211,7 +209,7 @@
     text-align: left;
 }
 
-/* ── Support Email View ── */
+ 
 .ap-email-iframe {
     width: 100%;
     min-height: 320px;
@@ -220,7 +218,7 @@
     background: #fff;
 }
 
-/* ── Key-Value Spec Table (Device Detail & Info Cards) ── */
+ 
 .ap-kv-list {
     display: flex;
     flex-direction: column;
@@ -253,7 +251,7 @@
     word-break: break-word;
 }
 
-/* ── Inline Callout Box inside Forms ── */
+ 
 .ap-subpanel {
     background: var(--bg-hover);
     border: 1px solid var(--border-default);
@@ -261,7 +259,7 @@
     padding: 14px;
 }
 
-/* Details accordion */
+ 
 details.ap-details {
     border: 1px solid var(--border-default);
     border-radius: var(--radius-md);
@@ -276,7 +274,7 @@ details.ap-details > summary {
     color: var(--text-secondary);
 }
 
-/* ── Sidebar Count Pill ── */
+ 
 .ap-nav-count {
     margin-right: auto;
     min-width: 20px;
@@ -299,7 +297,7 @@ details.ap-details > summary {
     }
 }
 
-/* ── Support Live Chat Workspace ── */
+ 
 .ap-chat-shell {
     display: grid;
     grid-template-columns: 330px minmax(0, 1fr);
@@ -479,7 +477,7 @@ details.ap-details > summary {
     }
 }
 
-/* ── Error Report Cards ── */
+ 
 .ap-error-card {
     border-right: 4px solid var(--danger);
 }

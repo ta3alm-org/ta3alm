@@ -1,6 +1,5 @@
-/**
- * عميل الشبكة الموحّد (Fetch API) مع CSRF، إلغاء الطلبات المكررة، وتوحيد الأخطاء.
- */
+
+
 import { getCsrfToken } from './csrf.js';
 import { toast } from './notifications.js';
 

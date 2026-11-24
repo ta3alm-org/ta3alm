@@ -1,6 +1,5 @@
-/**
- * إدارة الأدراج الجانبية (Slide-over Drawers).
- */
+
+
 const openDrawers = new Set();
 
 function syncBodyScroll() {
