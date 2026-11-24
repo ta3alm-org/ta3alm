@@ -546,10 +546,15 @@
 {% else %}
 
 <div class="ratio ratio-16x9 bg-dark shadow rounded mb-3 overflow-hidden position-relative ta3alm-web-player-fallback" id="playerFallbackWrapper">
-    <iframe id="fallbackVideoIframe" src="{{ lecture.video_link }}" title="Video player" frameborder="0"
-        allow="autoplay; fullscreen; picture-in-picture" allowfullscreen
+    {% if lecture.is_direct_media_link %}
+    <video id="fallbackVideoTag" src="{{ lecture.get_web_embed_url }}" controls playsinline controlsList="nodownload"
+        style="width: 100%; height: 100%; border-radius: 12px; background: #000;"></video>
+    {% else %}
+    <iframe id="fallbackVideoIframe" src="{{ lecture.get_web_embed_url }}" title="Video player" frameborder="0"
+        allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen
         style="width: 100%; height: 100%; border-radius: 12px;">
     </iframe>
+    {% endif %}
     <div class="position-absolute top-0 end-0 m-3 px-2 py-1 rounded bg-dark bg-opacity-75 text-white small"
          id="floatingWatermarkFallback" style="pointer-events: none; z-index: 20; opacity: 0.5;">
         {{ watermark.display_text|default:request.user.custom_id|default:request.user.username|default:"TA3ALM-USER" }}
@@ -592,6 +597,10 @@
                 var fallbackIframe = document.getElementById('fallbackVideoIframe');
                 if (fallbackIframe) {
                     fallbackIframe.removeAttribute('src');
+                }
+                var fallbackVideo = document.getElementById('fallbackVideoTag');
+                if (fallbackVideo && fallbackVideo.pause) {
+                    fallbackVideo.pause();
                 }
             }
             shield.style.display = 'flex';

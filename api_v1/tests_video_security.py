@@ -375,6 +375,7 @@ class VideoSecurityAndIntegrityTests(APITestCase):
                     'password': 'StrongPassword123!',
                     'confirm_password': 'StrongPassword123!',
                     'role': 'student',
+                    'gender': 'male',
                 },
             )
         self.assertRedirects(signup_resp, '/ar/verify-email/', fetch_redirect_response=False)
@@ -414,6 +415,7 @@ class VideoSecurityAndIntegrityTests(APITestCase):
                     'password': 'StrongPassword123!',
                     'confirm_password': 'StrongPassword123!',
                     'role': 'student',
+                    'gender': 'male',
                 },
             )
         user = User.objects.get(email='verify_link@ta3alm.test')
@@ -456,6 +458,8 @@ class PlatformFinancialAndContentFixesTests(APITestCase):
             password='Password123!',
             role='teacher',
             first_name='Hassan',
+            phone='01011112222',
+            gender='male',
         )
         self.teacher = TeacherProfile.objects.create(
             user=self.teacher_user,
@@ -463,6 +467,7 @@ class PlatformFinancialAndContentFixesTests(APITestCase):
             current_plan=self.plan,
             subscription_end_date=timezone.now() + timedelta(days=30),
             is_approved=True,
+            image='teachers/dummy.png',
         )
         self.student_user = User.objects.create_user(
             username='student_fin',

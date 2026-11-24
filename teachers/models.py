@@ -6,6 +6,7 @@ from datetime import timedelta
 import re
 import random
 import string
+import urllib.parse
 from core.models import Subject
 from core.constants import GRADE_CHOICES  # ┘à╪╡╪»╪▒ ┘à┘ê╪¡┘æ╪» ΓÇö ┘ä╪º ╪¬┘Å┘â╪▒╪▒ ╪º┘ä╪¬╪╣╪▒┘è┘ü ┘ç┘å╪º
 
@@ -149,15 +150,190 @@ class Lecture(models.Model):
         return text
 
     def get_video_id(self):
-        if not self.video_link: return None
-        clean = self.video_link.strip()
-        # ╪»╪╣┘à ┘è┘ê╪¬┘è┘ê╪¿ ┘ü┘é╪╖ ╪¡╪º┘ä┘è╪º┘ï ┘ü┘è ┘ç╪░╪º ╪º┘ä┘ü╪º┘å┘â╪┤┘å
-        if 'youtube' not in clean and 'youtu.be' not in clean: return None
-        patterns = [r'(?:v=|\/)([0-9A-Za-z_-]{11}).*', r'(?:youtu\.be\/)([0-9A-Za-z_-]{11})', r'(?:embed\/)([0-9A-Za-z_-]{11})']
+        """استخراج معرّف يوتيوب (11 حرفاً) بعد تنظيف الرابط إن وجد."""
+        clean = self.normalize_video_link(self.video_link)
+        if not clean:
+            return None
+        if re.fullmatch(r'[0-9A-Za-z_-]{11}', clean):
+            return clean
+        lowered = clean.lower()
+        if 'youtube' not in lowered and 'youtu.be' not in lowered:
+            return None
+        patterns = [
+            r'(?:[?&]v=|youtu\.be/|youtube(?:-nocookie)?\.com/(?:embed|shorts|live|v)/)([0-9A-Za-z_-]{11})',
+        ]
         for p in patterns:
             match = re.search(p, clean)
-            if match: return match.group(1)
+            if match:
+                return match.group(1)
         return None
+
+    @classmethod
+    def classify_video_source(cls, raw_link: str) -> dict:
+        """
+        تصنيف وتطبيع أي رابط فيديو (YouTube، ملفات MP4/HLS/WebM مباشرة، Google Drive، Vimeo،
+        Bunny Stream، Cloudflare Stream، Dailymotion، Loom، Streamable، Wistia، إلخ).
+        """
+        text = str(raw_link or '').strip()
+        if not text:
+            return {'kind': 'empty', 'url': ''}
+        if '<iframe' in text.lower():
+            src_match = re.search(r'src\s*=\s*["\']([^"\']+)["\']', text, flags=re.IGNORECASE)
+            if src_match:
+                text = src_match.group(1).strip()
+
+        if re.fullmatch(r'[0-9A-Za-z_-]{11}', text):
+            return {
+                'kind': 'youtube',
+                'youtube_id': text,
+                'url': f'https://www.youtube.com/watch?v={text}',
+            }
+
+        lowered = text.lower()
+        if 'youtube.com' in lowered or 'youtu.be' in lowered or 'youtube-nocookie.com' in lowered:
+            yt_match = re.search(
+                r'(?:[?&]v=|youtu\.be/|youtube(?:-nocookie)?\.com/(?:embed|shorts|live|v)/)([0-9A-Za-z_-]{11})',
+                text,
+            )
+            if yt_match:
+                yt_id = yt_match.group(1)
+                return {
+                    'kind': 'youtube',
+                    'youtube_id': yt_id,
+                    'url': f'https://www.youtube.com/watch?v={yt_id}',
+                }
+
+        if not (lowered.startswith('http://') or lowered.startswith('https://')):
+            return {'kind': 'empty', 'url': ''}
+
+        parsed = urllib.parse.urlparse(text)
+        host = parsed.netloc.lower()
+        path = parsed.path or ''
+        path_l = path.lower()
+
+        # تطبيع روابط Cloudflare Stream Watch إلى HLS Manifest
+        cf_match = re.match(r'^/([0-9a-f]{32})(?:/watch)?/?$', path_l)
+        if cf_match and ('cloudflarestream.com' in host or 'videodelivery.net' in host):
+            uid = cf_match.group(1)
+            sub_host = host if host.startswith('customer-') else 'videodelivery.net'
+            return {
+                'kind': 'direct_stream',
+                'stream_format': 'hls',
+                'url': f'https://{sub_host}/{uid}/manifest/video.m3u8',
+            }
+
+        # تطبيع روابط Dropbox للملفات المباشرة
+        normalized_url = text
+        if 'dropbox.com' in host:
+            q = urllib.parse.parse_qs(parsed.query)
+            q.pop('dl', None)
+            q['raw'] = ['1']
+            new_query = urllib.parse.urlencode(q, doseq=True)
+            normalized_url = urllib.parse.urlunparse(
+                ('https', 'dl.dropboxusercontent.com', parsed.path, parsed.params, new_query, '')
+            )
+        elif host == 'github.com':
+            segs = [s for s in path.split('/') if s]
+            if len(segs) >= 5 and segs[2] == 'blob':
+                rest = '/'.join(segs[3:])
+                normalized_url = f'https://raw.githubusercontent.com/{segs[0]}/{segs[1]}/{rest}'
+
+        direct_exts = ('.mp4', '.m3u8', '.webm', '.mov', '.m4v', '.mkv', '.mpd', '.ogg', '.ogv', '.ts')
+        if (
+            any(path_l.endswith(ext) for ext in direct_exts)
+            or '/video/upload/' in path_l
+            or '/playlist.m3u8' in path_l
+            or '/manifest/video.m3u8' in path_l
+        ):
+            stream_fmt = 'hls' if ('.m3u8' in path_l or '.mpd' in path_l) else 'mp4'
+            return {
+                'kind': 'direct_stream',
+                'stream_format': stream_fmt,
+                'url': normalized_url,
+            }
+
+        # Google Drive
+        if 'drive.google.com' in host:
+            m_drive = re.search(r'/file/d/([0-9A-Za-z_-]+)', path)
+            file_id = m_drive.group(1) if m_drive else (urllib.parse.parse_qs(parsed.query).get('id') or [''])[0]
+            if file_id:
+                return {'kind': 'embed', 'url': f'https://drive.google.com/file/d/{file_id}/preview'}
+
+        # Vimeo
+        if 'vimeo.com' in host:
+            if 'player.vimeo.com' in host:
+                sep = '&' if '?' in text else '?'
+                embed = text if 'playsinline=' in lowered else f'{text}{sep}playsinline=1&byline=0&portrait=0&title=0'
+                return {'kind': 'embed', 'url': embed}
+            m_vim = re.search(r'vimeo\.com/(?:video/|channels/[^/]+/|groups/[^/]+/videos/)?(\d+)(?:/([0-9A-Za-z]+))?', text)
+            if m_vim:
+                vid = m_vim.group(1)
+                h_tok = m_vim.group(2)
+                extra = f'&h={h_tok}' if h_tok else ''
+                return {
+                    'kind': 'embed',
+                    'url': f'https://player.vimeo.com/video/{vid}?playsinline=1&byline=0&portrait=0&title=0{extra}',
+                }
+
+        # Bunny Stream (mediadelivery.net)
+        if 'mediadelivery.net' in host:
+            m_bunny = re.search(r'/(?:play|embed)/([^/]+)/([^/?#]+)', path)
+            if m_bunny:
+                lib_id, vid_id = m_bunny.group(1), m_bunny.group(2)
+                return {
+                    'kind': 'embed',
+                    'url': f'https://iframe.mediadelivery.net/embed/{lib_id}/{vid_id}?autoplay=false&preload=true&responsive=true',
+                }
+
+        # Dailymotion
+        if 'dailymotion.com' in host or host == 'dai.ly':
+            m_dm = re.search(r'(?:dailymotion\.com/(?:embed/)?video/|dai\.ly/)([0-9A-Za-z]+)', text)
+            if m_dm:
+                return {
+                    'kind': 'embed',
+                    'url': f'https://www.dailymotion.com/embed/video/{m_dm.group(1)}?playsinline=1&ui-logo=0&sharing-enable=0',
+                }
+
+        # Loom
+        if 'loom.com' in host:
+            m_loom = re.search(r'loom\.com/(?:share|embed)/([0-9A-Za-z]+)', path)
+            if m_loom:
+                return {
+                    'kind': 'embed',
+                    'url': f'https://www.loom.com/embed/{m_loom.group(1)}?hide_owner=true&hide_share=true&hide_title=true',
+                }
+
+        # Streamable
+        if 'streamable.com' in host:
+            m_st = re.search(r'streamable\.com/(?:e/)?([0-9A-Za-z]+)', path)
+            if m_st:
+                return {'kind': 'embed', 'url': f'https://streamable.com/e/{m_st.group(1)}'}
+
+        # Wistia
+        if 'wistia.com' in host or 'wistia.net' in host:
+            m_w = re.search(r'/(?:medias|iframe)/([0-9A-Za-z]+)', path)
+            if m_w:
+                return {'kind': 'embed', 'url': f'https://fast.wistia.net/embed/iframe/{m_w.group(1)}?videoFoam=true'}
+
+        # Archive.org
+        if 'archive.org' in host:
+            m_ar = re.search(r'archive\.org/(?:details|embed)/([^/?#]+)', path)
+            if m_ar:
+                return {'kind': 'embed', 'url': f'https://archive.org/embed/{m_ar.group(1)}'}
+
+        # Facebook Video
+        if 'facebook.com' in host or 'fb.watch' in host:
+            quoted = urllib.parse.quote(text, safe='')
+            return {'kind': 'embed', 'url': f'https://www.facebook.com/plugins/video.php?href={quoted}&show_text=false'}
+
+        return {'kind': 'embed', 'url': normalized_url}
+
+    def is_direct_media_link(self) -> bool:
+        return self.classify_video_source(self.video_link).get('kind') == 'direct_stream'
+
+    def get_web_embed_url(self) -> str:
+        info = self.classify_video_source(self.video_link)
+        return info.get('url') or (self.video_link or '').strip()
 
 # ==========================================
 # 6. ╪ú┘â┘ê╪º╪» ╪º┘ä┘ü┘è╪»┘è┘ê

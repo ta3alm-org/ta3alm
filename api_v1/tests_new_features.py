@@ -17,11 +17,12 @@ from rest_framework.test import APIClient
 from accounts.models import EmailVerification, StudentProfile
 from api_v1.authentication import generate_jwt_pair
 from api_v1.models import DeviceBlock
+from api_v1.video_security import unseal_video_reference
 from core.models import SiteSetting, Subject, SupportMessage
 from core.profanity_filter import detect_profanity
 from students.models import Enrollment
 from ta3alm_project.middleware.web_device import FrontendHardeningMiddleware
-from teachers.models import CoursePackage, Group, GroupChatMessage, SubscriptionPlan, TeacherProfile
+from teachers.models import CoursePackage, Group, GroupChatMessage, Lecture, SubscriptionPlan, TeacherProfile, VideoCode
 
 User = get_user_model()
 
@@ -482,4 +483,75 @@ class NewFeaturesTestSuite(TestCase):
                 self.assertEqual(head_resp.status_code, 200)
                 self.assertEqual(head_resp['Accept-Ranges'], 'bytes')
                 self.assertEqual(head_resp['Content-Length'], str(len(apk_bytes)))
+
+    def test_universal_video_link_classification_and_sealed_authorize(self):
+        self.student_user.gender = 'male'
+        self.student_user.save(update_fields=['gender'])
+        hdr = self._auth_header(self.student_user)
+
+        mp4_url = 'https://cdn.example.com/lectures/lesson1.mp4'
+        hls_url = 'https://cdn.example.com/hls/lesson2/playlist.m3u8'
+        drive_url = 'https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQrStUvWxYz/view?usp=sharing'
+        vimeo_url = 'https://vimeo.com/987654321'
+        generic_embed = 'https://iframe.mediadelivery.net/play/1234/abcd-efgh'
+
+        lec_mp4 = Lecture.objects.create(group=self.group, title='MP4 Direct', video_link=mp4_url, is_active=True)
+        lec_hls = Lecture.objects.create(group=self.group, title='HLS Direct', video_link=hls_url, is_active=True)
+        lec_drive = Lecture.objects.create(group=self.group, title='Drive Lesson', video_link=drive_url, is_active=True)
+        lec_vimeo = Lecture.objects.create(group=self.group, title='Vimeo Lesson', video_link=vimeo_url, is_active=True)
+        lec_bunny = Lecture.objects.create(group=self.group, title='Bunny Lesson', video_link=generic_embed, is_active=True)
+
+        VideoCode.objects.create(lecture=lec_mp4, code='MP4001', max_views=3)
+        VideoCode.objects.create(lecture=lec_hls, code='HLS001', max_views=3)
+        VideoCode.objects.create(lecture=lec_drive, code='DRV001', max_views=3)
+        VideoCode.objects.create(lecture=lec_vimeo, code='VIM001', max_views=3)
+        VideoCode.objects.create(lecture=lec_bunny, code='BNY001', max_views=3)
+
+        r_mp4 = self.client.post(f'/api/v1/videos/{lec_mp4.id}/authorize/', {'code': 'MP4001', 'device_id': 'dev-univ-1'}, **hdr)
+        self.assertEqual(r_mp4.status_code, 200)
+        self.assertTrue(r_mp4.data['source']['is_native_protected'])
+        self.assertEqual(r_mp4.data['source']['source_type'], 'mp4_protected')
+        self.assertNotIn(mp4_url, str(r_mp4.data))
+        self.assertEqual(
+            unseal_video_reference(r_mp4.data['source']['sealed_video_ref'], r_mp4.data['session_id'], r_mp4.data['playback_token']),
+            mp4_url,
+        )
+
+        r_hls = self.client.post(f'/api/v1/videos/{lec_hls.id}/authorize/', {'code': 'HLS001', 'device_id': 'dev-univ-1'}, **hdr)
+        self.assertEqual(r_hls.status_code, 200)
+        self.assertTrue(r_hls.data['source']['is_native_protected'])
+        self.assertEqual(r_hls.data['source']['source_type'], 'hls_protected')
+        self.assertEqual(
+            unseal_video_reference(r_hls.data['source']['sealed_video_ref'], r_hls.data['session_id'], r_hls.data['playback_token']),
+            hls_url,
+        )
+
+        r_drv = self.client.post(f'/api/v1/videos/{lec_drive.id}/authorize/', {'code': 'DRV001', 'device_id': 'dev-univ-1'}, **hdr)
+        self.assertEqual(r_drv.status_code, 200)
+        self.assertFalse(r_drv.data['source']['is_native_protected'])
+        self.assertEqual(r_drv.data['source']['source_type'], 'embedded_shield')
+        self.assertNotIn('drive.google.com', str(r_drv.data))
+        self.assertEqual(
+            unseal_video_reference(r_drv.data['source']['sealed_video_ref'], r_drv.data['session_id'], r_drv.data['playback_token']),
+            'https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQrStUvWxYz/preview',
+        )
+
+        r_vim = self.client.post(f'/api/v1/videos/{lec_vimeo.id}/authorize/', {'code': 'VIM001', 'device_id': 'dev-univ-1'}, **hdr)
+        self.assertEqual(r_vim.status_code, 200)
+        self.assertFalse(r_vim.data['source']['is_native_protected'])
+        self.assertEqual(r_vim.data['source']['source_type'], 'embedded_shield')
+        self.assertNotIn('vimeo.com', str(r_vim.data))
+        self.assertIn(
+            'https://player.vimeo.com/video/987654321',
+            unseal_video_reference(r_vim.data['source']['sealed_video_ref'], r_vim.data['session_id'], r_vim.data['playback_token']),
+        )
+
+        r_bny = self.client.post(f'/api/v1/videos/{lec_bunny.id}/authorize/', {'code': 'BNY001', 'device_id': 'dev-univ-1'}, **hdr)
+        self.assertEqual(r_bny.status_code, 200)
+        self.assertEqual(r_bny.data['source']['source_type'], 'embedded_shield')
+        self.assertIn(
+            'https://iframe.mediadelivery.net/embed/1234/abcd-efgh',
+            unseal_video_reference(r_bny.data['source']['sealed_video_ref'], r_bny.data['session_id'], r_bny.data['playback_token']),
+        )
+
 

@@ -157,19 +157,89 @@ def resolve_signed_playback_source(
             'migration_status': asset.migration_status,
         }
 
-    # روابط المحاضرات غير المرفوعة على CDN خارجي: تشفير وتوقيع المرجع بالجلسة وإخفاء الرابط الخام تماماً
-    yt_id = lecture.get_video_id()
-    sealed_ref = (
-        seal_video_reference(yt_id, str(session.session_id), playback_token, ttl_seconds)
-        if yt_id
-        else ''
-    )
+    # روابط المحاضرات غير المرفوعة على CDN خارجي: تصنيف المصدر وتشفيره وربطه بالجلسة دون تسريب الرابط الخام
+    classified = lecture.classify_video_source(getattr(lecture, 'video_link', '') or '')
+    kind = classified.get('kind', 'empty')
+
+    if kind == 'youtube':
+        yt_id = classified.get('youtube_id') or ''
+        sealed_ref = (
+            seal_video_reference(yt_id, str(session.session_id), playback_token, ttl_seconds)
+            if yt_id
+            else ''
+        )
+        return {
+            'is_native_protected': False,
+            'source_type': 'ta3alm_shield',
+            'provider': 'ta3alm_shield',
+            'stream_url': '',
+            'sealed_video_ref': sealed_ref,
+            'quality_variants': [],
+            'subtitle_tracks': [],
+            'drm': {'enabled': False, 'scheme': 'none', 'license_url': ''},
+            'intro_skip': None,
+            'duration_seconds': asset.duration_seconds if asset else 0,
+            'youtube_video_id': None,
+            'legacy_external_url': '',
+            'migration_status': asset.migration_status if asset else 'shielded',
+            'migration_notice': '',
+        }
+
+    if kind == 'direct_stream':
+        target_url = classified.get('url') or ''
+        sealed_ref = (
+            seal_video_reference(target_url, str(session.session_id), playback_token, ttl_seconds)
+            if target_url
+            else ''
+        )
+        stream_fmt = classified.get('stream_format') or 'mp4'
+        return {
+            'is_native_protected': True,
+            'source_type': 'hls_protected' if stream_fmt == 'hls' else 'mp4_protected',
+            'provider': 'direct_shield',
+            'stream_url': '',
+            'sealed_video_ref': sealed_ref,
+            'quality_variants': [],
+            'subtitle_tracks': [],
+            'drm': {'enabled': False, 'scheme': 'none', 'license_url': ''},
+            'intro_skip': None,
+            'duration_seconds': asset.duration_seconds if asset else 0,
+            'youtube_video_id': None,
+            'legacy_external_url': '',
+            'migration_status': asset.migration_status if asset else 'shielded',
+            'migration_notice': '',
+        }
+
+    if kind == 'embed':
+        target_url = classified.get('url') or ''
+        sealed_ref = (
+            seal_video_reference(target_url, str(session.session_id), playback_token, ttl_seconds)
+            if target_url
+            else ''
+        )
+        return {
+            'is_native_protected': False,
+            'source_type': 'embedded_shield',
+            'provider': 'embedded_shield',
+            'stream_url': '',
+            'sealed_video_ref': sealed_ref,
+            'quality_variants': [],
+            'subtitle_tracks': [],
+            'drm': {'enabled': False, 'scheme': 'none', 'license_url': ''},
+            'intro_skip': None,
+            'duration_seconds': asset.duration_seconds if asset else 0,
+            'youtube_video_id': None,
+            'legacy_external_url': '',
+            'migration_status': asset.migration_status if asset else 'shielded',
+            'migration_notice': '',
+        }
+
     return {
         'is_native_protected': False,
-        'source_type': 'ta3alm_shield' if yt_id else 'external_legacy',
-        'provider': 'ta3alm_shield' if yt_id else 'external',
+        'source_type': 'external_legacy',
+        'provider': 'external',
         'stream_url': '',
-        'sealed_video_ref': sealed_ref,
+        'sealed_video_ref': '',
         'quality_variants': [],
         'subtitle_tracks': [],
         'drm': {'enabled': False, 'scheme': 'none', 'license_url': ''},
